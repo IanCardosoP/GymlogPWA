@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="GymLog — registro de entrenamientos offline-first" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <title>GymLog</title>
+</head>
+<body>
+  <div id="app-wrapper">
+
+    <nav id="tab-nav" role="tablist">
+      <button class="tab-btn is-active" data-tab="diario" role="tab" aria-selected="true">[ DIARIO ]</button>
+      <button class="tab-btn" data-tab="progreso" role="tab" aria-selected="false">[ PROGRESO ]</button>
+      <button class="tab-btn" data-tab="config" role="tab" aria-selected="false">[ CONFIG ]</button>
+    </nav>
+
+    <main id="main-content">
+      <section id="diario-container" role="tabpanel"></section>
+      <section id="progreso-container" role="tabpanel" hidden></section>
+      <section id="config-container" role="tabpanel" hidden></section>
+    </main>
+
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

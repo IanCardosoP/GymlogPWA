@@ -1,9 +1,71 @@
-# CLAUDE.md — GymLog PWA · Reglas Siempre-Activas
+# CLAUDE.md
 
-> Este archivo es leído automáticamente por Claude Code en cada sesión.
-> Contiene las restricciones de mayor criticidad que **nunca** deben olvidarse,
-> independientemente de qué tan avanzada esté la conversación.
-> Para el contexto completo del proyecto, lee `Agent.md`.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+> Para el contexto completo del proyecto (historias de usuario, mockups, DDL, arquitectura), lee `Agent.md`.
+> Para el estado del tablero Kanban y tickets activos, lee `Sprints.md`.
+
+---
+
+## GIT — REGLA DE RAMAS POR SPRINT
+
+Al iniciar cada sprint, **antes de escribir cualquier código**, el agente debe:
+
+1. Hacer commit del estado actual en la rama vigente.
+2. Crear y cambiar a una rama nueva: `git checkout -b sprint-N` (donde N = número del sprint).
+3. Al terminar el sprint, los cambios quedan en esa rama como checkpoint de seguridad.
+
+Esta regla es **automática** — el agente no espera que el PM la recuerde.
+
+---
+
+## COMANDOS ESENCIALES
+
+```bash
+pnpm install          # instalar dependencias
+pnpm test             # correr todos los tests (debe terminar en verde antes de marcar DONE)
+pnpm run dev          # servidor local de desarrollo
+```
+
+**Correr un solo archivo de test:**
+```bash
+pnpm vitest run tests/db.test.js
+pnpm vitest run tests/analitico.test.js
+pnpm vitest run tests/csv.test.js
+```
+
+> `pnpm test` debe pasar en verde al final de **cada ticket** antes de avanzar al siguiente.
+
+---
+
+## ARQUITECTURA
+
+La app sigue un flujo de datos unidireccional (estilo Flux minimalista):
+
+```
+Tap del usuario → db.js (SQL puro) → actualizar Store → componente.render(store)
+```
+
+**Tres capas estrictas — ninguna puede cruzar límites:**
+
+| Archivo | Responsabilidad única |
+|---|---|
+| `js/app.js` | Store global (`const store`), `dispatch(action, payload)`, routing SPA por DOM |
+| `js/db.js` | Toda interacción con PGLite — solo SQL, solo promesas, cero DOM |
+| `js/componentes/*.js` | Un módulo por pestaña; expone `.render(store)` idempotente, cero SQL |
+| `js/analitico.js` | Lógica pura (Epley 1RM, barras ASCII) — sin imports de DOM ni de db |
+| `js/csv.js` | Exportación e importación — transacciones obligatorias |
+| `sw.js` | Service Worker Cache-First — sin lógica de negocio |
+
+**IDs de contenedores clave (inmutables):** `#diario-container`, `#progreso-container`, `#config-container`.
+
+**Modelo de datos (6 tablas PGLite):**
+- `ejercicios` — diccionario global de movimientos
+- `rutinas` — plantillas semanales
+- `rutina_ejercicios` — tabla puente; `activo_hoy=TRUE` = en pantalla, `FALSE` = banco de suplentes
+- `sesiones` — cada entrenamiento real (fecha capturada en JS, no en SQL)
+- `series` — cada set individual; `peso=0` = peso corporal (BW)
+- `conf` — singleton de configuración (una sola fila, `id=1`, jamás DELETE)
 
 ---
 

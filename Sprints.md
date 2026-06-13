@@ -26,7 +26,7 @@
 
 ---
 
-### Ticket 1.0 — Prueba de Humo: PGLite en Vitest `[ ]`
+### Ticket 1.0 — Prueba de Humo: PGLite en Vitest `[DONE]`
 
 **Por qué existe este ticket:** Antes de escribir cualquier código de aplicación, verificar que PGLite puede importarse y ejecutar SQL desde un test Vitest con instancia `memory://`. Si esto falla, los hitos de control de todos los sprints siguientes se rompen.
 
@@ -43,7 +43,7 @@
 
 ---
 
-### Ticket 1.1 — Estructura de Carpetas y Archivos Vacíos `[ ]`
+### Ticket 1.1 — Estructura de Carpetas y Archivos Vacíos `[DONE]`
 
 **Dependencia:** Ticket 1.0 en `[DONE]`.
 
@@ -66,7 +66,7 @@
 
 ---
 
-### Ticket 1.2 — `index.html`: App Shell y Navegación SPA `[ ]`
+### Ticket 1.2 — `index.html`: App Shell y Navegación SPA `[DONE]`
 
 **Dependencia:** Ticket 1.1 en `[DONE]`.
 
@@ -81,7 +81,7 @@
 
 ---
 
-### Ticket 1.3 — `css/styles.css`: Estética Terminal Oscura `[ ]`
+### Ticket 1.3 — `css/styles.css`: Estética Terminal Oscura `[DONE]`
 
 **Dependencia:** Ticket 1.2 en `[DONE]`.
 
@@ -97,7 +97,7 @@
 
 ---
 
-### Ticket 1.4 — `sw.js`: Service Worker Cache-First `[ ]`
+### Ticket 1.4 — `sw.js`: Service Worker Cache-First `[DONE]`
 
 **Dependencia:** Ticket 1.2 en `[DONE]`.
 
@@ -112,7 +112,7 @@
 
 ---
 
-### Ticket 1.5 — `package.json` y `vitest.config.js` finales + tests del Sprint 1 `[ ]`
+### Ticket 1.5 — `package.json` y `vitest.config.js` finales + tests del Sprint 1 `[DONE]`
 
 **Dependencia:** Tickets 1.1–1.4 en `[DONE]`.
 
@@ -289,7 +289,7 @@
 - [ ] **Precarga inteligente:** inputs tienen `placeholder` con `peso x reps` de la última serie via `getUltimaSerie()`.
 - [ ] Botón `[ GUARDAR SERIE ]`: llama `saveSerie()` con valores de inputs. Marca `[✓]` en el DOM usando `textContent`.
 - [ ] **Single Tap** sobre nombre de ejercicio: muestra dropdown de suplentes (`activo_hoy = FALSE`). Al seleccionar, llama `updateActivoHoy()` y re-renderiza.
-- [ ] **Double Tap** sobre nombre de ejercicio: convierte `<summary>` en `<input type="text">`. Al `blur`/Enter: llama `saveEjercicio()` + vincula a rutina + re-renderiza.
+- [ ] **Tap Sostenido** sobre nombre de ejercicio: convierte `<summary>` en `<input type="text">`. Al `blur`/Enter: llama `saveEjercicio()` + vincula a rutina + re-renderiza.
 - [ ] Ningún `innerHTML` con variables de usuario. Todo via `textContent` o `createElement`.
 - [ ] Delegación de eventos en `#diario-container`, no en nodos dinámicos.
 
@@ -384,7 +384,7 @@
 
 | Sprint | Tickets | Done | Pendiente |
 |--------|---------|------|-----------|
-| Sprint 1 — Cascarón | 6 (1.0–1.5) | 0 | 6 |
+| Sprint 1 — Cascarón | 6 (1.0–1.5) | 6 | 0 |
 | Sprint 2 — Datos | 5 (2.1–2.5) | 0 | 5 |
 | Sprint 3 — Lógica | 3 (3.1–3.3) | 0 | 3 |
 | Sprint 4 — UI | 8 (4.1–4.8) | 0 | 8 |
