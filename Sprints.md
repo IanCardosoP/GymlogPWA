@@ -132,7 +132,7 @@
 
 ---
 
-### Ticket 2.1 — `db.js`: Inicialización PGLite + DDL completo `[ ]`
+### Ticket 2.1 — `db.js`: Inicialización PGLite + DDL completo `[DONE]`
 
 **Dependencia:** Sprint 1 en `[DONE]`.
 
@@ -145,7 +145,7 @@
 
 ---
 
-### Ticket 2.2 — `db.js`: Funciones de servicio — Módulo `ejercicios` y `rutinas` `[ ]`
+### Ticket 2.2 — `db.js`: Funciones de servicio — Módulo `ejercicios` y `rutinas` `[DONE]`
 
 **Dependencia:** Ticket 2.1 en `[DONE]`.
 
@@ -161,7 +161,7 @@
 
 ---
 
-### Ticket 2.3 — `db.js`: Funciones de servicio — Módulo `sesiones` y `series` `[ ]`
+### Ticket 2.3 — `db.js`: Funciones de servicio — Módulo `sesiones` y `series` `[DONE]`
 
 **Dependencia:** Ticket 2.2 en `[DONE]`.
 
@@ -175,7 +175,7 @@
 
 ---
 
-### Ticket 2.4 — `db.js`: Funciones de servicio — Módulo `conf` `[ ]`
+### Ticket 2.4 — `db.js`: Funciones de servicio — Módulo `conf` `[DONE]`
 
 **Dependencia:** Ticket 2.2 en `[DONE]`.
 
@@ -187,7 +187,7 @@
 
 ---
 
-### Ticket 2.5 — Tests de integración: Módulo DB completo `[ ]`
+### Ticket 2.5 — Tests de integración: Módulo DB completo `[DONE]`
 
 **Dependencia:** Tickets 2.1–2.4 en `[DONE]`.
 
@@ -385,7 +385,7 @@
 | Sprint | Tickets | Done | Pendiente |
 |--------|---------|------|-----------|
 | Sprint 1 — Cascarón | 6 (1.0–1.5) | 6 | 0 |
-| Sprint 2 — Datos | 5 (2.1–2.5) | 0 | 5 |
+| Sprint 2 — Datos | 5 (2.1–2.5) | 5 | 0 |
 | Sprint 3 — Lógica | 3 (3.1–3.3) | 0 | 3 |
 | Sprint 4 — UI | 8 (4.1–4.8) | 0 | 8 |
 | **Total** | **22** | **0** | **22** |
