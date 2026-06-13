@@ -210,7 +210,7 @@
 
 ---
 
-### Ticket 3.1 — `js/analitico.js`: Fórmula de Epley y motor de métricas `[ ]`
+### Ticket 3.1 — `js/analitico.js`: Fórmula de Epley y motor de métricas `[DONE]`
 
 **Dependencia:** Sprint 2 en `[DONE]`.
 
@@ -224,7 +224,7 @@
 
 ---
 
-### Ticket 3.2 — `js/csv.js`: Exportación e Importación con contrato estricto `[ ]`
+### Ticket 3.2 — `js/csv.js`: Exportación e Importación con contrato estricto `[DONE]`
 
 **Dependencia:** Ticket 3.1 en `[DONE]`.
 
@@ -236,7 +236,7 @@
 
 ---
 
-### Ticket 3.3 — Tests: Analítica y CSV `[ ]`
+### Ticket 3.3 — Tests: Analítica y CSV `[DONE]`
 
 **Dependencia:** Tickets 3.1 y 3.2 en `[DONE]`.
 
@@ -386,7 +386,7 @@
 |--------|---------|------|-----------|
 | Sprint 1 — Cascarón | 6 (1.0–1.5) | 6 | 0 |
 | Sprint 2 — Datos | 5 (2.1–2.5) | 5 | 0 |
-| Sprint 3 — Lógica | 3 (3.1–3.3) | 0 | 3 |
+| Sprint 3 — Lógica | 3 (3.1–3.3) | 3 | 0 |
 | Sprint 4 — UI | 8 (4.1–4.8) | 0 | 8 |
 | **Total** | **22** | **0** | **22** |
 
