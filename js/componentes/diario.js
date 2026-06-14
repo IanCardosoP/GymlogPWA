@@ -61,9 +61,11 @@ export async function render(state) {
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
-  for (let i = 0; i < MAX_ROUTINE_SLOTS; i++) {
+  for (let i = 0; i < ejercicios.length; i++) {
     lista.appendChild(await construirBloque(ejercicios[i], i, sesion, state));
   }
+  // Un slot extra para añadir el siguiente ejercicio
+  lista.appendChild(await construirBloque(null, ejercicios.length, sesion, state));
 
   // Botón fin
   const finBtn = cel('button', 'btn-fin-entrenamiento', '[ FIN DEL ENTRENAMIENTO ]');
