@@ -241,11 +241,25 @@ export async function linkEjercicioToRutina(rutinaId, ejercicioId, orden) {
 }
 
 export async function updateRutinaDia(rutinaId, diaSugerido) {
+  if (diaSugerido !== null) {
+    // Un día solo puede pertenecer a una rutina — limpia asignación previa
+    await db.query(
+      'UPDATE rutinas SET dia_sugerido = NULL WHERE dia_sugerido = $1 AND id != $2',
+      [Number(diaSugerido), rutinaId]
+    );
+  }
   const result = await db.query(
     'UPDATE rutinas SET dia_sugerido = $1 WHERE id = $2 RETURNING *',
     [diaSugerido === null ? null : Number(diaSugerido), rutinaId]
   );
   return result.rows[0];
+}
+
+export async function clearRutinaDia(dia) {
+  await db.query(
+    'UPDATE rutinas SET dia_sugerido = NULL WHERE dia_sugerido = $1',
+    [Number(dia)]
+  );
 }
 
 export async function getAllSeriesForExport() {

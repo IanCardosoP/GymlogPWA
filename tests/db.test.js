@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   initDB,
   getEjercicios, saveEjercicio,
-  getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy,
+  getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia,
   saveSesion, getSesionDelDia,
   saveSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit,
@@ -53,6 +53,28 @@ describe('rutinas', () => {
     const lista = await getRutinaEjercicios(rutina.id);
     expect(lista.length).toBe(1);
     expect(lista[0].nombre).toBe('Jalón Polea');
+  });
+
+  it('updateRutinaDia limpia la asignación previa del mismo día', async () => {
+    const vieja = await saveRutina('Pecho', 0);        // domingo
+    const nueva  = await saveRutina('Pierna', null);
+
+    await updateRutinaDia(nueva.id, 0);               // asigna Pierna a domingo
+
+    const todas = await getRutinas();
+    const viejaActual = todas.find(r => r.id === vieja.id);
+    const nuevaActual = todas.find(r => r.id === nueva.id);
+
+    expect(viejaActual.dia_sugerido).toBeNull();       // Pecho ya no tiene día
+    expect(nuevaActual.dia_sugerido).toBe(0);          // Pierna tiene domingo
+  });
+
+  it('clearRutinaDia deja el día sin rutina asignada', async () => {
+    const rutina = await saveRutina('Espalda', 3);     // miércoles
+    await clearRutinaDia(3);
+    const todas = await getRutinas();
+    const actual = todas.find(r => r.id === rutina.id);
+    expect(actual.dia_sugerido).toBeNull();
   });
 
   it('updateActivoHoy cambia el booleano correctamente', async () => {

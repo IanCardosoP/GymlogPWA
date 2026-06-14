@@ -1,7 +1,7 @@
 // Componente Config: asignación de rutinas semanales, unidades kg/lb y gestión CSV
 import { dispatch } from '../app.js';
 import {
-  getRutinas, saveRutina, updateRutinaDia,
+  getRutinas, saveRutina, updateRutinaDia, clearRutinaDia,
   getConf, updatePrefUnit,
   getDB, getAllSeriesForExport,
 } from '../db.js';
@@ -130,8 +130,13 @@ export async function render(state) {
   secDias.addEventListener('change', async e => {
     const select = e.target.closest('.config-dia-select');
     if (!select) return;
+    const dia = parseInt(select.dataset.dia);
     const rutinaId = select.value ? parseInt(select.value) : null;
-    if (rutinaId) await updateRutinaDia(rutinaId, parseInt(select.dataset.dia));
+    if (rutinaId) {
+      await updateRutinaDia(rutinaId, dia);
+    } else {
+      await clearRutinaDia(dia);
+    }
   });
 
   btnNueva.addEventListener('click', async () => {
