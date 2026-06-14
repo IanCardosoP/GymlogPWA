@@ -4,7 +4,7 @@ import {
   getEjercicios, saveEjercicio,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy,
   saveSesion, getSesionDelDia,
-  saveSerie, getUltimaSerie, getSeriesPorEjercicio,
+  saveSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit,
 } from '../js/db.js';
 
@@ -129,5 +129,39 @@ describe('conf', () => {
   it('no existe función deleteConf en el módulo', async () => {
     const mod = await import('../js/db.js');
     expect(mod.deleteConf).toBeUndefined();
+  });
+});
+
+// ── getSeriesDeSesionEjercicio ────────────────────────────────────────────────
+
+describe('getSeriesDeSesionEjercicio', () => {
+  it('devuelve solo las series de la sesión y ejercicio indicados', async () => {
+    const rutina = await saveRutina('Pecho', 1);
+    const ej1    = await saveEjercicio('Press Banca', 'Pecho');
+    const ej2    = await saveEjercicio('Aperturas', 'Pecho');
+    const s1     = await saveSesion('2026-06-14', rutina.id, null);
+    const s2     = await saveSesion('2026-06-13', rutina.id, null);
+
+    await saveSerie(s1.id, ej1.id, 1, 70, 10);
+    await saveSerie(s1.id, ej1.id, 2, 70, 8);
+    await saveSerie(s1.id, ej2.id, 1, 30, 12); // otro ejercicio, no debe aparecer
+    await saveSerie(s2.id, ej1.id, 1, 60, 10); // otra sesión, no debe aparecer
+
+    const result = await getSeriesDeSesionEjercicio(s1.id, ej1.id);
+
+    expect(result.length).toBe(2);
+    expect(result[0].numero_serie).toBe(1);
+    expect(result[1].numero_serie).toBe(2);
+    expect(result.every(r => r.sesion_id === s1.id)).toBe(true);
+    expect(result.every(r => r.ejercicio_id === ej1.id)).toBe(true);
+  });
+
+  it('devuelve array vacío si no hay series para esa sesión+ejercicio', async () => {
+    const rutina = await saveRutina('Espalda', 2);
+    const ej     = await saveEjercicio('Dominadas', 'Espalda');
+    const sesion = await saveSesion('2026-06-14', rutina.id, null);
+
+    const result = await getSeriesDeSesionEjercicio(sesion.id, ej.id);
+    expect(result).toEqual([]);
   });
 });

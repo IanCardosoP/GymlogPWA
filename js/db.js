@@ -160,6 +160,16 @@ export async function getUltimaSerie(ejercicioId) {
   return result.rows[0] ?? null;
 }
 
+export async function getSeriesDeSesionEjercicio(sesionId, ejercicioId) {
+  const result = await db.query(
+    `SELECT * FROM series
+     WHERE sesion_id = $1 AND ejercicio_id = $2
+     ORDER BY numero_serie ASC`,
+    [sesionId, ejercicioId]
+  );
+  return result.rows;
+}
+
 export async function getSeriesPorEjercicio(ejercicioId) {
   const result = await db.query(
     `SELECT s.*, se.fecha

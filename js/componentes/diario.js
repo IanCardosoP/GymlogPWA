@@ -1,15 +1,17 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
-import { store } from '../app.js';
+import { store, navigateTo } from '../app.js';
+import asciiFinArt from '/icons/ascii-end.txt?raw';
 import {
   getRutinas, getRutinaEjercicios, getRutinaEjerciciosSuplentes,
   getSesionDelDia, saveSesion,
-  saveSerie, getUltimaSerie,
+  saveSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
   saveEjercicio, updateActivoHoy, linkEjercicioToRutina,
 } from '../db.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
 
 let clickAbort = null;
+
 
 function cel(tag, clase, texto) {
   const e = document.createElement(tag);
@@ -108,6 +110,26 @@ export async function render(state) {
   }, { signal: clickAbort.signal });
 }
 
+function marcarComoGuardada(fila, peso, reps) {
+  const inputPeso = fila.querySelector('.input-peso');
+  const inputReps = fila.querySelector('.input-reps');
+  const btn       = fila.querySelector('.btn-guardar');
+
+  btn.textContent  = '[✓]';
+  btn.disabled     = true;
+  inputPeso.disabled = true;
+  inputReps.disabled = true;
+  inputPeso.classList.add('is-saved');
+  inputReps.classList.add('is-saved');
+
+  if (peso === 0) {
+    inputPeso.placeholder = 'BW';
+  } else {
+    inputPeso.value = String(peso);
+  }
+  inputReps.value = String(reps);
+}
+
 async function construirBloque(ej, idx, sesion) {
   const details = document.createElement('details');
   details.className = 'ejercicio-bloque';
@@ -118,8 +140,8 @@ async function construirBloque(ej, idx, sesion) {
   const numSpan = cel('span', 'ejercicio-num', `${idx + 1}. `);
   const nombreSpan = cel('span', 'ejercicio-nombre', ej ? ej.nombre : '[ + Añadir Ejercicio ]');
   if (ej) {
-    nombreSpan.dataset.reId  = ej.id;
-    nombreSpan.dataset.ejId  = ej.ejercicio_id;
+    nombreSpan.dataset.reId   = ej.id;
+    nombreSpan.dataset.ejId   = ej.ejercicio_id;
     nombreSpan.dataset.nombre = ej.nombre;
   }
 
@@ -130,14 +152,30 @@ async function construirBloque(ej, idx, sesion) {
   if (ej && sesion) {
     const cuerpo = cel('div', 'ejercicio-cuerpo');
 
-    const ultima = await getUltimaSerie(ej.ejercicio_id);
-    const phPeso = ultima ? (Number(ultima.peso) === 0 ? 'BW' : String(ultima.peso)) : '';
-    const phReps = ultima ? String(ultima.repeticiones) : '';
+    // Series ya guardadas hoy para este ejercicio
+    const seriesHoy = await getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id);
+
+    // Placeholder = última serie de hoy, o última de sesiones anteriores si no hay ninguna hoy
+    const ref = seriesHoy.length > 0
+      ? seriesHoy[seriesHoy.length - 1]
+      : await getUltimaSerie(ej.ejercicio_id);
+    const phPeso = ref ? (Number(ref.peso) === 0 ? 'BW' : String(ref.peso)) : '';
+    const phReps = ref ? String(ref.repeticiones) : '';
 
     const filaWrapper = cel('div', 'serie-filas');
     filaWrapper.dataset.ejId = ej.ejercicio_id;
     filaWrapper.dataset.reId = ej.id;
-    filaWrapper.appendChild(construirFilaSerie(1, phPeso, phReps));
+
+    // Hidratar series guardadas
+    for (const serie of seriesHoy) {
+      const displayPeso = Number(serie.peso) === 0 ? 'BW' : String(serie.peso);
+      const fila = construirFilaSerie(serie.numero_serie, displayPeso, String(serie.repeticiones));
+      marcarComoGuardada(fila, Number(serie.peso), serie.repeticiones);
+      filaWrapper.appendChild(fila);
+    }
+
+    // Fila vacía para la siguiente serie
+    filaWrapper.appendChild(construirFilaSerie(seriesHoy.length + 1, phPeso, phReps));
     cuerpo.appendChild(filaWrapper);
 
     details.appendChild(cuerpo);
@@ -200,27 +238,10 @@ async function handleGuardar(btnGuardar, sesionId) {
 
   await saveSerie(sesionId, ejId, numSerie, peso, reps);
 
-  // Representación visual del valor guardado ('BW' cuando peso=0)
   const displayPeso = peso === 0 ? 'BW' : String(peso);
   const displayReps = String(reps);
 
-  btnGuardar.textContent = '[✓]';
-  btnGuardar.disabled = true;
-  inputPeso.disabled = true;
-  inputReps.disabled = true;
-
-  // Aplica is-saved para que el texto tenga el mismo color que si el usuario lo hubiera escrito
-  inputPeso.classList.add('is-saved');
-  inputReps.classList.add('is-saved');
-
-  // En inputs de tipo number no se puede poner 'BW' como value; se usa placeholder con is-saved
-  if (peso === 0) {
-    inputPeso.placeholder = 'BW';
-  } else {
-    inputPeso.value = displayPeso;
-  }
-  inputReps.value = displayReps;
-
+  marcarComoGuardada(fila, peso, reps);
   filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
 }
 
@@ -290,18 +311,24 @@ function mostrarPantallaFin(container) {
   finDiv.appendChild(cel('h2', 'fin-titulo', '¡Entrenamiento Registrado!'));
 
   const arte = cel('pre', 'fin-arte');
-  arte.textContent = [
-    '     \\o/',
-    '      |',
-    '     / \\',
-    '',
-    ' ___________',
-    '|  GymLog  |',
-    '|___________|',
-  ].join('\n');
+  arte.textContent = asciiFinArt;
   finDiv.appendChild(arte);
 
   finDiv.appendChild(cel('p', 'fin-msg', 'Descansa. Recupera. Vuelve mañana.'));
 
+  const countdown = cel('p', 'fin-countdown', 'Volviendo en 5...');
+  finDiv.appendChild(countdown);
+
   container.appendChild(finDiv);
+
+  let secs = 5;
+  const timer = setInterval(() => {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(timer);
+      if (document.getElementById('diario-fin')) navigateTo('diario');
+    } else {
+      if (countdown.isConnected) countdown.textContent = `Volviendo en ${secs}...`;
+    }
+  }, 1000);
 }

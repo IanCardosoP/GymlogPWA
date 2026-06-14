@@ -289,6 +289,7 @@ input.is-saved::placeholder {
 .diario-fin {
   text-align: center;
   padding: 32px 16px;
+  overflow: hidden;
 }
 
 .fin-titulo {
@@ -298,15 +299,26 @@ input.is-saved::placeholder {
 }
 
 .fin-arte {
-  font-size: 20px;
-  line-height: 1.4;
-  color: var(--color-texto);
+  font-size: 0.7px;
+  line-height: 0.7px;
+  letter-spacing: 0;
+  color: var(--color-acento);
   margin-bottom: 24px;
+  display: inline-block;
+  text-align: left;
+  white-space: pre;
 }
 
 .fin-msg {
   color: var(--color-texto-dim);
   font-size: 13px;
+}
+
+.fin-countdown {
+  font-size: 11px;
+  color: var(--color-texto-dim);
+  margin-top: 16px;
+  letter-spacing: 0.1em;
 }
 
 /* ── Progreso ────────────────────────────────────────────────────────────────── */
