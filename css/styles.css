@@ -557,8 +557,9 @@ input.is-saved::placeholder {
 }
 
 .config-radio-label {
-  display: block;
-  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 20px;
   font-size: 14px;
   cursor: pointer;
 }
