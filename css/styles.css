@@ -145,3 +145,291 @@ details[open] summary {
 details > div {
   padding: 12px;
 }
+
+/* ── Diario ──────────────────────────────────────────────────────────────────── */
+
+.diario-header {
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--color-texto-dim);
+  margin-bottom: 12px;
+}
+
+.diario-fecha {
+  font-size: 13px;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  color: var(--color-acento);
+}
+
+.diario-rutina-row {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-texto-dim);
+}
+
+.ejercicio-num {
+  color: var(--color-texto-dim);
+}
+
+.ejercicio-nombre {
+  color: var(--color-texto);
+  text-decoration: underline dotted;
+}
+
+.ejercicio-historial {
+  font-size: 11px;
+  color: var(--color-texto-dim);
+  margin-bottom: 8px;
+}
+
+.serie-filas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.serie-fila {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.serie-label {
+  font-size: 12px;
+  color: var(--color-texto-dim);
+  min-width: 28px;
+}
+
+.input-peso,
+.input-reps {
+  width: 64px;
+  padding: 8px 6px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.serie-unit {
+  font-size: 12px;
+  color: var(--color-texto-dim);
+}
+
+.btn-guardar {
+  background: none;
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto);
+  font-size: 11px;
+  padding: 6px 8px;
+  letter-spacing: 0.03em;
+}
+
+.btn-guardar:disabled {
+  color: var(--color-acento);
+  border-color: var(--color-acento);
+}
+
+.suplentes-dropdown {
+  padding: 8px 12px;
+  background-color: var(--color-fondo-alt);
+  border-bottom: 1px solid var(--color-texto-dim);
+}
+
+.suplentes-titulo {
+  font-size: 11px;
+  color: var(--color-texto-dim);
+  margin-bottom: 6px;
+}
+
+.suplente-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--color-texto);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: left;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-texto-dim);
+}
+
+.suplente-item:last-child { border-bottom: none; }
+
+.ejercicio-nombre-input {
+  font-size: 13px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.btn-fin-entrenamiento {
+  display: block;
+  width: 100%;
+  margin-top: 24px;
+  padding: 14px;
+  background: none;
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto-dim);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+.btn-fin-entrenamiento:hover {
+  border-color: var(--color-acento);
+  color: var(--color-acento);
+}
+
+/* Pantalla fin */
+.diario-fin {
+  text-align: center;
+  padding: 32px 16px;
+}
+
+.fin-titulo {
+  color: var(--color-acento);
+  font-size: 18px;
+  margin-bottom: 24px;
+}
+
+.fin-arte {
+  font-size: 20px;
+  line-height: 1.4;
+  color: var(--color-texto);
+  margin-bottom: 24px;
+}
+
+.fin-msg {
+  color: var(--color-texto-dim);
+  font-size: 13px;
+}
+
+/* ── Progreso ────────────────────────────────────────────────────────────────── */
+
+.progreso-label {
+  display: block;
+  font-size: 12px;
+  color: var(--color-texto-dim);
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.grafica-titulo,
+.historial-titulo {
+  font-size: 12px;
+  color: var(--color-texto-dim);
+  margin: 16px 0 8px;
+  border-bottom: 1px solid var(--color-texto-dim);
+  padding-bottom: 4px;
+}
+
+.grafica-fila {
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.grafica-fecha { color: var(--color-texto-dim); }
+.grafica-valor { color: var(--color-texto); }
+.grafica-barra { color: var(--color-acento); font-size: 11px; }
+
+.historial-lista {
+  list-style: none;
+  padding: 0;
+}
+
+.historial-item {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--color-texto);
+}
+
+/* ── Config ──────────────────────────────────────────────────────────────────── */
+
+.config-seccion {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-texto-dim);
+}
+
+.config-titulo {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--color-texto-dim);
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.config-dia-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.config-dia-fila label {
+  min-width: 90px;
+  font-size: 13px;
+  color: var(--color-texto-dim);
+}
+
+.config-dia-select { flex: 1; }
+
+.config-nueva-rutina {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.input-nueva-rutina { flex: 1; }
+
+.btn-nueva-rutina {
+  background: none;
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto);
+  font-size: 12px;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.config-radio-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.config-radio { margin-right: 8px; accent-color: var(--color-acento); }
+
+.btn-exportar-csv,
+.btn-importar-csv {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto);
+  font-size: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  text-align: left;
+  letter-spacing: 0.03em;
+}
+
+.input-archivo {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--color-texto-dim);
+}
+
+.resultado-importacion {
+  font-size: 12px;
+  color: var(--color-acento);
+  min-height: 1.5em;
+}
+
+.config-footer {
+  font-size: 11px;
+  color: var(--color-texto-dim);
+  text-align: center;
+  padding: 16px 0 8px;
+}

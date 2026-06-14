@@ -189,3 +189,66 @@ export async function updatePrefUnit(unit) {
   );
   return result.rows[0];
 }
+
+// ── Funciones auxiliares para componentes UI ───────────────────────────────────
+
+export async function getEjerciciosOrdenadosPorUso() {
+  const result = await db.query(`
+    SELECT e.id, e.nombre, e.grupo_muscular, MAX(se.fecha) AS ultima_fecha
+    FROM ejercicios e
+    LEFT JOIN series s ON s.ejercicio_id = e.id
+    LEFT JOIN sesiones se ON se.id = s.sesion_id
+    GROUP BY e.id, e.nombre, e.grupo_muscular
+    ORDER BY ultima_fecha DESC NULLS LAST, e.nombre ASC
+  `);
+  return result.rows;
+}
+
+export async function getRutinaEjerciciosSuplentes(rutinaId) {
+  const result = await db.query(
+    `SELECT re.id, re.rutina_id, re.ejercicio_id, re.orden, re.activo_hoy,
+            e.nombre, e.grupo_muscular
+     FROM rutina_ejercicios re
+     JOIN ejercicios e ON e.id = re.ejercicio_id
+     WHERE re.rutina_id = $1 AND re.activo_hoy = FALSE
+     ORDER BY e.nombre`,
+    [rutinaId]
+  );
+  return result.rows;
+}
+
+export async function linkEjercicioToRutina(rutinaId, ejercicioId, orden) {
+  const { rows: existing } = await db.query(
+    'SELECT id FROM rutina_ejercicios WHERE rutina_id = $1 AND ejercicio_id = $2',
+    [rutinaId, ejercicioId]
+  );
+  if (existing.length > 0) return existing[0];
+  const result = await db.query(
+    'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden, activo_hoy) VALUES ($1, $2, $3, TRUE) RETURNING *',
+    [rutinaId, ejercicioId, orden ?? 0]
+  );
+  return result.rows[0];
+}
+
+export async function updateRutinaDia(rutinaId, diaSugerido) {
+  const result = await db.query(
+    'UPDATE rutinas SET dia_sugerido = $1 WHERE id = $2 RETURNING *',
+    [diaSugerido === null ? null : Number(diaSugerido), rutinaId]
+  );
+  return result.rows[0];
+}
+
+export async function getAllSeriesForExport() {
+  const result = await db.query(`
+    SELECT se.fecha, r.nombre AS rutina_nombre,
+           e.nombre AS ejercicio_nombre, e.grupo_muscular,
+           s.numero_serie, s.peso, s.repeticiones,
+           se.peso_corporal, se.energia_sueno
+    FROM series s
+    JOIN sesiones se ON se.id = s.sesion_id
+    JOIN ejercicios e ON e.id = s.ejercicio_id
+    LEFT JOIN rutinas r ON r.id = se.rutina_id
+    ORDER BY se.fecha ASC, s.sesion_id ASC, s.numero_serie ASC
+  `);
+  return result.rows;
+}
