@@ -201,8 +201,8 @@ details > div {
   min-width: 28px;
 }
 
-.input-peso,
-.input-reps {
+input.input-peso,
+input.input-reps {
   width: 64px;
   padding: 8px 6px;
   font-size: 16px;

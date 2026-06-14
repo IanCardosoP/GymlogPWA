@@ -163,6 +163,7 @@ function construirFilaSerie(num, phPeso, phReps) {
   inputPeso.setAttribute('inputmode', 'decimal');
   inputPeso.setAttribute('pattern', '[0-9]*');
   inputPeso.setAttribute('aria-label', 'Peso');
+  inputPeso.min = '0';
   inputPeso.placeholder = phPeso || '0';
   fila.appendChild(inputPeso);
 
@@ -176,8 +177,11 @@ function construirFilaSerie(num, phPeso, phReps) {
   inputReps.setAttribute('inputmode', 'decimal');
   inputReps.setAttribute('pattern', '[0-9]*');
   inputReps.setAttribute('aria-label', 'Repeticiones');
+  inputReps.min = '0';
   inputReps.placeholder = phReps || '0';
   fila.appendChild(inputReps);
+
+  fila.appendChild(cel('span', 'serie-unit', ' reps'));
 
   const btn = cel('button', 'btn-guardar', '[ GUARDAR SERIE ]');
   btn.dataset.numSerie = num;
