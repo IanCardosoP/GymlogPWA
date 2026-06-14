@@ -383,6 +383,54 @@ input.is-saved::placeholder {
   color: var(--color-acento);
 }
 
+/* Pantalla descanso / sin rutina */
+.diario-descanso {
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.descanso-arte {
+  font-size: 4px;
+  line-height: 4px;
+  letter-spacing: 0;
+  color: var(--color-acento);
+  display: inline-block;
+  text-align: left;
+  white-space: pre;
+  margin-bottom: 24px;
+}
+
+.descanso-msg {
+  font-size: 12px;
+  color: var(--color-texto-dim);
+  margin-bottom: 16px;
+  letter-spacing: 0.05em;
+}
+
+.btn-ir-config {
+  display: inline-block;
+  background: none;
+  border: 1px solid var(--color-acento);
+  color: var(--color-acento);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  margin-bottom: 20px;
+}
+
+.btn-ir-config:hover {
+  background-color: var(--color-acento);
+  color: var(--color-fondo);
+}
+
+.descanso-descanso {
+  font-size: 11px;
+  color: var(--color-texto-dim);
+  letter-spacing: 0.08em;
+}
+
 /* Pantalla fin */
 .diario-fin {
   text-align: center;

@@ -1,6 +1,7 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
 import { store, navigateTo } from '../app.js';
-import asciiFinArt from '/icons/ascii-end.txt?raw';
+import asciiFinArt  from '/icons/ascii-end.txt?raw';
+import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
@@ -51,18 +52,21 @@ export async function render(state) {
   if (sesion)    store.currentSesionId = sesion.id;
   if (rutinaHoy) store.activeRoutineId  = rutinaHoy.id;
 
+  // Sin rutina asignada → pantalla de descanso
+  if (!rutinaHoy) {
+    mostrarPantallaDescanso(container);
+    return;
+  }
+
   // Ejercicios activos (máx MAX_ROUTINE_SLOTS) + suplentes para swap
   let ejercicios = [];
   let suplentesSwap = [];
-  if (rutinaHoy) {
-    const todos = await getRutinaEjercicios(rutinaHoy.id);
-    const activos = todos.filter(e => e.activo_hoy);
-    ejercicios = activos.slice(0, MAX_ROUTINE_SLOTS);
-    // Suplentes = inactivos + activos que no caben en los 8 slots visibles
-    const inactivos    = todos.filter(e => !e.activo_hoy);
-    const activosExtra = activos.slice(MAX_ROUTINE_SLOTS);
-    suplentesSwap = [...inactivos, ...activosExtra];
-  }
+  const todos = await getRutinaEjercicios(rutinaHoy.id);
+  const activos = todos.filter(e => e.activo_hoy);
+  ejercicios = activos.slice(0, MAX_ROUTINE_SLOTS);
+  const inactivos    = todos.filter(e => !e.activo_hoy);
+  const activosExtra = activos.slice(MAX_ROUTINE_SLOTS);
+  suplentesSwap = [...inactivos, ...activosExtra];
 
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
@@ -423,6 +427,32 @@ function handleEliminar(btnDelete, state) {
   const cuerpo = details?.querySelector('.ejercicio-cuerpo');
   if (cuerpo) details.insertBefore(panel, cuerpo);
   else details?.appendChild(panel);
+}
+
+function mostrarPantallaDescanso(container) {
+  const div = cel('div', 'diario-descanso');
+
+  const arte = cel('pre', 'descanso-arte');
+  arte.textContent = motivArt;
+  div.appendChild(arte);
+
+  div.appendChild(cel('p', 'descanso-msg', 'No hay rutina asignada para hoy.'));
+
+  const enlace = cel('button', 'btn-ir-config', '[ CONFIGURAR RUTINA PARA HOY ]');
+  enlace.dataset.action = 'ir-config';
+  div.appendChild(enlace);
+
+  div.appendChild(cel('p', 'descanso-descanso', '— o disfruta tu día de descanso —'));
+
+  container.appendChild(div);
+
+  // El click en ir-config lo captura el listener global de app.js
+  // pero como aún no hay listener aquí, lo añadimos localmente
+  clickAbort?.abort();
+  clickAbort = new AbortController();
+  container.addEventListener('click', e => {
+    if (e.target.closest('[data-action="ir-config"]')) navigateTo('config');
+  }, { signal: clickAbort.signal });
 }
 
 function mostrarPantallaFin(container) {
