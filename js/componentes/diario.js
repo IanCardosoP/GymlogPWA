@@ -134,11 +134,6 @@ async function construirBloque(ej, idx, sesion) {
     const phPeso = ultima ? (Number(ultima.peso) === 0 ? 'BW' : String(ultima.peso)) : '';
     const phReps = ultima ? String(ultima.repeticiones) : '';
 
-    if (ultima) {
-      cuerpo.appendChild(cel('p', 'ejercicio-historial',
-        `Último: ${phPeso} × ${phReps} reps`));
-    }
-
     const filaWrapper = cel('div', 'serie-filas');
     filaWrapper.dataset.ejId = ej.ejercicio_id;
     filaWrapper.dataset.reId = ej.id;
@@ -198,19 +193,35 @@ async function handleGuardar(btnGuardar, sesionId) {
   const inputPeso = fila.querySelector('.input-peso');
   const inputReps = fila.querySelector('.input-reps');
 
-  const peso = parseFloat(inputPeso.value) || 0;
-  const reps = parseInt(inputReps.value, 10) || 0;
+  const pesoStr = inputPeso.value || inputPeso.placeholder;
+  const repsStr = inputReps.value || inputReps.placeholder;
+  const peso = parseFloat(pesoStr) || 0;  // 'BW' → NaN → 0 (regla BW)
+  const reps = parseInt(repsStr, 10)  || 0;
 
   await saveSerie(sesionId, ejId, numSerie, peso, reps);
+
+  // Representación visual del valor guardado ('BW' cuando peso=0)
+  const displayPeso = peso === 0 ? 'BW' : String(peso);
+  const displayReps = String(reps);
 
   btnGuardar.textContent = '[✓]';
   btnGuardar.disabled = true;
   inputPeso.disabled = true;
   inputReps.disabled = true;
 
-  const nextPh = `${inputPeso.value || inputPeso.placeholder}`;
-  const nextPhR = `${inputReps.value || inputReps.placeholder}`;
-  filaWrapper.appendChild(construirFilaSerie(numSerie + 1, nextPh, nextPhR));
+  // Aplica is-saved para que el texto tenga el mismo color que si el usuario lo hubiera escrito
+  inputPeso.classList.add('is-saved');
+  inputReps.classList.add('is-saved');
+
+  // En inputs de tipo number no se puede poner 'BW' como value; se usa placeholder con is-saved
+  if (peso === 0) {
+    inputPeso.placeholder = 'BW';
+  } else {
+    inputPeso.value = displayPeso;
+  }
+  inputReps.value = displayReps;
+
+  filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
 }
 
 async function handleSingleTap(nombreEl, rutinaHoy) {

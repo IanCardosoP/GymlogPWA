@@ -209,6 +209,13 @@ input.input-reps {
   text-align: center;
 }
 
+input.is-saved,
+input.is-saved::placeholder {
+  color: var(--color-texto);
+  -webkit-text-fill-color: var(--color-texto);
+  opacity: 1;
+}
+
 .serie-unit {
   font-size: 12px;
   color: var(--color-texto-dim);
