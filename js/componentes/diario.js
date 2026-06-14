@@ -2,7 +2,7 @@
 import { store, navigateTo } from '../app.js';
 import asciiFinArt from '/icons/ascii-end.txt?raw';
 import {
-  getRutinas, getRutinaEjercicios, getRutinaEjerciciosSuplentes,
+  getRutinas, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
   saveSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
   saveEjercicio, updateActivoHoy, linkEjercicioToRutina,
@@ -51,21 +51,28 @@ export async function render(state) {
   if (sesion)    store.currentSesionId = sesion.id;
   if (rutinaHoy) store.activeRoutineId  = rutinaHoy.id;
 
-  // Ejercicios activos (máx MAX_ROUTINE_SLOTS)
+  // Ejercicios activos (máx MAX_ROUTINE_SLOTS) + suplentes para swap
   let ejercicios = [];
+  let suplentesSwap = [];
   if (rutinaHoy) {
     const todos = await getRutinaEjercicios(rutinaHoy.id);
-    ejercicios = todos.filter(e => e.activo_hoy).slice(0, MAX_ROUTINE_SLOTS);
+    const activos = todos.filter(e => e.activo_hoy);
+    ejercicios = activos.slice(0, MAX_ROUTINE_SLOTS);
+    // Suplentes = inactivos + activos que no caben en los 8 slots visibles
+    const inactivos    = todos.filter(e => !e.activo_hoy);
+    const activosExtra = activos.slice(MAX_ROUTINE_SLOTS);
+    suplentesSwap = [...inactivos, ...activosExtra];
   }
 
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
+  const hasSuplentes = suplentesSwap.length > 0;
   for (let i = 0; i < ejercicios.length; i++) {
-    lista.appendChild(await construirBloque(ejercicios[i], i, sesion, state));
+    lista.appendChild(await construirBloque(ejercicios[i], i, sesion, hasSuplentes));
   }
   // Un slot extra para añadir el siguiente ejercicio
-  lista.appendChild(await construirBloque(null, ejercicios.length, sesion, state));
+  lista.appendChild(await construirBloque(null, ejercicios.length, sesion, false));
 
   // Botón fin
   const finBtn = cel('button', 'btn-fin-entrenamiento', '[ FIN DEL ENTRENAMIENTO ]');
@@ -75,9 +82,6 @@ export async function render(state) {
   // Delegación de eventos — AbortController descarta el listener del render anterior
   clickAbort?.abort();
   clickAbort = new AbortController();
-
-  let tapTimer = null;
-  let lastTapTarget = null;
 
   container.addEventListener('click', async e => {
     const btnGuardar = e.target.closest('.btn-guardar');
@@ -93,22 +97,20 @@ export async function render(state) {
       return;
     }
 
+    const btnSwap = e.target.closest('.btn-swap');
+    if (btnSwap && rutinaHoy) {
+      await handleSuplentesDropdown(btnSwap, suplentesSwap);
+      return;
+    }
+
     const nombreEl = e.target.closest('.ejercicio-nombre');
     if (!nombreEl) return;
 
-    if (lastTapTarget === nombreEl && tapTimer) {
-      clearTimeout(tapTimer);
-      tapTimer = null;
-      lastTapTarget = null;
-      handleDoubleTap(nombreEl, rutinaHoy, state);
-    } else {
-      lastTapTarget = nombreEl;
-      tapTimer = setTimeout(async () => {
-        tapTimer = null;
-        lastTapTarget = null;
-        if (rutinaHoy) await handleSingleTap(nombreEl, rutinaHoy);
-      }, 280);
+    // Slot "[ + Añadir Ejercicio ]" — 1 tap activa el input
+    if (!nombreEl.dataset.ejId && rutinaHoy) {
+      handleAñadirEjercicio(nombreEl, rutinaHoy, state);
     }
+    // Ejercicio existente: <details> maneja el acordeón nativamente
   }, { signal: clickAbort.signal });
 }
 
@@ -132,7 +134,7 @@ function marcarComoGuardada(fila, peso, reps) {
   inputReps.value = String(reps);
 }
 
-async function construirBloque(ej, idx, sesion) {
+async function construirBloque(ej, idx, sesion, hasSuplentes) {
   const details = document.createElement('details');
   details.className = 'ejercicio-bloque';
 
@@ -149,6 +151,13 @@ async function construirBloque(ej, idx, sesion) {
 
   summary.appendChild(numSpan);
   summary.appendChild(nombreSpan);
+
+  if (ej && hasSuplentes) {
+    const btnSwap = cel('button', 'btn-swap', '[ ⇄ ]');
+    btnSwap.dataset.reId = ej.id;
+    summary.appendChild(btnSwap);
+  }
+
   details.appendChild(summary);
 
   if (ej && sesion) {
@@ -247,15 +256,15 @@ async function handleGuardar(btnGuardar, sesionId) {
   filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
 }
 
-async function handleSingleTap(nombreEl, rutinaHoy) {
-  const details = nombreEl.closest('details');
+async function handleSuplentesDropdown(btnSwap, suplentes) {
+  const details = btnSwap.closest('details');
   const existente = details?.querySelector('.suplentes-dropdown');
   if (existente) { existente.remove(); return; }
-
-  const reId = parseInt(nombreEl.dataset.reId);
-  const suplentes = await getRutinaEjerciciosSuplentes(rutinaHoy.id);
   if (suplentes.length === 0) return;
 
+  if (details) details.open = true; // abre el acordeón si estaba colapsado
+
+  const reId = parseInt(btnSwap.dataset.reId);
   const dropdown = cel('div', 'suplentes-dropdown');
   dropdown.appendChild(cel('p', 'suplentes-titulo', 'Suplentes:'));
 
@@ -271,7 +280,7 @@ async function handleSingleTap(nombreEl, rutinaHoy) {
   else details?.appendChild(dropdown);
 }
 
-function handleDoubleTap(nombreEl, rutinaHoy, state) {
+function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   const nombreActual = nombreEl.textContent;
 
   const input = document.createElement('input');

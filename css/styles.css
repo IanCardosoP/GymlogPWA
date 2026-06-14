@@ -131,6 +131,8 @@ summary {
   letter-spacing: 0.05em;
   background-color: var(--color-fondo-alt);
   user-select: none;
+  display: flex;
+  align-items: center;
 }
 
 summary::-webkit-details-marker {
@@ -172,6 +174,7 @@ details > div {
 }
 
 .ejercicio-nombre {
+  flex: 1;
   color: var(--color-texto);
   text-decoration: underline dotted;
 }
@@ -261,6 +264,22 @@ input.is-saved::placeholder {
 }
 
 .suplente-item:last-child { border-bottom: none; }
+
+.btn-swap {
+  background: none;
+  border: none;
+  color: var(--color-acento);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 300;
+  padding: 0 6px;
+  cursor: pointer;
+  opacity: 0.6;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.btn-swap:hover { opacity: 1; }
 
 .ejercicio-nombre-input {
   font-size: 13px;
