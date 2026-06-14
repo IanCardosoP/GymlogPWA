@@ -31,20 +31,19 @@ export async function render(state) {
     .toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     .toUpperCase();
 
-  // Cabecera
-  const header = cel('header', 'diario-header');
-  header.appendChild(cel('h2', 'diario-fecha', fechaDisplay));
-  container.appendChild(header);
-
   // Rutina del día (por día de semana: 0=Dom … 6=Sáb)
   const diaSemana = new Date().getDay();
   const rutinas = await getRutinas();
   const rutinaHoy = rutinas.find(r => r.dia_sugerido === diaSemana) ?? null;
 
-  const rutinaRow = cel('div', 'diario-rutina-row');
-  rutinaRow.appendChild(cel('span', 'diario-rutina-nombre',
-    `Rutina: ${rutinaHoy?.nombre ?? '— Sin rutina asignada —'}`));
-  container.appendChild(rutinaRow);
+  // Cabecera
+  const header = cel('header', 'diario-header');
+  header.appendChild(cel('h2', 'diario-fecha', fechaDisplay));
+  const rutinaLabel = rutinaHoy
+    ? `[ DIA DE ${rutinaHoy.nombre.toUpperCase()} ]`
+    : '[ SIN RUTINA ASIGNADA ]';
+  header.appendChild(cel('p', 'diario-rutina-titulo', rutinaLabel));
+  container.appendChild(header);
 
   // Sesión del día
   let sesion = await getSesionDelDia(fechaLocal);

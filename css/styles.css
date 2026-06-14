@@ -161,12 +161,14 @@ details > div {
   font-weight: normal;
   letter-spacing: 0.08em;
   color: var(--color-acento);
+  margin-bottom: 6px;
 }
 
-.diario-rutina-row {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--color-texto-dim);
+.diario-rutina-titulo {
+  font-size: 13px;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  color: var(--color-acento);
 }
 
 .ejercicio-num {
