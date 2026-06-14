@@ -5,7 +5,8 @@ import {
   getRutinas, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
   saveSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
-  saveEjercicio, updateActivoHoy, linkEjercicioToRutina, swapOrden,
+  saveEjercicio, updateEjercicioNombre, deleteEjercicio,
+  updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
@@ -106,6 +107,31 @@ export async function render(state) {
       return;
     }
 
+    const btnConfirmar = e.target.closest('.btn-confirmar-eliminar');
+    if (btnConfirmar) {
+      await deleteEjercicio(parseInt(btnConfirmar.dataset.ejId));
+      await render(state);
+      return;
+    }
+
+    const btnCancelar = e.target.closest('.btn-cancelar-eliminar');
+    if (btnCancelar) {
+      btnCancelar.closest('.confirm-delete-panel')?.remove();
+      return;
+    }
+
+    const btnEdit = e.target.closest('.btn-edit');
+    if (btnEdit) {
+      handleRenombrar(btnEdit, state);
+      return;
+    }
+
+    const btnDelete = e.target.closest('.btn-delete');
+    if (btnDelete) {
+      handleEliminar(btnDelete, state);
+      return;
+    }
+
     const nombreEl = e.target.closest('.ejercicio-nombre');
     if (!nombreEl) return;
 
@@ -159,6 +185,17 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
     const btnSwap = cel('button', 'btn-swap', '[ ⇄ ]');
     btnSwap.dataset.reId = ej.id;
     summary.appendChild(btnSwap);
+  }
+
+  if (ej) {
+    const btnEdit = cel('button', 'btn-edit', '[ ✎ ]');
+    btnEdit.dataset.ejId = ej.ejercicio_id;
+    summary.appendChild(btnEdit);
+
+    const btnDelete = cel('button', 'btn-delete', '[ ✕ ]');
+    btnDelete.dataset.ejId   = ej.ejercicio_id;
+    btnDelete.dataset.nombre = ej.nombre;
+    summary.appendChild(btnDelete);
   }
 
   details.appendChild(summary);
@@ -314,6 +351,79 @@ function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
       input.replaceWith(span);
     }
   });
+}
+
+function handleRenombrar(btnEdit, state) {
+  const details = btnEdit.closest('details');
+  if (details) details.open = true;
+
+  const existente = details?.querySelector('.rename-panel');
+  details?.querySelector('.confirm-delete-panel')?.remove();
+  if (existente) { existente.remove(); return; }
+
+  const ejId = parseInt(btnEdit.dataset.ejId);
+  const nombreActual = details?.querySelector('.ejercicio-nombre')?.textContent ?? '';
+
+  const panel = cel('div', 'rename-panel');
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'input-rename-ejercicio';
+  input.value = nombreActual;
+  input.setAttribute('aria-label', 'Nuevo nombre del ejercicio');
+  panel.appendChild(input);
+
+  const btnGuardar = cel('button', 'btn-panel-accion', '[ GUARDAR ]');
+  const btnCancelar = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
+  panel.appendChild(btnGuardar);
+  panel.appendChild(btnCancelar);
+
+  const guardar = async () => {
+    const nuevoNombre = input.value.trim();
+    if (!nuevoNombre || nuevoNombre === nombreActual) { panel.remove(); return; }
+    await updateEjercicioNombre(ejId, nuevoNombre);
+    await render(state);
+  };
+
+  btnGuardar.addEventListener('click', guardar);
+  btnCancelar.addEventListener('click', () => panel.remove());
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); guardar(); }
+    if (e.key === 'Escape') panel.remove();
+  });
+
+  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
+  if (cuerpo) details.insertBefore(panel, cuerpo);
+  else details?.appendChild(panel);
+
+  input.focus();
+  input.select();
+}
+
+function handleEliminar(btnDelete, state) {
+  const details = btnDelete.closest('details');
+  if (details) details.open = true;
+
+  const existente = details?.querySelector('.confirm-delete-panel');
+  details?.querySelector('.rename-panel')?.remove();
+  if (existente) { existente.remove(); return; }
+
+  const ejId   = parseInt(btnDelete.dataset.ejId);
+  const nombre = btnDelete.dataset.nombre ?? '?';
+
+  const panel = cel('div', 'confirm-delete-panel');
+  panel.appendChild(cel('span', 'confirm-delete-msg',
+    `¿Eliminar "${nombre}"? Se borrarán todas las series registradas.`));
+
+  const btnConfirmar = cel('button', 'btn-confirmar-eliminar', '[ ELIMINAR ]');
+  btnConfirmar.dataset.ejId = ejId;
+  const btnCancelar = cel('button', 'btn-cancelar-eliminar', '[ CANCELAR ]');
+  panel.appendChild(btnConfirmar);
+  panel.appendChild(btnCancelar);
+
+  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
+  if (cuerpo) details.insertBefore(panel, cuerpo);
+  else details?.appendChild(panel);
 }
 
 function mostrarPantallaFin(container) {

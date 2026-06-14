@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   initDB,
-  getEjercicios, saveEjercicio,
+  getEjercicios, saveEjercicio, updateEjercicioNombre, deleteEjercicio,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   saveSesion, getSesionDelDia,
   saveSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
@@ -21,6 +21,35 @@ describe('ejercicios', () => {
     expect(rows.length).toBe(1);
     expect(rows[0].nombre).toBe('Press Banca');
     expect(rows[0].grupo_muscular).toBe('Pecho');
+  });
+
+  it('updateEjercicioNombre actualiza el nombre correctamente', async () => {
+    const ej = await saveEjercicio('Press Banca', 'Pecho');
+    const updated = await updateEjercicioNombre(ej.id, 'Press Banca Inclinado');
+    expect(updated.nombre).toBe('Press Banca Inclinado');
+    const todos = await getEjercicios();
+    expect(todos[0].nombre).toBe('Press Banca Inclinado');
+  });
+
+  it('deleteEjercicio elimina el ejercicio, sus series y su vínculo con rutinas', async () => {
+    const rutina = await saveRutina('Pecho', 1);
+    const ej     = await saveEjercicio('Fondos', 'Pecho');
+    const sesion = await saveSesion('2026-06-14', rutina.id, null);
+    await saveSerie(sesion.id, ej.id, 1, 20, 10);
+    const db = (await import('../js/db.js')).getDB();
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutina.id, ej.id]
+    );
+
+    await deleteEjercicio(ej.id);
+
+    const { rows: ejRows }  = await db.query('SELECT * FROM ejercicios WHERE id = $1', [ej.id]);
+    const { rows: reRows }  = await db.query('SELECT * FROM rutina_ejercicios WHERE ejercicio_id = $1', [ej.id]);
+    const { rows: serRows } = await db.query('SELECT * FROM series WHERE ejercicio_id = $1', [ej.id]);
+    expect(ejRows).toHaveLength(0);
+    expect(reRows).toHaveLength(0);
+    expect(serRows).toHaveLength(0);
   });
 
   it('retorna múltiples ejercicios ordenados por nombre', async () => {

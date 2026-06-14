@@ -75,6 +75,19 @@ export async function getEjercicios() {
   return result.rows;
 }
 
+export async function updateEjercicioNombre(ejId, nuevoNombre) {
+  const result = await db.query(
+    'UPDATE ejercicios SET nombre = $1 WHERE id = $2 RETURNING *',
+    [nuevoNombre, ejId]
+  );
+  return result.rows[0];
+}
+
+export async function deleteEjercicio(ejId) {
+  await db.query('DELETE FROM series WHERE ejercicio_id = $1', [ejId]);
+  await db.query('DELETE FROM ejercicios WHERE id = $1', [ejId]);
+}
+
 export async function saveEjercicio(nombre, grupoMuscular) {
   const result = await db.query(
     'INSERT INTO ejercicios (nombre, grupo_muscular) VALUES ($1, $2) RETURNING *',
