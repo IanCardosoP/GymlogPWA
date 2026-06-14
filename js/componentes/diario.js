@@ -1,5 +1,5 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
-import { dispatch, store } from '../app.js';
+import { store } from '../app.js';
 import {
   getRutinas, getRutinaEjercicios, getRutinaEjerciciosSuplentes,
   getSesionDelDia, saveSesion,
@@ -8,6 +8,8 @@ import {
 } from '../db.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
+
+let clickAbort = null;
 
 function cel(tag, clase, texto) {
   const e = document.createElement(tag);
@@ -44,8 +46,8 @@ export async function render(state) {
   // Sesión del día
   let sesion = await getSesionDelDia(fechaLocal);
   if (!sesion && rutinaHoy) sesion = await saveSesion(fechaLocal, rutinaHoy.id, null);
-  if (sesion)    dispatch('SET_SESION', sesion.id);
-  if (rutinaHoy) dispatch('SET_RUTINA', rutinaHoy.id);
+  if (sesion)    store.currentSesionId = sesion.id;
+  if (rutinaHoy) store.activeRoutineId  = rutinaHoy.id;
 
   // Ejercicios activos (máx MAX_ROUTINE_SLOTS)
   let ejercicios = [];
@@ -66,7 +68,10 @@ export async function render(state) {
   finBtn.dataset.action = 'fin';
   container.appendChild(finBtn);
 
-  // Delegación de eventos
+  // Delegación de eventos — AbortController descarta el listener del render anterior
+  clickAbort?.abort();
+  clickAbort = new AbortController();
+
   let tapTimer = null;
   let lastTapTarget = null;
 
@@ -100,7 +105,7 @@ export async function render(state) {
         if (rutinaHoy) await handleSingleTap(nombreEl, rutinaHoy);
       }, 280);
     }
-  });
+  }, { signal: clickAbort.signal });
 }
 
 async function construirBloque(ej, idx, sesion) {
