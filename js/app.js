@@ -76,7 +76,7 @@ export async function initApp() {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof window !== 'undefined') {
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
       navigator.serviceWorker.register('/sw.js');
     }
     initApp();
