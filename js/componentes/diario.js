@@ -5,7 +5,7 @@ import {
   getRutinas, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
   saveSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
-  saveEjercicio, updateActivoHoy, linkEjercicioToRutina,
+  saveEjercicio, updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
@@ -91,8 +91,11 @@ export async function render(state) {
 
     const suplanteItem = e.target.closest('.suplente-item');
     if (suplanteItem && rutinaHoy) {
-      await updateActivoHoy(parseInt(suplanteItem.dataset.reId), true);
-      await updateActivoHoy(parseInt(suplanteItem.dataset.anteriorReId), false);
+      const nuevoReId    = parseInt(suplanteItem.dataset.reId);
+      const anteriorReId = parseInt(suplanteItem.dataset.anteriorReId);
+      await updateActivoHoy(nuevoReId, true);
+      await updateActivoHoy(anteriorReId, false);
+      await swapOrden(nuevoReId, anteriorReId);
       await render(state);
       return;
     }

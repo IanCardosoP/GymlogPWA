@@ -255,6 +255,14 @@ export async function updateRutinaDia(rutinaId, diaSugerido) {
   return result.rows[0];
 }
 
+export async function swapOrden(reId1, reId2) {
+  const { rows: r1 } = await db.query('SELECT orden FROM rutina_ejercicios WHERE id = $1', [reId1]);
+  const { rows: r2 } = await db.query('SELECT orden FROM rutina_ejercicios WHERE id = $1', [reId2]);
+  if (!r1[0] || !r2[0]) return;
+  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [r2[0].orden, reId1]);
+  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [r1[0].orden, reId2]);
+}
+
 export async function clearRutinaDia(dia) {
   await db.query(
     'UPDATE rutinas SET dia_sugerido = NULL WHERE dia_sugerido = $1',

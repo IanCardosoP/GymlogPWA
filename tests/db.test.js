@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   initDB,
   getEjercicios, saveEjercicio,
-  getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia,
+  getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   saveSesion, getSesionDelDia,
   saveSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit,
@@ -67,6 +67,29 @@ describe('rutinas', () => {
 
     expect(viejaActual.dia_sugerido).toBeNull();       // Pecho ya no tiene día
     expect(nuevaActual.dia_sugerido).toBe(0);          // Pierna tiene domingo
+  });
+
+  it('swapOrden intercambia la posición de dos ejercicios en la rutina', async () => {
+    const rutina = await saveRutina('Pecho', 1);
+    const ej1 = await saveEjercicio('Press Banca', 'Pecho');
+    const ej2 = await saveEjercicio('Aperturas', 'Pecho');
+    const db = (await import('../js/db.js')).getDB();
+    const { rows: [re1] } = await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1) RETURNING *',
+      [rutina.id, ej1.id]
+    );
+    const { rows: [re2] } = await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 9) RETURNING *',
+      [rutina.id, ej2.id]
+    );
+
+    await swapOrden(re1.id, re2.id);
+
+    const lista = await getRutinaEjercicios(rutina.id);
+    const actualEj1 = lista.find(r => r.ejercicio_id === ej1.id);
+    const actualEj2 = lista.find(r => r.ejercicio_id === ej2.id);
+    expect(actualEj1.orden).toBe(9);
+    expect(actualEj2.orden).toBe(1);
   });
 
   it('clearRutinaDia deja el día sin rutina asignada', async () => {
