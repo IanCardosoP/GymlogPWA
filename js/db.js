@@ -57,6 +57,18 @@ export async function initDB(uri = 'idb://gym-log-db') {
     INSERT INTO conf (id, pref_unit)
     VALUES (1, 'lb')
     ON CONFLICT (id) DO NOTHING;
+
+    CREATE TABLE IF NOT EXISTS rutina_dias (
+      id        SERIAL PRIMARY KEY,
+      rutina_id INT REFERENCES rutinas(id) ON DELETE CASCADE,
+      dia       INT NOT NULL,
+      UNIQUE (rutina_id, dia)
+    );
+
+    INSERT INTO rutina_dias (rutina_id, dia)
+    SELECT id, dia_sugerido FROM rutinas
+    WHERE dia_sugerido IS NOT NULL
+    ON CONFLICT DO NOTHING;
   `);
 
   return db;
@@ -101,6 +113,39 @@ export async function saveEjercicio(nombre, grupoMuscular) {
 export async function getRutinas() {
   const result = await db.query('SELECT * FROM rutinas');
   return result.rows;
+}
+
+export async function getRutinasDias() {
+  const { rows } = await db.query('SELECT rutina_id, dia FROM rutina_dias ORDER BY dia');
+  return rows;
+}
+
+export async function addRutinaDia(rutinaId, dia) {
+  await db.query(
+    'INSERT INTO rutina_dias (rutina_id, dia) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [rutinaId, dia]
+  );
+}
+
+export async function removeRutinaDia(rutinaId, dia) {
+  await db.query(
+    'DELETE FROM rutina_dias WHERE rutina_id = $1 AND dia = $2',
+    [rutinaId, dia]
+  );
+}
+
+export async function updateRutinaNombre(rutinaId, nuevoNombre) {
+  const { rows } = await db.query(
+    'UPDATE rutinas SET nombre = $1 WHERE id = $2 RETURNING *',
+    [nuevoNombre, rutinaId]
+  );
+  return rows[0];
+}
+
+export async function deleteRutina(rutinaId) {
+  await db.query('UPDATE sesiones SET rutina_id = NULL WHERE rutina_id = $1', [rutinaId]);
+  await db.query('DELETE FROM rutinas WHERE id = $1', [rutinaId]);
+  // rutina_ejercicios y rutina_dias cascadean automáticamente
 }
 
 export async function saveRutina(nombre, diaSugerido) {

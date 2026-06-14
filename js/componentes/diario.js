@@ -3,7 +3,7 @@ import { store, navigateTo } from '../app.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
 import motivArt     from '/icons/motiv.txt?raw';
 import {
-  getRutinas, getRutinaEjercicios,
+  getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
   saveSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
   saveEjercicio, updateEjercicioNombre, deleteEjercicio,
@@ -32,10 +32,14 @@ export async function render(state) {
     .toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     .toUpperCase();
 
-  // Rutina del día (por día de semana: 0=Dom … 6=Sáb)
+  // Rutina del día (por día de semana: 0=Dom … 6=Sáb) via tabla rutina_dias
   const diaSemana = new Date().getDay();
-  const rutinas = await getRutinas();
-  const rutinaHoy = rutinas.find(r => r.dia_sugerido === diaSemana) ?? null;
+  const rutinas     = await getRutinas();
+  const rutinaDias  = await getRutinasDias();
+  const asignacion  = rutinaDias.find(rd => rd.dia === diaSemana);
+  const rutinaHoy   = asignacion
+    ? rutinas.find(r => r.id === asignacion.rutina_id) ?? null
+    : null;
 
   // Cabecera
   const header = cel('header', 'diario-header');

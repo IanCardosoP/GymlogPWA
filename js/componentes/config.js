@@ -1,13 +1,15 @@
-// Componente Config: asignación de rutinas semanales, unidades kg/lb y gestión CSV
+// Componente Config: administración de rutinas, unidades kg/lb y gestión CSV
 import { dispatch } from '../app.js';
 import {
-  getRutinas, saveRutina, updateRutinaDia, clearRutinaDia,
+  getRutinas, saveRutina,
+  getRutinasDias, addRutinaDia, removeRutinaDia,
+  updateRutinaNombre, deleteRutina,
   getConf, updatePrefUnit,
   getDB, getAllSeriesForExport,
 } from '../db.js';
 import { exportarCSV, importarCSV } from '../csv.js';
 
-const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const DIAS_CORTO = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 
 function cel(tag, clase, texto) {
   const e = document.createElement(tag);
@@ -21,57 +23,68 @@ export async function render(state) {
   if (!container) return;
   container.textContent = '';
 
-  const [rutinas, conf] = await Promise.all([getRutinas(), getConf()]);
+  const [rutinas, rutinasDias, conf] = await Promise.all([
+    getRutinas(), getRutinasDias(), getConf(),
+  ]);
 
-  // ── 1. Asignación de rutinas / días ──────────────────────────────────────
-  const secDias = cel('section', 'config-seccion');
-  secDias.appendChild(cel('h3', 'config-titulo', '[1. ASIGNACIÓN DE RUTINAS / DÍAS]'));
+  // ── 1. Administración de rutinas / días ──────────────────────────────────
+  const secAdmin = cel('section', 'config-seccion');
+  secAdmin.appendChild(cel('h3', 'config-titulo', '[1. ADMINISTRACIÓN DE RUTINAS / DÍAS]'));
 
-  for (let dia = 0; dia < 7; dia++) {
-    const fila = cel('div', 'config-dia-fila');
+  const listaRutinas = cel('div', 'rutinas-lista');
 
-    const label = document.createElement('label');
-    label.textContent = `${DIAS[dia]}: `;
-    label.setAttribute('for', `select-dia-${dia}`);
-    fila.appendChild(label);
+  for (const rutina of rutinas) {
+    const diasRutina = rutinasDias
+      .filter(rd => rd.rutina_id === rutina.id)
+      .map(rd => rd.dia)
+      .sort((a, b) => a - b);
 
-    const select = document.createElement('select');
-    select.id = `select-dia-${dia}`;
-    select.className = 'config-dia-select';
-    select.dataset.dia = dia;
+    const badgeTexto = diasRutina.length === 0
+      ? 'LIBRE'
+      : diasRutina.map(d => DIAS_CORTO[d]).join('·');
 
-    const optDescanso = document.createElement('option');
-    optDescanso.value = '';
-    optDescanso.textContent = 'Descanso';
-    select.appendChild(optDescanso);
+    const item = cel('div', 'rutina-item');
+    item.dataset.rutinaId = rutina.id;
 
-    for (const rutina of rutinas) {
-      const opt = document.createElement('option');
-      opt.value = rutina.id;
-      opt.textContent = rutina.nombre;
-      if (rutina.dia_sugerido === dia) opt.selected = true;
-      select.appendChild(opt);
-    }
+    const fila = cel('div', 'rutina-fila');
 
-    fila.appendChild(select);
-    secDias.appendChild(fila);
+    const nombreSpan = cel('span', 'rutina-nombre', rutina.nombre);
+    fila.appendChild(nombreSpan);
+
+    const badge = cel('button', 'rutina-dia-badge', badgeTexto);
+    if (diasRutina.length > 0) badge.classList.add('is-assigned');
+    badge.dataset.rutinaId = rutina.id;
+    badge.dataset.dias = JSON.stringify(diasRutina);
+    fila.appendChild(badge);
+
+    const btnEdit = cel('button', 'btn-edit', '[ ✎ ]');
+    btnEdit.dataset.rutinaId = rutina.id;
+    btnEdit.dataset.nombre   = rutina.nombre;
+    fila.appendChild(btnEdit);
+
+    const btnDel = cel('button', 'btn-delete', '[ ✕ ]');
+    btnDel.dataset.rutinaId = rutina.id;
+    btnDel.dataset.nombre   = rutina.nombre;
+    fila.appendChild(btnDel);
+
+    item.appendChild(fila);
+    listaRutinas.appendChild(item);
   }
 
-  // Nueva rutina
-  const nuevaWrapper = cel('div', 'config-nueva-rutina');
+  secAdmin.appendChild(listaRutinas);
 
+  // Crear nueva rutina
+  const nuevaWrapper = cel('div', 'config-nueva-rutina');
   const inputNueva = document.createElement('input');
   inputNueva.type = 'text';
-  inputNueva.id = 'input-nueva-rutina';
   inputNueva.className = 'input-nueva-rutina';
-  inputNueva.placeholder = 'Nombre de la nueva rutina...';
+  inputNueva.placeholder = 'Nueva rutina...';
   nuevaWrapper.appendChild(inputNueva);
-
-  const btnNueva = cel('button', 'btn-nueva-rutina', '[+ Crear nueva rutina]');
+  const btnNueva = cel('button', 'btn-nueva-rutina', '[+ CREAR]');
   nuevaWrapper.appendChild(btnNueva);
+  secAdmin.appendChild(nuevaWrapper);
 
-  secDias.appendChild(nuevaWrapper);
-  container.appendChild(secDias);
+  container.appendChild(secAdmin);
 
   // ── 2. Unidad de medida ──────────────────────────────────────────────────
   const secUnidad = cel('section', 'config-seccion');
@@ -80,19 +93,16 @@ export async function render(state) {
   for (const unit of ['kg', 'lb']) {
     const label = document.createElement('label');
     label.className = 'config-radio-label';
-
     const radio = document.createElement('input');
     radio.type = 'radio';
     radio.name = 'pref-unit';
     radio.value = unit;
     radio.className = 'config-radio';
     if (conf.pref_unit === unit) radio.checked = true;
-
     label.appendChild(radio);
     label.appendChild(document.createTextNode(` ${unit.toUpperCase()}`));
     secUnidad.appendChild(label);
   }
-
   container.appendChild(secUnidad);
 
   // ── 3. Gestión de datos CSV ──────────────────────────────────────────────
@@ -105,7 +115,6 @@ export async function render(state) {
 
   const inputArchivo = document.createElement('input');
   inputArchivo.type = 'file';
-  inputArchivo.id = 'input-csv-file';
   inputArchivo.className = 'input-archivo';
   inputArchivo.accept = '.csv';
   secCSV.appendChild(inputArchivo);
@@ -115,27 +124,138 @@ export async function render(state) {
   secCSV.appendChild(btnImportar);
 
   const resultadoEl = cel('p', 'resultado-importacion');
-  resultadoEl.id = 'resultado-importacion';
   secCSV.appendChild(resultadoEl);
 
   container.appendChild(secCSV);
 
   // Footer
-  const footer = cel('footer', 'config-footer',
-    'GymLog v1.0.0-wasm | DB: idb://gym-log-db (Postgres)');
-  container.appendChild(footer);
+  container.appendChild(cel('footer', 'config-footer',
+    'GymLog v1.0.0-wasm | DB: idb://gym-log-db (Postgres)'));
 
   // ── Eventos ──────────────────────────────────────────────────────────────
 
-  secDias.addEventListener('change', async e => {
-    const select = e.target.closest('.config-dia-select');
-    if (!select) return;
-    const dia = parseInt(select.dataset.dia);
-    const rutinaId = select.value ? parseInt(select.value) : null;
-    if (rutinaId) {
-      await updateRutinaDia(rutinaId, dia);
-    } else {
-      await clearRutinaDia(dia);
+  secAdmin.addEventListener('click', async e => {
+    // Badge de días → toggle day picker
+    const badge = e.target.closest('.rutina-dia-badge');
+    if (badge) {
+      const item = badge.closest('.rutina-item');
+      const picker = item.querySelector('.dia-picker');
+      item.querySelector('.rename-panel')?.remove();
+      item.querySelector('.confirm-delete-panel')?.remove();
+      if (picker) { picker.remove(); return; }
+
+      const rutinaId  = parseInt(badge.dataset.rutinaId);
+      const diasActivos = JSON.parse(badge.dataset.dias || '[]');
+
+      const pickerEl = cel('div', 'dia-picker');
+      for (let d = 0; d < 7; d++) {
+        const chip = cel('button', 'dia-chip', DIAS_CORTO[d]);
+        chip.dataset.rutinaId = rutinaId;
+        chip.dataset.dia = d;
+        if (diasActivos.includes(d)) chip.classList.add('is-active');
+        pickerEl.appendChild(chip);
+      }
+      item.appendChild(pickerEl);
+      return;
+    }
+
+    // Chip de día → toggle asignación
+    const chip = e.target.closest('.dia-chip');
+    if (chip) {
+      const rutinaId = parseInt(chip.dataset.rutinaId);
+      const dia      = parseInt(chip.dataset.dia);
+      if (chip.classList.contains('is-active')) {
+        await removeRutinaDia(rutinaId, dia);
+      } else {
+        await addRutinaDia(rutinaId, dia);
+      }
+      await render(state);
+      return;
+    }
+
+    // [ ✎ ] renombrar rutina
+    const btnEdit = e.target.closest('.btn-edit');
+    if (btnEdit && btnEdit.dataset.rutinaId) {
+      const item = btnEdit.closest('.rutina-item');
+      const existente = item.querySelector('.rename-panel');
+      item.querySelector('.confirm-delete-panel')?.remove();
+      item.querySelector('.dia-picker')?.remove();
+      if (existente) { existente.remove(); return; }
+
+      const rutinaId     = parseInt(btnEdit.dataset.rutinaId);
+      const nombreActual = btnEdit.dataset.nombre ?? '';
+
+      const panel = cel('div', 'rename-panel');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'input-rename-ejercicio';
+      input.value = nombreActual;
+      panel.appendChild(input);
+
+      const btnGuardar = cel('button', 'btn-panel-accion btn-guardar-nombre-rutina', '[ GUARDAR ]');
+      btnGuardar.dataset.rutinaId = rutinaId;
+      const btnCancel  = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
+      panel.appendChild(btnGuardar);
+      panel.appendChild(btnCancel);
+
+      const guardar = async () => {
+        const nuevo = input.value.trim();
+        if (!nuevo || nuevo === nombreActual) { panel.remove(); return; }
+        await updateRutinaNombre(rutinaId, nuevo);
+        await render(state);
+      };
+      btnGuardar.addEventListener('click', guardar);
+      btnCancel.addEventListener('click', () => panel.remove());
+      input.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter')  { ev.preventDefault(); guardar(); }
+        if (ev.key === 'Escape') panel.remove();
+      });
+
+      item.appendChild(panel);
+      input.focus();
+      input.select();
+      return;
+    }
+
+    // [ ✕ ] eliminar rutina
+    const btnDel = e.target.closest('.btn-delete');
+    if (btnDel && btnDel.dataset.rutinaId) {
+      const item = btnDel.closest('.rutina-item');
+      const existente = item.querySelector('.confirm-delete-panel');
+      item.querySelector('.rename-panel')?.remove();
+      item.querySelector('.dia-picker')?.remove();
+      if (existente) { existente.remove(); return; }
+
+      const rutinaId = parseInt(btnDel.dataset.rutinaId);
+      const nombre   = btnDel.dataset.nombre ?? '?';
+
+      const panel = cel('div', 'confirm-delete-panel');
+      panel.appendChild(cel('span', 'confirm-delete-msg',
+        `¿Eliminar rutina "${nombre}"? Se perderán sus ejercicios configurados.`));
+
+      const btnConf   = cel('button', 'btn-confirmar-eliminar', '[ ELIMINAR ]');
+      btnConf.dataset.rutinaId = rutinaId;
+      const btnCancel = cel('button', 'btn-cancelar-eliminar', '[ CANCELAR ]');
+      panel.appendChild(btnConf);
+      panel.appendChild(btnCancel);
+
+      item.appendChild(panel);
+      return;
+    }
+
+    // Confirmar eliminación
+    const btnConf = e.target.closest('.btn-confirmar-eliminar');
+    if (btnConf && btnConf.dataset.rutinaId) {
+      await deleteRutina(parseInt(btnConf.dataset.rutinaId));
+      await render(state);
+      return;
+    }
+
+    // Cancelar panel
+    const btnCancel = e.target.closest('.btn-cancelar-eliminar');
+    if (btnCancel) {
+      btnCancel.closest('.confirm-delete-panel')?.remove();
+      return;
     }
   });
 
@@ -161,13 +281,9 @@ export async function render(state) {
 
   btnImportar.addEventListener('click', async () => {
     const archivo = inputArchivo.files?.[0];
-    if (!archivo) {
-      resultadoEl.textContent = 'Selecciona un archivo CSV primero.';
-      return;
-    }
-    const texto   = await archivo.text();
-    const dbInst  = getDB();
-    const resultado = await importarCSV(texto, dbInst);
+    if (!archivo) { resultadoEl.textContent = 'Selecciona un archivo CSV primero.'; return; }
+    const texto    = await archivo.text();
+    const resultado = await importarCSV(texto, getDB());
     if (resultado.error) {
       resultadoEl.textContent = `Error: ${resultado.error}`;
     } else {

@@ -3,6 +3,7 @@ import {
   initDB,
   getEjercicios, saveEjercicio, updateEjercicioNombre, deleteEjercicio,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
+  getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
   saveSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit,
@@ -127,6 +128,71 @@ describe('rutinas', () => {
     const todas = await getRutinas();
     const actual = todas.find(r => r.id === rutina.id);
     expect(actual.dia_sugerido).toBeNull();
+  });
+
+  it('addRutinaDia vincula una rutina a un día', async () => {
+    const rutina = await saveRutina('Pecho', null);
+    await addRutinaDia(rutina.id, 1); // lunes
+    const dias = await getRutinasDias();
+    const vinculo = dias.find(rd => rd.rutina_id === rutina.id && rd.dia === 1);
+    expect(vinculo).toBeDefined();
+  });
+
+  it('addRutinaDia es idempotente (ON CONFLICT DO NOTHING)', async () => {
+    const rutina = await saveRutina('Espalda', null);
+    await addRutinaDia(rutina.id, 2);
+    await addRutinaDia(rutina.id, 2); // segunda vez no debe lanzar error
+    const dias = await getRutinasDias();
+    const vinculos = dias.filter(rd => rd.rutina_id === rutina.id && rd.dia === 2);
+    expect(vinculos).toHaveLength(1);
+  });
+
+  it('removeRutinaDia desvincula una rutina de un día', async () => {
+    const rutina = await saveRutina('Pierna', null);
+    await addRutinaDia(rutina.id, 4); // jueves
+    await removeRutinaDia(rutina.id, 4);
+    const dias = await getRutinasDias();
+    const vinculo = dias.find(rd => rd.rutina_id === rutina.id && rd.dia === 4);
+    expect(vinculo).toBeUndefined();
+  });
+
+  it('getRutinasDias retorna todos los vínculos rutina→día', async () => {
+    const r1 = await saveRutina('Pecho', null);
+    const r2 = await saveRutina('Pierna', null);
+    await addRutinaDia(r1.id, 1);
+    await addRutinaDia(r1.id, 4);
+    await addRutinaDia(r2.id, 3);
+    const dias = await getRutinasDias();
+    expect(dias.length).toBeGreaterThanOrEqual(3);
+    const diasR1 = dias.filter(rd => rd.rutina_id === r1.id).map(rd => rd.dia).sort();
+    expect(diasR1).toEqual([1, 4]);
+  });
+
+  it('updateRutinaNombre actualiza el nombre de la rutina', async () => {
+    const rutina = await saveRutina('Nombre Viejo', null);
+    const updated = await updateRutinaNombre(rutina.id, 'Nombre Nuevo');
+    expect(updated.nombre).toBe('Nombre Nuevo');
+    const todas = await getRutinas();
+    const actual = todas.find(r => r.id === rutina.id);
+    expect(actual.nombre).toBe('Nombre Nuevo');
+  });
+
+  it('deleteRutina elimina rutina y desvincula sesiones y días', async () => {
+    const rutina = await saveRutina('TempRutina', null);
+    await addRutinaDia(rutina.id, 0);
+    const sesion = await saveSesion('2026-06-14', rutina.id, null);
+    await deleteRutina(rutina.id);
+    const todas = await getRutinas();
+    expect(todas.find(r => r.id === rutina.id)).toBeUndefined();
+    const db = (await import('../js/db.js')).getDB();
+    const { rows: diasRows } = await db.query(
+      'SELECT * FROM rutina_dias WHERE rutina_id = $1', [rutina.id]
+    );
+    expect(diasRows).toHaveLength(0);
+    const { rows: sesRows } = await db.query(
+      'SELECT rutina_id FROM sesiones WHERE id = $1', [sesion.id]
+    );
+    expect(sesRows[0].rutina_id).toBeNull();
   });
 
   it('updateActivoHoy cambia el booleano correctamente', async () => {

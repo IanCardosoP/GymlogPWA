@@ -539,6 +539,68 @@ input.is-saved::placeholder {
 
 .config-dia-select { flex: 1; }
 
+.rutinas-lista {
+  margin-bottom: 4px;
+}
+
+.rutina-item {
+  margin-bottom: 2px;
+}
+
+.rutina-fila {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-texto-dim);
+}
+
+.rutina-nombre {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-texto);
+}
+
+.rutina-dia-badge {
+  background: none;
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.rutina-dia-badge.is-assigned {
+  border-color: var(--color-acento);
+  color: var(--color-acento);
+}
+
+.dia-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-texto-dim);
+}
+
+.dia-chip {
+  background: none;
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.dia-chip.is-active {
+  border-color: var(--color-acento);
+  color: var(--color-acento);
+}
+
 .config-nueva-rutina {
   display: flex;
   gap: 8px;
