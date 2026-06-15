@@ -5,7 +5,7 @@ import {
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
-  saveSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
+  saveSerie, deleteSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit, updatePrefAcento,
 } from '../js/db.js';
 
@@ -227,6 +227,15 @@ describe('sesiones y series', () => {
     expect(Number(serie.peso)).toBe(0);
     const ultima = await getUltimaSerie(ej.id);
     expect(Number(ultima.peso)).toBe(0);
+  });
+
+  it('deleteSerie elimina la serie por id', async () => {
+    const sesion = await saveSesion('2026-06-14', null, null);
+    const ej     = await saveEjercicio('Press Banca', 'Pecho');
+    const serie  = await saveSerie(sesion.id, ej.id, 1, 80, 5);
+    await deleteSerie(serie.id);
+    const result = await getSeriesDeSesionEjercicio(sesion.id, ej.id);
+    expect(result).toHaveLength(0);
   });
 
   it('getSeriesPorEjercicio retorna series con fecha de sesión', async () => {

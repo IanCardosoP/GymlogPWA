@@ -200,6 +200,10 @@ export async function getSesionDelDia(fechaLocal) {
 
 // ── Series ────────────────────────────────────────────────────────────────────
 
+export async function deleteSerie(serieId) {
+  await db.query('DELETE FROM series WHERE id = $1', [serieId]);
+}
+
 export async function saveSerie(sesionId, ejercicioId, numeroSerie, peso, repeticiones) {
   const result = await db.query(
     `INSERT INTO series (sesion_id, ejercicio_id, numero_serie, peso, repeticiones)

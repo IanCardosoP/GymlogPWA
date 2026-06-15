@@ -247,6 +247,15 @@ input.is-saved::placeholder {
   border-color: var(--color-acento);
 }
 
+.btn-delete-serie {
+  background: none;
+  border: 1px solid var(--color-acento);
+  color: var(--color-acento);
+  font-size: 11px;
+  padding: 6px 8px;
+  letter-spacing: 0.03em;
+}
+
 .suplentes-dropdown {
   padding: 8px 12px;
   background-color: var(--color-fondo-alt);

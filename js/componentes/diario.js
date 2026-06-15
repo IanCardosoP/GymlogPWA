@@ -5,7 +5,7 @@ import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
-  saveSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
+  saveSerie, deleteSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
   saveEjercicio, updateEjercicioNombre, deleteEjercicio,
   updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
@@ -95,6 +95,13 @@ export async function render(state) {
     const btnGuardar = e.target.closest('.btn-guardar');
     if (btnGuardar && sesion) { await handleGuardar(btnGuardar, sesion.id); return; }
 
+    const btnDeleteSerie = e.target.closest('.btn-delete-serie');
+    if (btnDeleteSerie && sesion) {
+      await deleteSerie(parseInt(btnDeleteSerie.dataset.serieId));
+      btnDeleteSerie.closest('.serie-fila').remove();
+      return;
+    }
+
     if (e.target.closest('[data-action="fin"]')) { mostrarPantallaFin(container); return; }
 
     const suplanteItem = e.target.closest('.suplente-item');
@@ -150,10 +157,11 @@ export async function render(state) {
   }, { signal: clickAbort.signal });
 }
 
-function marcarComoGuardada(fila, peso, reps) {
+function marcarComoGuardada(fila, peso, reps, serieId) {
   const inputPeso = fila.querySelector('.input-peso');
   const inputReps = fila.querySelector('.input-reps');
   const btn       = fila.querySelector('.btn-guardar');
+  const btnX      = fila.querySelector('.btn-delete-serie');
 
   btn.textContent  = '[✓]';
   btn.disabled     = true;
@@ -168,6 +176,11 @@ function marcarComoGuardada(fila, peso, reps) {
     inputPeso.value = String(peso);
   }
   inputReps.value = String(reps);
+
+  if (btnX && serieId) {
+    btnX.dataset.serieId = serieId;
+    btnX.hidden = false;
+  }
 }
 
 async function construirBloque(ej, idx, sesion, hasSuplentes) {
@@ -228,7 +241,7 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
     for (const serie of seriesHoy) {
       const displayPeso = Number(serie.peso) === 0 ? 'BW' : String(serie.peso);
       const fila = construirFilaSerie(serie.numero_serie, displayPeso, String(serie.repeticiones));
-      marcarComoGuardada(fila, Number(serie.peso), serie.repeticiones);
+      marcarComoGuardada(fila, Number(serie.peso), serie.repeticiones, serie.id);
       filaWrapper.appendChild(fila);
     }
 
@@ -278,6 +291,10 @@ function construirFilaSerie(num, phPeso, phReps) {
   btn.dataset.numSerie = num;
   fila.appendChild(btn);
 
+  const btnX = cel('button', 'btn-delete-serie', '[X]');
+  btnX.hidden = true;
+  fila.appendChild(btnX);
+
   return fila;
 }
 
@@ -294,12 +311,12 @@ async function handleGuardar(btnGuardar, sesionId) {
   const peso = parseFloat(pesoStr) || 0;  // 'BW' → NaN → 0 (regla BW)
   const reps = parseInt(repsStr, 10)  || 0;
 
-  await saveSerie(sesionId, ejId, numSerie, peso, reps);
+  const serie = await saveSerie(sesionId, ejId, numSerie, peso, reps);
 
   const displayPeso = peso === 0 ? 'BW' : String(peso);
   const displayReps = String(reps);
 
-  marcarComoGuardada(fila, peso, reps);
+  marcarComoGuardada(fila, peso, reps, serie.id);
   filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
 }
 
