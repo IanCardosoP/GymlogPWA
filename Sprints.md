@@ -26,7 +26,7 @@
 
 ---
 
-### Ticket 1.0 — Prueba de Humo: PGLite en Vitest `[ ]`
+### Ticket 1.0 — Prueba de Humo: PGLite en Vitest `[DONE]`
 
 **Por qué existe este ticket:** Antes de escribir cualquier código de aplicación, verificar que PGLite puede importarse y ejecutar SQL desde un test Vitest con instancia `memory://`. Si esto falla, los hitos de control de todos los sprints siguientes se rompen.
 
@@ -43,7 +43,7 @@
 
 ---
 
-### Ticket 1.1 — Estructura de Carpetas y Archivos Vacíos `[ ]`
+### Ticket 1.1 — Estructura de Carpetas y Archivos Vacíos `[DONE]`
 
 **Dependencia:** Ticket 1.0 en `[DONE]`.
 
@@ -66,7 +66,7 @@
 
 ---
 
-### Ticket 1.2 — `index.html`: App Shell y Navegación SPA `[ ]`
+### Ticket 1.2 — `index.html`: App Shell y Navegación SPA `[DONE]`
 
 **Dependencia:** Ticket 1.1 en `[DONE]`.
 
@@ -81,7 +81,7 @@
 
 ---
 
-### Ticket 1.3 — `css/styles.css`: Estética Terminal Oscura `[ ]`
+### Ticket 1.3 — `css/styles.css`: Estética Terminal Oscura `[DONE]`
 
 **Dependencia:** Ticket 1.2 en `[DONE]`.
 
@@ -97,7 +97,7 @@
 
 ---
 
-### Ticket 1.4 — `sw.js`: Service Worker Cache-First `[ ]`
+### Ticket 1.4 — `sw.js`: Service Worker Cache-First `[DONE]`
 
 **Dependencia:** Ticket 1.2 en `[DONE]`.
 
@@ -112,7 +112,7 @@
 
 ---
 
-### Ticket 1.5 — `package.json` y `vitest.config.js` finales + tests del Sprint 1 `[ ]`
+### Ticket 1.5 — `package.json` y `vitest.config.js` finales + tests del Sprint 1 `[DONE]`
 
 **Dependencia:** Tickets 1.1–1.4 en `[DONE]`.
 
@@ -132,7 +132,7 @@
 
 ---
 
-### Ticket 2.1 — `db.js`: Inicialización PGLite + DDL completo `[ ]`
+### Ticket 2.1 — `db.js`: Inicialización PGLite + DDL completo `[DONE]`
 
 **Dependencia:** Sprint 1 en `[DONE]`.
 
@@ -145,7 +145,7 @@
 
 ---
 
-### Ticket 2.2 — `db.js`: Funciones de servicio — Módulo `ejercicios` y `rutinas` `[ ]`
+### Ticket 2.2 — `db.js`: Funciones de servicio — Módulo `ejercicios` y `rutinas` `[DONE]`
 
 **Dependencia:** Ticket 2.1 en `[DONE]`.
 
@@ -161,7 +161,7 @@
 
 ---
 
-### Ticket 2.3 — `db.js`: Funciones de servicio — Módulo `sesiones` y `series` `[ ]`
+### Ticket 2.3 — `db.js`: Funciones de servicio — Módulo `sesiones` y `series` `[DONE]`
 
 **Dependencia:** Ticket 2.2 en `[DONE]`.
 
@@ -175,7 +175,7 @@
 
 ---
 
-### Ticket 2.4 — `db.js`: Funciones de servicio — Módulo `conf` `[ ]`
+### Ticket 2.4 — `db.js`: Funciones de servicio — Módulo `conf` `[DONE]`
 
 **Dependencia:** Ticket 2.2 en `[DONE]`.
 
@@ -187,7 +187,7 @@
 
 ---
 
-### Ticket 2.5 — Tests de integración: Módulo DB completo `[ ]`
+### Ticket 2.5 — Tests de integración: Módulo DB completo `[DONE]`
 
 **Dependencia:** Tickets 2.1–2.4 en `[DONE]`.
 
@@ -210,7 +210,7 @@
 
 ---
 
-### Ticket 3.1 — `js/analitico.js`: Fórmula de Epley y motor de métricas `[ ]`
+### Ticket 3.1 — `js/analitico.js`: Fórmula de Epley y motor de métricas `[DONE]`
 
 **Dependencia:** Sprint 2 en `[DONE]`.
 
@@ -224,7 +224,7 @@
 
 ---
 
-### Ticket 3.2 — `js/csv.js`: Exportación e Importación con contrato estricto `[ ]`
+### Ticket 3.2 — `js/csv.js`: Exportación e Importación con contrato estricto `[DONE]`
 
 **Dependencia:** Ticket 3.1 en `[DONE]`.
 
@@ -236,7 +236,7 @@
 
 ---
 
-### Ticket 3.3 — Tests: Analítica y CSV `[ ]`
+### Ticket 3.3 — Tests: Analítica y CSV `[DONE]`
 
 **Dependencia:** Tickets 3.1 y 3.2 en `[DONE]`.
 
@@ -264,7 +264,7 @@
 
 ---
 
-### Ticket 4.1 — `js/app.js`: Estado Global (Store) y orquestador `[ ]`
+### Ticket 4.1 — `js/app.js`: Estado Global (Store) y orquestador `[DONE]`
 
 **Dependencia:** Sprint 3 en `[DONE]`.
 
@@ -276,7 +276,7 @@
 
 ---
 
-### Ticket 4.2 — `js/componentes/diario.js`: Acordeones, precarga y guardado de series `[ ]`
+### Ticket 4.2 — `js/componentes/diario.js`: Acordeones, precarga y guardado de series `[DONE]`
 
 **Dependencia:** Ticket 4.1 en `[DONE]`.
 
@@ -289,13 +289,13 @@
 - [ ] **Precarga inteligente:** inputs tienen `placeholder` con `peso x reps` de la última serie via `getUltimaSerie()`.
 - [ ] Botón `[ GUARDAR SERIE ]`: llama `saveSerie()` con valores de inputs. Marca `[✓]` en el DOM usando `textContent`.
 - [ ] **Single Tap** sobre nombre de ejercicio: muestra dropdown de suplentes (`activo_hoy = FALSE`). Al seleccionar, llama `updateActivoHoy()` y re-renderiza.
-- [ ] **Double Tap** sobre nombre de ejercicio: convierte `<summary>` en `<input type="text">`. Al `blur`/Enter: llama `saveEjercicio()` + vincula a rutina + re-renderiza.
+- [ ] **Tap Sostenido** sobre nombre de ejercicio: convierte `<summary>` en `<input type="text">`. Al `blur`/Enter: llama `saveEjercicio()` + vincula a rutina + re-renderiza.
 - [ ] Ningún `innerHTML` con variables de usuario. Todo via `textContent` o `createElement`.
 - [ ] Delegación de eventos en `#diario-container`, no en nodos dinámicos.
 
 ---
 
-### Ticket 4.3 — `js/componentes/progreso.js`: Gráfica de barras ASCII `[ ]`
+### Ticket 4.3 — `js/componentes/progreso.js`: Gráfica de barras ASCII `[DONE]`
 
 **Dependencia:** Ticket 4.1 en `[DONE]`.
 
@@ -311,7 +311,7 @@
 
 ---
 
-### Ticket 4.4 — `js/componentes/config.js`: Rutinas, unidades y CSV `[ ]`
+### Ticket 4.4 — `js/componentes/config.js`: Rutinas, unidades y CSV `[DONE]`
 
 **Dependencia:** Ticket 4.1 en `[DONE]`.
 
@@ -326,7 +326,7 @@
 
 ---
 
-### Ticket 4.5 — Pantalla de Fin de Entrenamiento (HU 9) `[ ]`
+### Ticket 4.5 — Pantalla de Fin de Entrenamiento (HU 9) `[DONE]`
 
 **Dependencia:** Ticket 4.2 en `[DONE]`.
 
@@ -338,7 +338,7 @@
 
 ---
 
-### Ticket 4.6 — PWA Manifest y prueba de instalación `[ ]`
+### Ticket 4.6 — PWA Manifest y prueba de instalación `[DONE]`
 
 **Dependencia:** Tickets 4.1–4.5 en `[DONE]`.
 
@@ -350,7 +350,7 @@
 
 ---
 
-### Ticket 4.7 — `_headers` (Cloudflare Pages) o `vercel.json`: Cabeceras de Seguridad `[ ]`
+### Ticket 4.7 — `_headers` (Cloudflare Pages) o `vercel.json`: Cabeceras de Seguridad `[DONE]`
 
 **Dependencia:** Ticket 4.6 en `[DONE]`.
 
@@ -365,7 +365,7 @@
 
 ---
 
-### Ticket 4.8 — `pnpm test` final: Suite E2E de humo + regresión completa `[ ]`
+### Ticket 4.8 — `pnpm test` final: Suite E2E de humo + regresión completa `[DONE]`
 
 **Dependencia:** Todos los tickets del Sprint 4 en `[DONE]`.
 
@@ -384,11 +384,11 @@
 
 | Sprint | Tickets | Done | Pendiente |
 |--------|---------|------|-----------|
-| Sprint 1 — Cascarón | 6 (1.0–1.5) | 0 | 6 |
-| Sprint 2 — Datos | 5 (2.1–2.5) | 0 | 5 |
-| Sprint 3 — Lógica | 3 (3.1–3.3) | 0 | 3 |
-| Sprint 4 — UI | 8 (4.1–4.8) | 0 | 8 |
-| **Total** | **22** | **0** | **22** |
+| Sprint 1 — Cascarón | 6 (1.0–1.5) | 6 | 0 |
+| Sprint 2 — Datos | 5 (2.1–2.5) | 5 | 0 |
+| Sprint 3 — Lógica | 3 (3.1–3.3) | 3 | 0 |
+| Sprint 4 — UI | 8 (4.1–4.8) | 8 | 0 |
+| **Total** | **22** | **22** | **0** |
 
 ---
 
