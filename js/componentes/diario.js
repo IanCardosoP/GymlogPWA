@@ -5,7 +5,7 @@ import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
-  saveSerie, deleteSerie, getUltimaSerie, getSeriesDeSesionEjercicio,
+  saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesDeSesionEjercicio,
   saveEjercicio, updateEjercicioNombre, deleteEjercicio,
   updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
@@ -97,8 +97,23 @@ export async function render(state) {
 
     const btnDeleteSerie = e.target.closest('.btn-delete-serie');
     if (btnDeleteSerie && sesion) {
-      await deleteSerie(parseInt(btnDeleteSerie.dataset.serieId));
-      btnDeleteSerie.closest('.serie-fila').remove();
+      const serieId      = parseInt(btnDeleteSerie.dataset.serieId);
+      const filaToRemove = btnDeleteSerie.closest('.serie-fila');
+      const filaWrapper  = filaToRemove.closest('.serie-filas');
+      const ejId         = parseInt(filaWrapper.dataset.ejId);
+
+      await deleteSerie(serieId);
+      await renumerarSeries(sesion.id, ejId);
+
+      filaToRemove.remove();
+      filaWrapper.querySelectorAll('.serie-fila').forEach((fila, i) => {
+        const num = i + 1;
+        fila.dataset.numSerie = num;
+        const label = fila.querySelector('.serie-label');
+        if (label) label.textContent = `S${num}: `;
+        const guardarBtn = fila.querySelector('.btn-guardar');
+        if (guardarBtn) guardarBtn.dataset.numSerie = num;
+      });
       return;
     }
 

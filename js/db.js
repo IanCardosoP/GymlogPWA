@@ -204,6 +204,16 @@ export async function deleteSerie(serieId) {
   await db.query('DELETE FROM series WHERE id = $1', [serieId]);
 }
 
+export async function renumerarSeries(sesionId, ejercicioId) {
+  const { rows } = await db.query(
+    'SELECT id FROM series WHERE sesion_id = $1 AND ejercicio_id = $2 ORDER BY numero_serie ASC',
+    [sesionId, ejercicioId]
+  );
+  for (let i = 0; i < rows.length; i++) {
+    await db.query('UPDATE series SET numero_serie = $1 WHERE id = $2', [i + 1, rows[i].id]);
+  }
+}
+
 export async function saveSerie(sesionId, ejercicioId, numeroSerie, peso, repeticiones) {
   const result = await db.query(
     `INSERT INTO series (sesion_id, ejercicio_id, numero_serie, peso, repeticiones)

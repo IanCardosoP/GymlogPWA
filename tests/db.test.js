@@ -5,7 +5,7 @@ import {
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
-  saveSerie, deleteSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
+  saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit, updatePrefAcento,
 } from '../js/db.js';
 
@@ -227,6 +227,23 @@ describe('sesiones y series', () => {
     expect(Number(serie.peso)).toBe(0);
     const ultima = await getUltimaSerie(ej.id);
     expect(Number(ultima.peso)).toBe(0);
+  });
+
+  it('renumerarSeries reordena las series consecutivamente tras un borrado', async () => {
+    const sesion = await saveSesion('2026-06-14', null, null);
+    const ej     = await saveEjercicio('Sentadilla', 'Pierna');
+    const s1     = await saveSerie(sesion.id, ej.id, 1, 100, 5);
+    const s2     = await saveSerie(sesion.id, ej.id, 2, 100, 5);
+    await saveSerie(sesion.id, ej.id, 3, 100, 5);
+
+    await deleteSerie(s1.id);
+    await renumerarSeries(sesion.id, ej.id);
+
+    const result = await getSeriesDeSesionEjercicio(sesion.id, ej.id);
+    expect(result).toHaveLength(2);
+    expect(result[0].numero_serie).toBe(1);
+    expect(result[0].id).toBe(s2.id);
+    expect(result[1].numero_serie).toBe(2);
   });
 
   it('deleteSerie elimina la serie por id', async () => {
