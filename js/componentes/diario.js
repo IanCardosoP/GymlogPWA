@@ -178,7 +178,7 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   const btn       = fila.querySelector('.btn-guardar');
   const btnX      = fila.querySelector('.btn-delete-serie');
 
-  btn.textContent  = '[✓]';
+  btn.textContent  = '[ ✓ ]';
   btn.disabled     = true;
   inputPeso.disabled = true;
   inputReps.disabled = true;
@@ -302,11 +302,11 @@ function construirFilaSerie(num, phPeso, phReps) {
 
   fila.appendChild(cel('span', 'serie-unit', ' reps'));
 
-  const btn = cel('button', 'btn-guardar', '[✓]');
+  const btn = cel('button', 'btn-guardar', '[ ✓ ]');
   btn.dataset.numSerie = num;
   fila.appendChild(btn);
 
-  const btnX = cel('button', 'btn-delete-serie', '[X]');
+  const btnX = cel('button', 'btn-delete-serie', '[ ✕ ]');
   btnX.hidden = true;
   fila.appendChild(btnX);
 
