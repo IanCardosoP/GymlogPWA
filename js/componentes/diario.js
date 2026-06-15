@@ -274,7 +274,7 @@ function construirFilaSerie(num, phPeso, phReps) {
 
   fila.appendChild(cel('span', 'serie-unit', ' reps'));
 
-  const btn = cel('button', 'btn-guardar', '[ GUARDAR SERIE ]');
+  const btn = cel('button', 'btn-guardar', '[✓]');
   btn.dataset.numSerie = num;
   fila.appendChild(btn);
 
