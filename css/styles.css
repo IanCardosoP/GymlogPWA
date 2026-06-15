@@ -397,8 +397,8 @@ input.is-saved::placeholder {
 }
 
 .descanso-arte {
-  font-size: 4px;
-  line-height: 4px;
+  font-size: 3px;
+  line-height: 3px;
   letter-spacing: 0;
   color: var(--color-acento);
   display: inline-block;
