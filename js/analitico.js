@@ -3,6 +3,11 @@
 export const METRICAS_REGISTRY = {
   '1rm_epley': {
     nombre: 'Fuerza Estimada (1RM)',
+    descripcion: [
+      '¿Qué es? El máximo peso que podrías levantar en una sola repetición, estimado a partir de tus series del día.',
+      '¿Cómo se calcula? Fórmula de Epley: 1RM = peso × (1 + reps ÷ 30). Se toma el valor más alto de todas las series de esa sesión.',
+      '¿Para qué sirve? Permite comparar tu fuerza entre sesiones aunque uses pesos y repeticiones distintos cada día. Si tu 1RM estimado sube, estás progresando.',
+    ],
     calcular: (seriesArray) => prepararDatosProgreso(seriesArray),
   },
 };
