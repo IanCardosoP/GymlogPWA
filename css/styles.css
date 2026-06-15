@@ -102,6 +102,8 @@ input:focus {
 button {
   cursor: pointer;
   font-family: var(--font-mono);
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* Select */
