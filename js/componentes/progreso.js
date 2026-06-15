@@ -79,7 +79,7 @@ export async function render(state) {
 
   // ── Panel info de métrica ──────────────────────────────────────────────────
   const metricaInfo = document.createElement('details');
-  metricaInfo.className = 'metrica-info';
+  metricaInfo.className = `metrica-info acento-${state.acentoKey ?? 'verde'}`;
   const metricaSummary = document.createElement('summary');
   metricaSummary.textContent = '¿Qué es esto?';
   metricaInfo.appendChild(metricaSummary);

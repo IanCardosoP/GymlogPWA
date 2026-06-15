@@ -539,19 +539,33 @@ input.is-saved::placeholder {
 }
 
 .metrica-info {
+  border: none;
+  border-left: 2px solid;
+  border-radius: 0;
+  margin-bottom: 0;
   margin-top: 12px;
-  border-left: 2px solid var(--color-acento);
   padding-left: 10px;
 }
 
+.metrica-info.acento-verde  { border-left-color: #00ff88; }
+.metrica-info.acento-morado { border-left-color: #bf00ff; }
+.metrica-info.acento-rosa   { border-left-color: #ff0080; }
+.metrica-info.acento-cian   { border-left-color: #00d4ff; }
+
 .metrica-info summary {
+  background: none;
+  padding: 4px 0;
   font-size: 11px;
-  color: var(--color-acento);
   cursor: pointer;
   opacity: 0.7;
   letter-spacing: 0.05em;
   user-select: none;
 }
+
+.metrica-info.acento-verde  summary { color: #00ff88; }
+.metrica-info.acento-morado summary { color: #bf00ff; }
+.metrica-info.acento-rosa   summary { color: #ff0080; }
+.metrica-info.acento-cian   summary { color: #00d4ff; }
 
 .metrica-info summary:hover {
   opacity: 1;
