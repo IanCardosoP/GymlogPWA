@@ -161,9 +161,17 @@ export async function render(state) {
   secReset.appendChild(btnReset);
   container.appendChild(secReset);
 
-  // Footer
-  const footer = cel('footer', 'config-footer',
-    'GymLog v1.1.0-wasm | DB: idb://gym-log-db (Postgres)');
+  // Footer — versión derivada dinámicamente del CACHE_NAME activo del SW
+  const footer = document.createElement('footer');
+  footer.className = 'config-footer';
+  const versionNode = document.createTextNode('gymlog-wasm | DB: idb://gym-log-db (Postgres)');
+  footer.appendChild(versionNode);
+  if ('caches' in window) {
+    caches.keys().then(keys => {
+      const v = keys.find(k => k.startsWith('gymlog')) ?? 'gymlog';
+      versionNode.nodeValue = `${v}-wasm | DB: idb://gym-log-db (Postgres)`;
+    });
+  }
   footer.appendChild(document.createElement('br'));
   const credLink = document.createElement('a');
   credLink.href = 'https://github.com/IanCardosoP';
