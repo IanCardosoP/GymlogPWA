@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   initDB,
   saveRutina, saveEjercicio, saveSesion, saveSerie,
-  getSeriesPorEjercicio, getAllSeriesForExport, getDB,
+  getSeriesPorEjercicio, getAllDataForExport, getDB,
 } from '../js/db.js';
 import { calculateEpley1RM } from '../js/analitico.js';
-import { exportarCSV, importarCSV, CSV_HEADERS } from '../js/csv.js';
+import { exportarBackup, importarBackup } from '../js/csv.js';
 
 beforeEach(async () => {
   await initDB('memory://');
@@ -15,9 +15,9 @@ beforeEach(async () => {
 
 describe('flujo completo: rutina → sesión → serie → 1RM', () => {
   it('encadena todas las capas y calcula 1RM correcto', async () => {
-    const rutina   = await saveRutina('Pecho + Tríceps', 1);
+    const rutina    = await saveRutina('Pecho + Tríceps', 1);
     const ejercicio = await saveEjercicio('Press Banca', 'Pecho');
-    const sesion   = await saveSesion('2026-06-13', rutina.id, 4);
+    const sesion    = await saveSesion('2026-06-13', rutina.id, 4);
 
     await saveSerie(sesion.id, ejercicio.id, 1, 60, 10);
     await saveSerie(sesion.id, ejercicio.id, 2, 60, 8);
@@ -36,9 +36,9 @@ describe('flujo completo: rutina → sesión → serie → 1RM', () => {
   });
 
   it('serie BW (peso=0) no rompe el cálculo de 1RM', async () => {
-    const rutina   = await saveRutina('Calistenia', 2);
+    const rutina    = await saveRutina('Calistenia', 2);
     const ejercicio = await saveEjercicio('Dominadas', 'Espalda');
-    const sesion   = await saveSesion('2026-06-13', rutina.id, 3);
+    const sesion    = await saveSesion('2026-06-13', rutina.id, 3);
 
     await saveSerie(sesion.id, ejercicio.id, 1, 0, 12);
 
@@ -50,53 +50,52 @@ describe('flujo completo: rutina → sesión → serie → 1RM', () => {
   });
 });
 
-// ── Flujo CSV con ROLLBACK ────────────────────────────────────────────────────
+// ── Flujo backup JSON con ROLLBACK ────────────────────────────────────────────
 
-describe('flujo CSV: exportar → corromper → importar → ROLLBACK → DB intacta', () => {
-  it('el ROLLBACK impide que se inserten datos de un CSV corrupto', async () => {
-    // Insertar 1 serie real
-    const rutina   = await saveRutina('Test', 0);
+describe('flujo backup: exportar → importar corrupto → ROLLBACK → DB intacta', () => {
+  it('ROLLBACK ante JSON inválido deja la DB con los datos originales', async () => {
+    const rutina    = await saveRutina('Test', 0);
     const ejercicio = await saveEjercicio('Sentadilla', 'Pierna');
-    const sesion   = await saveSesion('2026-06-13', rutina.id, 3);
+    const sesion    = await saveSesion('2026-06-13', rutina.id, 3);
     await saveSerie(sesion.id, ejercicio.id, 1, 80, 5);
 
-    // Exportar
-    const datos = await getAllSeriesForExport();
-    expect(datos.length).toBe(1);
-    const csvOriginal = exportarCSV(datos);
-    expect(csvOriginal.split('\n')[0]).toBe(CSV_HEADERS);
+    // Exportar backup válido
+    const datos = await getAllDataForExport();
+    expect(datos.series.length).toBe(1);
+    const jsonOriginal = exportarBackup(datos);
+    const parsed = JSON.parse(jsonOriginal);
+    expect(parsed.version).toBe(1);
 
-    // Corromper la columna "peso"
-    const lineas = csvOriginal.split('\n');
-    const cols   = lineas[1].split(',');
-    cols[5]      = 'CORRUPTO';
-    lineas[1]    = cols.join(',');
-    const csvCorrupto = lineas.join('\n');
-
-    // Intentar importar el CSV corrupto en el mismo DB
-    const dbInst  = getDB();
-    const resultado = await importarCSV(csvCorrupto, dbInst);
-
-    expect(resultado.exitosas).toBe(0);
+    // Intentar importar JSON corrupto
+    const dbInst = getDB();
+    const resultado = await importarBackup('{ corrupto: verdad }', dbInst);
     expect(resultado.error).toBeTruthy();
 
-    // La DB sigue teniendo solo la 1 serie original (ROLLBACK = no se añadió nada)
+    // DB sigue con los datos originales
     const { rows } = await dbInst.query('SELECT COUNT(*) AS n FROM series');
     expect(Number(rows[0].n)).toBe(1);
   });
 
-  it('importar CSV válido después de uno corrupto deja la DB correcta', async () => {
-    const csvValido = `${CSV_HEADERS}\n2026-06-14,Pecho,Press Banca,Pecho,1,60,10,,4`;
-    const csvCorrupto = `${CSV_HEADERS}\n2026-06-14,Pecho,Press Banca,Pecho,1,XXX,10,,4`;
-
+  it('importar backup válido después de uno corrupto deja la DB correcta', async () => {
     const dbInst = getDB();
 
-    const r1 = await importarCSV(csvCorrupto, dbInst);
-    expect(r1.exitosas).toBe(0);
+    const r1 = await importarBackup('no es json', dbInst);
+    expect(r1.error).toBeTruthy();
 
-    const r2 = await importarCSV(csvValido, dbInst);
-    expect(r2.exitosas).toBe(1);
+    const backupValido = {
+      version: 1,
+      conf: { pref_unit: 'lb', pref_acento: 'verde' },
+      ejercicios: [{ id: 1, nombre: 'Press Banca', grupo_muscular: 'Pecho' }],
+      rutinas: [{ id: 1, nombre: 'Pecho' }],
+      rutina_ejercicios: [{ rutina_id: 1, ejercicio_id: 1, orden: 1, activo_hoy: true }],
+      rutina_dias: [],
+      sesiones: [{ id: 1, fecha: '2026-06-14', rutina_id: 1, energia_sueno: null, peso_corporal: null }],
+      series: [{ sesion_id: 1, ejercicio_id: 1, numero_serie: 1, peso: 60, repeticiones: 10 }],
+    };
+
+    const r2 = await importarBackup(JSON.stringify(backupValido), dbInst);
     expect(r2.error).toBeNull();
+    expect(r2.series).toBe(1);
 
     const { rows } = await dbInst.query('SELECT COUNT(*) AS n FROM series');
     expect(Number(rows[0].n)).toBe(1);
