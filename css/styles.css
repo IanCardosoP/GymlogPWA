@@ -657,6 +657,31 @@ input.is-saved::placeholder {
   min-height: 1.5em;
 }
 
+.reset-advertencia {
+  font-size: 12px;
+  color: var(--color-texto-dim);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.btn-reset-datos {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 1px solid #ff4444;
+  color: #ff4444;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 12px;
+  text-align: left;
+  letter-spacing: 0.03em;
+}
+
+.btn-reset-datos:hover {
+  background-color: #ff4444;
+  color: var(--color-fondo);
+}
+
 .config-footer {
   font-size: 11px;
   color: var(--color-texto-dim);

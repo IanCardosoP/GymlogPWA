@@ -128,6 +128,16 @@ export async function render(state) {
 
   container.appendChild(secCSV);
 
+  // ── 4. Eliminar datos ────────────────────────────────────────────────────
+  const secReset = cel('section', 'config-seccion');
+  secReset.appendChild(cel('h3', 'config-titulo', '[4. ELIMINAR DATOS]'));
+  secReset.appendChild(cel('p', 'reset-advertencia',
+    '⚠ Esta acción elimina toda la base de datos, caché y datos de la app. ' +
+    'Recomendamos exportar un CSV antes de continuar.'));
+  const btnReset = cel('button', 'btn-reset-datos', '[ ⚠ REINICIO DE FÁBRICA ]');
+  secReset.appendChild(btnReset);
+  container.appendChild(secReset);
+
   // Footer
   container.appendChild(cel('footer', 'config-footer',
     'GymLog v1.0.0-wasm | DB: idb://gym-log-db (Postgres)'));
@@ -291,4 +301,44 @@ export async function render(state) {
         `Importación completada: ${resultado.exitosas} series, ${resultado.fallidas} fallidas.`;
     }
   });
+
+  btnReset.addEventListener('click', () => {
+    const existente = secReset.querySelector('.confirm-delete-panel');
+    if (existente) { existente.remove(); return; }
+
+    const panel = cel('div', 'confirm-delete-panel');
+    panel.appendChild(cel('span', 'confirm-delete-msg',
+      '¿Confirmas el borrado total? Esta acción es IRREVERSIBLE.'));
+    const btnConf   = cel('button', 'btn-confirmar-eliminar', '[ SÍ, BORRAR TODO ]');
+    const btnCancel = cel('button', 'btn-cancelar-eliminar', '[ CANCELAR ]');
+    panel.appendChild(btnConf);
+    panel.appendChild(btnCancel);
+
+    btnConf.addEventListener('click', resetearTodo);
+    btnCancel.addEventListener('click', () => panel.remove());
+
+    secReset.appendChild(panel);
+  });
+}
+
+async function resetearTodo() {
+  if (typeof indexedDB.databases === 'function') {
+    const dbs = await indexedDB.databases();
+    await Promise.all(dbs.map(d => indexedDB.deleteDatabase(d.name)));
+  } else {
+    indexedDB.deleteDatabase('/gym-log-db');
+    indexedDB.deleteDatabase('gym-log-db');
+  }
+
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+  }
+
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map(r => r.unregister()));
+  }
+
+  window.location.reload();
 }
