@@ -1,0 +1,6 @@
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self' idb://*; style-src 'self' 'unsafe-inline'; worker-src 'self'; img-src 'self' data:;
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(), microphone=(), camera=()

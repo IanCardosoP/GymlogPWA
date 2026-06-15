@@ -1,6 +1,6 @@
 // Service Worker: estrategia Cache-First estricta para modo offline completo
 
-const CACHE_NAME = 'gymlog-v1';
+const CACHE_NAME = 'gymlog-v2';
 
 const ASSETS_TO_CACHE = [
   '/',
