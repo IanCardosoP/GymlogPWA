@@ -5,12 +5,24 @@ const TABS = ['diario', 'progreso', 'config'];
 // Registro de funciones render — se puebla en initApp() con dynamic imports
 const RENDERS = {};
 
+export const ACENTOS = {
+  verde:  '#00ff88',
+  morado: '#bf00ff',
+  rosa:   '#ff0080',
+  cian:   '#00d4ff',
+};
+
+export function aplicarAcento(key) {
+  document.documentElement.style.setProperty('--color-acento', ACENTOS[key] ?? ACENTOS.verde);
+}
+
 export const store = {
   currentTab: 'diario',
   activeRoutineId: null,
   loadedExercises: [],
   currentSesionId: null,
   prefUnit: 'lb',
+  acentoKey: 'verde',
 };
 
 export function dispatch(action, payload) {
@@ -19,6 +31,7 @@ export function dispatch(action, payload) {
     case 'SET_RUTINA':    store.activeRoutineId  = payload; break;
     case 'SET_EXERCISES': store.loadedExercises  = payload; break;
     case 'SET_PREF_UNIT': store.prefUnit         = payload; break;
+    case 'SET_ACENTO':    store.acentoKey        = payload; aplicarAcento(payload); break;
   }
   RENDERS[store.currentTab]?.(store);
 }
@@ -68,7 +81,9 @@ export async function initApp() {
   const { initDB, getConf } = await import('./db.js');
   await initDB('idb://gym-log-db');
   const conf = await getConf();
-  store.prefUnit = conf.pref_unit;
+  store.prefUnit  = conf.pref_unit;
+  store.acentoKey = conf.pref_acento ?? 'verde';
+  aplicarAcento(store.acentoKey);
 
   bindNav();
   navigateTo('diario');

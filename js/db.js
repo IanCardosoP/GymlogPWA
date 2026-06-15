@@ -49,7 +49,8 @@ export async function initDB(uri = 'idb://gym-log-db') {
 
     CREATE TABLE IF NOT EXISTS conf (
       id INT PRIMARY KEY DEFAULT 1,
-      pref_unit TEXT NOT NULL DEFAULT 'lb',
+      pref_unit   TEXT NOT NULL DEFAULT 'lb',
+      pref_acento TEXT NOT NULL DEFAULT 'verde',
       CONSTRAINT chk_pref_unit CHECK (pref_unit IN ('kg', 'lb')),
       CONSTRAINT chk_single_row CHECK (id = 1)
     );
@@ -57,6 +58,8 @@ export async function initDB(uri = 'idb://gym-log-db') {
     INSERT INTO conf (id, pref_unit)
     VALUES (1, 'lb')
     ON CONFLICT (id) DO NOTHING;
+
+    ALTER TABLE conf ADD COLUMN IF NOT EXISTS pref_acento TEXT NOT NULL DEFAULT 'verde';
 
     CREATE TABLE IF NOT EXISTS rutina_dias (
       id        SERIAL PRIMARY KEY,
@@ -245,6 +248,14 @@ export async function getSeriesPorEjercicio(ejercicioId) {
 export async function getConf() {
   const result = await db.query('SELECT * FROM conf WHERE id = 1');
   return result.rows[0];
+}
+
+export async function updatePrefAcento(key) {
+  const { rows } = await db.query(
+    'UPDATE conf SET pref_acento = $1 WHERE id = 1 RETURNING *',
+    [key]
+  );
+  return rows[0];
 }
 
 export async function updatePrefUnit(unit) {

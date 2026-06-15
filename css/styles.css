@@ -662,6 +662,30 @@ input.is-saved::placeholder {
   min-height: 1.5em;
 }
 
+.acento-selector {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.acento-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.acento-swatch.is-active {
+  box-shadow: 0 0 0 2px var(--color-fondo), 0 0 0 4px currentColor;
+}
+
+.acento-swatch-verde  { background-color: #00ff88; color: #00ff88; }
+.acento-swatch-morado { background-color: #bf00ff; color: #bf00ff; }
+.acento-swatch-rosa   { background-color: #ff0080; color: #ff0080; }
+.acento-swatch-cian   { background-color: #00d4ff; color: #00d4ff; }
+
 .reset-advertencia {
   font-size: 12px;
   color: var(--color-texto-dim);

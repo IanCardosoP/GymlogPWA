@@ -1,13 +1,20 @@
 // Componente Config: administración de rutinas, unidades kg/lb y gestión CSV
-import { dispatch } from '../app.js';
+import { dispatch, aplicarAcento, ACENTOS } from '../app.js';
 import {
   getRutinas, saveRutina,
   getRutinasDias, addRutinaDia, removeRutinaDia,
   updateRutinaNombre, deleteRutina,
-  getConf, updatePrefUnit,
+  getConf, updatePrefUnit, updatePrefAcento,
   getDB, getAllSeriesForExport,
 } from '../db.js';
 import { exportarCSV, importarCSV } from '../csv.js';
+
+const ACENTOS_LABELS = {
+  verde:  'Verde terminal',
+  morado: 'Morado ciberpunk',
+  rosa:   'Rosa eléctrico',
+  cian:   'Azul cian',
+};
 
 const DIAS_CORTO = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 
@@ -128,9 +135,25 @@ export async function render(state) {
 
   container.appendChild(secCSV);
 
-  // ── 4. Eliminar datos ────────────────────────────────────────────────────
+  // ── 4. Color de acento ───────────────────────────────────────────────────
+  const secAcento = cel('section', 'config-seccion');
+  secAcento.appendChild(cel('h3', 'config-titulo', '[4. COLOR DE ACENTO]'));
+
+  const selectorEl = cel('div', 'acento-selector');
+  const acentoActual = conf.pref_acento ?? 'verde';
+  for (const key of Object.keys(ACENTOS)) {
+    const btn = cel('button', `acento-swatch acento-swatch-${key}`);
+    btn.dataset.acento = key;
+    btn.title = ACENTOS_LABELS[key];
+    if (key === acentoActual) btn.classList.add('is-active');
+    selectorEl.appendChild(btn);
+  }
+  secAcento.appendChild(selectorEl);
+  container.appendChild(secAcento);
+
+  // ── 5. Eliminar datos ────────────────────────────────────────────────────
   const secReset = cel('section', 'config-seccion');
-  secReset.appendChild(cel('h3', 'config-titulo', '[4. ELIMINAR DATOS]'));
+  secReset.appendChild(cel('h3', 'config-titulo', '[5. ELIMINAR DATOS]'));
   secReset.appendChild(cel('p', 'reset-advertencia',
     '⚠ Esta acción elimina toda la base de datos, caché y datos de la app. ' +
     'Recomendamos exportar un CSV antes de continuar.'));
@@ -282,6 +305,17 @@ export async function render(state) {
     if (!radio) return;
     await updatePrefUnit(radio.value);
     dispatch('SET_PREF_UNIT', radio.value);
+  });
+
+  secAcento.addEventListener('click', async e => {
+    const btn = e.target.closest('.acento-swatch');
+    if (!btn) return;
+    const key = btn.dataset.acento;
+    await updatePrefAcento(key);
+    dispatch('SET_ACENTO', key);
+    selectorEl.querySelectorAll('.acento-swatch').forEach(b =>
+      b.classList.toggle('is-active', b.dataset.acento === key)
+    );
   });
 
   btnExportar.addEventListener('click', async () => {

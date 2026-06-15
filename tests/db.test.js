@@ -6,7 +6,7 @@ import {
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
   saveSerie, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
-  getConf, updatePrefUnit,
+  getConf, updatePrefUnit, updatePrefAcento,
 } from '../js/db.js';
 
 beforeEach(async () => {
@@ -264,6 +264,12 @@ describe('conf', () => {
     await expect(
       db.query("INSERT INTO conf (id, pref_unit) VALUES (1, 'kg')")
     ).rejects.toThrow();
+  });
+
+  it('updatePrefAcento persiste la clave de acento', async () => {
+    await updatePrefAcento('morado');
+    const conf = await getConf();
+    expect(conf.pref_acento).toBe('morado');
   });
 
   it('no existe función deleteConf en el módulo', async () => {
