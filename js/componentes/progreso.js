@@ -77,6 +77,26 @@ export async function render(state) {
   }
   container.appendChild(selectMet);
 
+  // ── Panel info de métrica ──────────────────────────────────────────────────
+  const metricaInfo = document.createElement('details');
+  metricaInfo.className = 'metrica-info';
+  const metricaSummary = document.createElement('summary');
+  metricaSummary.textContent = '¿Qué es esto?';
+  metricaInfo.appendChild(metricaSummary);
+  const metricaBody = cel('div', 'metrica-info-body');
+  metricaInfo.appendChild(metricaBody);
+  container.appendChild(metricaInfo);
+
+  function actualizarInfoMetrica() {
+    metricaBody.textContent = '';
+    const metrica = METRICAS_REGISTRY[selectMet.value];
+    if (!metrica?.descripcion) return;
+    for (const linea of metrica.descripcion) {
+      metricaBody.appendChild(cel('p', 'metrica-info-p', linea));
+    }
+  }
+  actualizarInfoMetrica();
+
   container.appendChild(document.createElement('hr'));
 
   const graficaArea = cel('div', 'grafica-area');
@@ -156,5 +176,8 @@ export async function render(state) {
   }
 
   selectEj.addEventListener('change', actualizarGrafica);
-  selectMet.addEventListener('change', actualizarGrafica);
+  selectMet.addEventListener('change', () => {
+    actualizarInfoMetrica();
+    actualizarGrafica();
+  });
 }

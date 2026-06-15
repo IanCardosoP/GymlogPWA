@@ -538,6 +538,32 @@ input.is-saved::placeholder {
   color: var(--color-texto);
 }
 
+.metrica-info {
+  margin-top: 12px;
+  border-left: 2px solid var(--color-acento);
+  padding-left: 10px;
+}
+
+.metrica-info summary {
+  font-size: 11px;
+  color: var(--color-acento);
+  cursor: pointer;
+  opacity: 0.7;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+.metrica-info summary:hover {
+  opacity: 1;
+}
+
+.metrica-info-p {
+  font-size: 11px;
+  color: var(--color-texto-dim);
+  line-height: 1.6;
+  margin: 6px 0 0;
+}
+
 /* ── Config ──────────────────────────────────────────────────────────────────── */
 
 .config-seccion {
