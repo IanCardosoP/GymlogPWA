@@ -92,7 +92,7 @@ export async function initApp() {
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof window !== 'undefined') {
     if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
-      navigator.serviceWorker.register('/sw.js');
+      navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js');
     }
     initApp();
   }
