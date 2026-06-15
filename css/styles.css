@@ -787,3 +787,10 @@ input.is-saved::placeholder {
   text-align: center;
   padding: 16px 0 8px;
 }
+.config-footer-link {
+  color: var(--color-texto-dim);
+  text-decoration: none;
+  display: block;
+  margin-top: 4px;
+}
+.config-footer-link:hover { color: var(--color-acento); }
