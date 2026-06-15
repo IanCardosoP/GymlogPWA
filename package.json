@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "dev": "vite --host"
+    "dev": "vite --host",
+    "build": "vite build"
   },
   "keywords": [],
   "author": "",
