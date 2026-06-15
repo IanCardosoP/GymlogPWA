@@ -204,7 +204,7 @@
 
 ---
 
-## ⚙️ SPRINT 3 — Lógica de Negocio Pura (Analítica y CSV)
+## ⚙️ SPRINT 3 — Lógica de Negocio Pura (Analítica y Backup JSON)
 
 **Objetivo:** Módulos de lógica pura (sin DOM) con cobertura de tests completa antes de renderizar nada.
 
@@ -224,19 +224,21 @@
 
 ---
 
-### Ticket 3.2 — `js/csv.js`: Exportación e Importación con contrato estricto `[DONE]`
+### Ticket 3.2 — `js/csv.js`: Backup JSON completo `[DONE]`
 
 **Dependencia:** Ticket 3.1 en `[DONE]`.
 
+> ⚠️ Implementado como JSON en lugar de CSV (fix/backup-json). El CSV plano no podía representar rutinas sin series, rutina_dias ni conf; y presentaba un bug de timezone con PGLite.
+
 **Criterios de aceptación:**
-- [ ] Constante `CSV_HEADERS` exportada: `'fecha,rutina_nombre,ejercicio_nombre,grupo_muscular,numero_serie,peso,repeticiones,peso_corporal,energia_sueno'`.
-- [ ] `exportarCSV(datos)` → recibe array de objetos de DB, serializa a string CSV con `CSV_HEADERS` como primera línea, genera `Blob` y dispara descarga en el browser.
-- [ ] `importarCSV(archivoTexto, dbInstance)` → parsea el string, valida que la primera línea sea exactamente `CSV_HEADERS` (error explícito si no coincide), valida tipos de cada columna (`peso` y `repeticiones` son numéricos ≥ 0), ejecuta inserciones dentro de `BEGIN; ... COMMIT;`, hace `ROLLBACK` si cualquier fila falla.
-- [ ] La función de importación retorna `{ exitosas: N, fallidas: M, error: null | string }`.
+- [ ] Constante `BACKUP_VERSION = 1` exportada.
+- [ ] `exportarBackup(datos)` → recibe objeto con claves relacionales, serializa a JSON, genera `Blob` y dispara descarga como `gymlog-backup-YYYY-MM-DD.json`.
+- [ ] `importarBackup(textoJson, dbInstance)` → parsea JSON, valida `version === BACKUP_VERSION`, ejecuta FULL REPLACE dentro de `BEGIN; ... COMMIT;` (borra en orden inverso a FK, inserta con IDs originales, resetea secuencias SERIAL), hace `ROLLBACK` si cualquier registro falla.
+- [ ] La función de importación retorna `{ ejercicios: N, rutinas: N, sesiones: N, series: N, error: null | string }`.
 
 ---
 
-### Ticket 3.3 — Tests: Analítica y CSV `[DONE]`
+### Ticket 3.3 — Tests: Analítica y Backup JSON `[DONE]`
 
 **Dependencia:** Tickets 3.1 y 3.2 en `[DONE]`.
 
@@ -249,11 +251,16 @@
   - [ ] `calculateEpley1RM(80, 0)` → exactamente `80` (0 reps = 1RM = el propio peso).
   - [ ] `calcularBarraProgreso(76, 80)` → string de exactamente 20 chars con proporción correcta.
   - [ ] `calcularBarraProgreso(80, 80)` → `'████████████████████'` (100% lleno).
-- [ ] `tests/csv.test.js`:
-  - [ ] Exportar array de datos → primera línea del CSV es exactamente `CSV_HEADERS`.
-  - [ ] Importar CSV con headers incorrectos → error explícito, cero inserciones en DB.
-  - [ ] Importar CSV con fila corrupta (peso = `'abc'`) → `ROLLBACK` ejecutado, DB intacta.
-  - [ ] Importar CSV válido → `{ exitosas: N, fallidas: 0, error: null }`.
+- [ ] `tests/csv.test.js` (8 tests — backup JSON):
+  - [ ] `exportarBackup` retorna JSON con campos estructurales correctos (`version`, `conf`, `ejercicios`, `rutinas`, `rutina_dias`, `series`).
+  - [ ] Importar JSON inválido → `{ error: ... }`, DB intacta.
+  - [ ] Importar versión incompatible → `{ error: /incompatible/ }`.
+  - [ ] Importar backup completo → conteos correctos (`rutinas`, `ejercicios`, `sesiones`, `series`).
+  - [ ] Restaura ejercicios sin series (Sentadilla sin historial).
+  - [ ] Restaura `rutina_dias` correctamente.
+  - [ ] Restaura `conf` (pref_unit y pref_acento).
+  - [ ] Segunda importación del mismo backup no duplica (FULL REPLACE).
+  - [ ] Tras restaurar, nuevos INSERTs no colisionan con IDs restaurados (secuencias reseteadas).
 - [ ] `pnpm test` → todos los tests passed, incluyendo Sprints 1 y 2.
 
 ---
@@ -311,7 +318,7 @@
 
 ---
 
-### Ticket 4.4 — `js/componentes/config.js`: Rutinas, unidades y CSV `[DONE]`
+### Ticket 4.4 — `js/componentes/config.js`: Rutinas, unidades y backup JSON `[DONE]`
 
 **Dependencia:** Ticket 4.1 en `[DONE]`.
 
@@ -320,8 +327,8 @@
 - [ ] 7 selectores (Lunes–Domingo) poblados con `getRutinas()`. Al cambiar: `updateRutinaDia()`.
 - [ ] Botón `[+ Crear nueva rutina]`: input de texto → `saveRutina()` → re-renderiza selectores.
 - [ ] Radio buttons KG/LB: al cambiar → `updatePrefUnit()` → `dispatch` actualiza `store.prefUnit` globalmente.
-- [ ] Botón `[ Respaldar CSV ]`: llama `exportarCSV()` con datos de DB completos.
-- [ ] Input de archivo + botón `[ Importar CSV ]`: llama `importarCSV()`, muestra resultado `{ exitosas, fallidas }` con `textContent`.
+- [ ] Botón `[ Exportar backup completo (.json) ]`: llama `getAllDataForExport()` + `exportarBackup()`.
+- [ ] Input de archivo (`accept=".json"`) + botón `[ Restaurar desde backup (.json) ]`: llama `importarBackup()`, muestra resultado `{ rutinas, ejercicios, sesiones, series }` con `textContent`.
 - [ ] Ningún `innerHTML` con variables de usuario.
 
 ---
@@ -375,7 +382,7 @@
 - [ ] Todos los tests de Sprints 1, 2 y 3 siguen en verde (no hay regresiones).
 - [ ] Test de integración completo en `tests/integracion.test.js`:
   - [ ] Flujo completo: `initDB('memory://')` → `saveRutina` → `saveEjercicio` → `saveSesion` → `saveSerie` → `getSeriesPorEjercicio` → `calculateEpley1RM` → valor correcto.
-  - [ ] Flujo CSV: exportar → corromper una fila → importar → verificar ROLLBACK → DB intacta.
+  - [ ] Flujo backup JSON: exportar → importar JSON corrupto → verificar ROLLBACK → DB intacta → importar válido → DB correcta.
 - [ ] `pnpm test` → **todos los tests passed**. Output limpio, cero warnings de ESM.
 
 ---
