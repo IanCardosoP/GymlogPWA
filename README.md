@@ -28,7 +28,7 @@ GymLog es una aplicación web progresiva (PWA) para registrar tus entrenamientos
 ### Configuración personal
 - Unidad de peso: kilogramos o libras
 - Color de acento de la interfaz (verde terminal, morado, rosa, cian)
-- Exportar e importar tus datos en formato CSV como respaldo
+- Exportar e importar tus datos en formato JSON como respaldo completo
 - Borrado completo de datos con un solo botón (previa confirmación)
 
 ---
@@ -62,7 +62,7 @@ La primera vez que abres la app necesitas conexión para descargarla. A partir d
 | Quieres saber si estás progresando | La gráfica de 1RM muestra si tu fuerza sube aunque cambies de peso o reps |
 | Entrenas sin WiFi (sótano, campo, viaje) | Modo offline completo — funciona igual sin conexión |
 | No quieres dar tu email a otra app de gimnasio | No hay registro, no hay cuenta, no hay email |
-| Cambias de teléfono | Exporta en CSV, instala en el nuevo y reimporta — datos intactos |
+| Cambias de teléfono | Exporta el backup .json, instala en el nuevo y reimporta — datos intactos |
 
 ---
 
@@ -128,10 +128,10 @@ GymLog se instala directamente desde el navegador, sin pasar por ninguna tienda 
 
 GymLog incluye opciones de exportación e importación en la pestaña **CONFIG**:
 
-- **Exportar CSV:** descarga un archivo con todo tu historial de series. Guárdalo en tu nube personal (Drive, iCloud, etc.) como respaldo
-- **Importar CSV:** carga un respaldo previamente exportado para restaurar tus datos o migrar a otro dispositivo
+- **Exportar backup (.json):** descarga un archivo JSON con todo tu historial — rutinas, ejercicios, sesiones, series y preferencias. Guárdalo en tu nube personal (Drive, iCloud, etc.) como respaldo
+- **Restaurar desde backup (.json):** carga un respaldo previamente exportado para restaurar tus datos completos o migrar a otro dispositivo
 
-Si cambias de teléfono: exporta en el antiguo, instala GymLog en el nuevo e importa el CSV. Tus datos estarán intactos.
+Si cambias de teléfono: exporta el backup en el antiguo, instala GymLog en el nuevo e importa el .json. Tus datos estarán intactos.
 
 ---
 

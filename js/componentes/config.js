@@ -5,9 +5,9 @@ import {
   getRutinasDias, addRutinaDia, removeRutinaDia,
   updateRutinaNombre, deleteRutina,
   getConf, updatePrefUnit, updatePrefAcento,
-  getDB, getAllSeriesForExport,
+  getDB, getAllDataForExport,
 } from '../db.js';
-import { exportarCSV, importarCSV } from '../csv.js';
+import { exportarBackup, importarBackup } from '../csv.js';
 
 const ACENTOS_LABELS = {
   verde:  'Verde terminal',
@@ -112,22 +112,22 @@ export async function render(state) {
   }
   container.appendChild(secUnidad);
 
-  // ── 3. Gestión de datos CSV ──────────────────────────────────────────────
+  // ── 3. Gestión de datos ──────────────────────────────────────────────────
   const secCSV = cel('section', 'config-seccion');
-  secCSV.appendChild(cel('h3', 'config-titulo', '[3. GESTIÓN DE DATOS HISTÓRICOS]'));
+  secCSV.appendChild(cel('h3', 'config-titulo', '[3. GESTIÓN DE DATOS]'));
 
   const btnExportar = cel('button', 'btn-exportar-csv',
-    '[ Respaldar todo a un archivo CSV (Exportar) ]');
+    '[ Exportar backup completo (.json) ]');
   secCSV.appendChild(btnExportar);
 
   const inputArchivo = document.createElement('input');
   inputArchivo.type = 'file';
   inputArchivo.className = 'input-archivo';
-  inputArchivo.accept = '.csv';
+  inputArchivo.accept = '.json';
   secCSV.appendChild(inputArchivo);
 
   const btnImportar = cel('button', 'btn-importar-csv',
-    '[ Importar y Combinar CSV (Restaurar) ]');
+    '[ Restaurar desde backup (.json) ]');
   secCSV.appendChild(btnImportar);
 
   const resultadoEl = cel('p', 'resultado-importacion');
@@ -156,7 +156,7 @@ export async function render(state) {
   secReset.appendChild(cel('h3', 'config-titulo', '[5. ELIMINAR DATOS]'));
   secReset.appendChild(cel('p', 'reset-advertencia',
     '⚠ Esta acción elimina toda la base de datos, caché y datos de la app. ' +
-    'Recomendamos exportar un CSV antes de continuar.'));
+    'Recomendamos exportar un backup .json antes de continuar.'));
   const btnReset = cel('button', 'btn-reset-datos', '[ ⚠ REINICIO DE FÁBRICA ]');
   secReset.appendChild(btnReset);
   container.appendChild(secReset);
@@ -336,20 +336,21 @@ export async function render(state) {
   });
 
   btnExportar.addEventListener('click', async () => {
-    const datos = await getAllSeriesForExport();
-    exportarCSV(datos);
+    const datos = await getAllDataForExport();
+    exportarBackup(datos);
   });
 
   btnImportar.addEventListener('click', async () => {
     const archivo = inputArchivo.files?.[0];
-    if (!archivo) { resultadoEl.textContent = 'Selecciona un archivo CSV primero.'; return; }
-    const texto    = await archivo.text();
-    const resultado = await importarCSV(texto, getDB());
-    if (resultado.error) {
-      resultadoEl.textContent = `Error: ${resultado.error}`;
+    if (!archivo) { resultadoEl.textContent = 'Selecciona un archivo .json primero.'; return; }
+    const texto = await archivo.text();
+    const r = await importarBackup(texto, getDB());
+    if (r.error) {
+      resultadoEl.textContent = `Error: ${r.error}`;
     } else {
       resultadoEl.textContent =
-        `Importación completada: ${resultado.exitosas} series, ${resultado.fallidas} fallidas.`;
+        `Restaurado: ${r.rutinas} rutinas, ${r.ejercicios} ejercicios, ${r.sesiones} sesiones, ${r.series} series.`;
+      location.reload();
     }
   });
 

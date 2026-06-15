@@ -54,7 +54,7 @@ Tap del usuario → db.js (SQL puro) → actualizar Store → componente.render(
 | `js/db.js` | Toda interacción con PGLite — solo SQL, solo promesas, cero DOM |
 | `js/componentes/*.js` | Un módulo por pestaña; expone `.render(store)` idempotente, cero SQL |
 | `js/analitico.js` | Lógica pura (Epley 1RM, barras ASCII) — sin imports de DOM ni de db |
-| `js/csv.js` | Exportación e importación — transacciones obligatorias |
+| `js/csv.js` | Backup JSON completo (export/import) — transacciones obligatorias |
 | `sw.js` | Service Worker Cache-First — sin lógica de negocio |
 
 **IDs de contenedores clave (inmutables):** `#diario-container`, `#progreso-container`, `#config-container`.
@@ -151,10 +151,10 @@ elemento.innerHTML = `<span>${ejercicio.nombre}</span>`;
 // ❌ PROHIBIDO — eval() en cualquier contexto
 ```
 
-### A08 · Integridad CSV — Transacciones obligatorias en importación
+### A08 · Integridad de datos — Transacciones obligatorias en importación
 
-Toda importación de CSV debe ejecutarse dentro de `BEGIN; ... COMMIT;`.
-Si cualquier fila falla → `ROLLBACK;` automático. Sin excepciones.
+Toda importación de backup JSON debe ejecutarse dentro de `BEGIN; ... COMMIT;`.
+Si cualquier registro falla → `ROLLBACK;` automático. Sin excepciones.
 
 ### A05 · Configuración — Tabla `conf` protegida
 

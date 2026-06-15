@@ -8,7 +8,7 @@ Eres el Desarrollador Principal de **GymLog Minimalist PWA**, un Micro-SaaS hipe
 * **Local-First / Offline-First:** La app debe funcionar al 100% sin internet, en modo avión, dentro de sótanos o zonas sin cobertura.
 * **Cero Servidores Iniciales:** No existe autenticación, no hay login, no hay llamadas a APIs de terceros en la nube para el MVP.
 * **Estética Terminal Oscura:** Interfaz visual negra pura (#000000 / #121212) orientada a texto plano, compacta y ultra veloz.
-* **LocalStorage:** Los datos son persistentes siempre mientras no se borre el cache del dispositivo. Se puede exportar a .csv para respaldar los entrenamientos y cargar desde un fichero respaldado para continuar donde se dejó.
+* **LocalStorage:** Los datos son persistentes siempre mientras no se borre el cache del dispositivo. Se puede exportar un backup .json completo para respaldar los entrenamientos y cargarlo para continuar donde se dejó.
 
 ---
 
@@ -120,7 +120,7 @@ Todo el contenido de la aplicación debe vivir dentro de un contenedor principal
 * **Pantalla Diario:** Renderizado dinámico usando `<details>` y `<summary>` por ejercicio. Inputs numéricos con `inputmode="decimal"` para invocar el teclado numérico gigante. Botón `[ Guardar ]` que ejecuta un INSERT inmediato en la base de datos local Wasm.
 * **Precarga Inteligente:** Los inputs de rutina y ejercicios deben heredar automáticamente como valores por defecto (o placeholders) los datos de la última serie registrada de ese mismo ejercicio o rutina para reducir la fricción a un solo tap.
 * **Pantalla Progreso:** Gráfica de rendimiento relativa de las últimas 5 semanas en base al 1RM Estimado (Fórmula de Epley: 1RM = Peso * (1 + Reps / 30)). El renderizado de barras debe hacerse con texto/bloques CSS (`█` y `░`) calculados dinámicamente según el PR histórico (100% de la barra = PR absoluto).
-* **Pantalla Configuración:** Botón nativo para ejecutar un query masivo y descargar el historial completo de entrenamientos directamente en un archivo `.csv`, Aqui también se puede configurar facilmente qué dias se entrena qué rutina o qué días se descansa.
+* **Pantalla Configuración:** Botón para exportar un backup completo en formato `.json` (rutinas, ejercicios, sesiones, series, preferencias) y botón para restaurar desde un .json previo. Aquí también se configura qué días se entrena qué rutina o qué días se descansa.
 * **Estetica**: Para capturar la esencia *text-only* e hiperminimalista, imagínate una estética limpia, monocromática (estilo consola o modo oscuro puro) con fuentes monoespaciadas. La navegación se maneja con pestañas fijas arriba.
 
 ## Pantalla 1: El Diario (Modo Registro)
@@ -224,7 +224,7 @@ Historial Reciente:
 ## Pantalla 3: Config (Configuracion)
 
 1. En esta pantalla se asignan rutinas a dias de la semana. 
-2. También hay botones para descargar respaldo de datos en csv asi como para cargar un csv descargado y restaurar desde un respaldo. 
+2. También hay botones para exportar un backup completo en .json y para restaurar desde un archivo .json previamente descargado. 
 3. También se permite el cambio global entre kg y lb.
 
 
@@ -258,11 +258,11 @@ Sistema de Carga: ( ) Kilogramos (KG)
 --------------------------------------------------
 ¡Soberanía de datos! Tu historial reside en este dispositivo.
 
-[ Respaldar todo a un archivo CSV (Exportar) ]
+[ Exportar backup completo (.json) ]
 
 Para restaurar tus datos desde un respaldo:
 Seleccionar archivo: [ examinar... / sin archivo ]
-[ Importar y Combinar CSV (Restaurar) ]
+[ Restaurar desde backup (.json) ]
 
 ==================================================
 GymLog v1.0.0-wasm | DB: idb://gym-log-db (Postgres)
@@ -271,7 +271,7 @@ GymLog v1.0.0-wasm | DB: idb://gym-log-db (Postgres)
 ```
 * **Estructura de las Rutinas Semanales**: Los elementos desplegables [ v ] harán un query SELECT * FROM rutinas. Al cambiar un día (ej: cambiar el jueves a "Descanso"), se actualizará la columna dia_sugerido en la tabla rutinas para remapear la automatización del Diario.
 * **El etiquetadir de Unidades (KG/LB)**: Cuando el usuario cambia a Libras (LB), se guarda una variable en el localStorage (pref_unidad: 'lb'). La base de datos siempre guardará números puros, pero si la preferencia es lb, el Diario mostrará la etiqueta "lb" (o viceversa).
-* **La Operación de Restauración (Importar CSV)**: La función de importación debe leer el archivo de texto plano cargado, separar los valores por comas e iterar un script de inserción seguro (INSERT INTO ... ON CONFLICT DO NOTHING) para poblar masivamente las tablas locales de ejercicios, sesiones y series sin duplicar entrenamientos que ya existieran en el teléfono.
+* **La Operación de Restauración (Importar JSON)**: La función de importación lee el archivo `.json`, valida la versión del backup, y ejecuta un FULL REPLACE dentro de una transacción (`BEGIN … COMMIT`): borra las tablas en orden inverso a las FK y restaura todos los registros con sus IDs originales. Si cualquier inserción falla → `ROLLBACK` automático. Al finalizar resetea las secuencias SERIAL para que futuros INSERTs no colisionen.
 
 
 ---
@@ -322,11 +322,9 @@ GymLog v1.0.0-wasm | DB: idb://gym-log-db (Postgres)
 * **Flujo:** En la pantalla de configuración, el usuario puede alternar el sistema de carga preferido entre Kilogramos (KG) y Libras (LB) mediante un control de opciones. El cambio se aplica inmediatamente a toda la aplicación.
 * **Criterio Técnico:** El estado se lee y se escribe directamente en la tabla de configuración única `conf` (`WHERE id = 1`). Por defecto es `lb`. La base de datos siempre almacena números puros en la tabla `series`; el frontend es el encargado de renderizar la etiqueta del texto correspondiente ('kg' o 'lb') según el valor activo en `conf`.
 
-### HU 8: Soberanía de Datos y Contrato CSV estricto
-* **Flujo:** Exportación e importación de la base de datos completa.
-* **Criterio Técnico:** El archivo exportado DEBE tener estrictamente la siguiente primera fila (cabeceras) para garantizar el contrato de datos en la restauración:
-  `fecha,rutina_nombre,ejercicio_nombre,grupo_muscular,numero_serie,peso,repeticiones,peso_corporal,energia_sueno`
-  El script de importación debe leer este contrato y procesar las inserciones lógicas verificando la existencia previa de nombres para no duplicar IDs en las tablas de diccionarios.
+### HU 8: Soberanía de Datos — Backup JSON completo
+* **Flujo:** Exportación e importación de la base de datos completa en formato JSON.
+* **Criterio Técnico:** El archivo exportado es un JSON con la clave `version: 1` y las claves relacionales: `conf`, `ejercicios`, `rutinas`, `rutina_ejercicios`, `rutina_dias`, `sesiones`, `series`. La importación valida la versión, ejecuta FULL REPLACE dentro de una transacción y resetea secuencias SERIAL al finalizar. `fecha::text` en la query de exportación evita el bug de timezone (PGLite retorna DATE como JS Date).
 
 ### HU 9: Cierre de Sesión (Fin del Entrenamiento)
 * **Flujo:** Al finalizar sus ejercicios, el usuario presiona el botón `[ FIN DEL ENTRENAMIENTO ]` ubicado al fondo del Diario.
@@ -443,12 +441,12 @@ span.textContent = ejercicio.nombre; // Sanitiza automáticamente cualquier inte
 elemento.appendChild(span);
 
 ```
-#### 8.3. OWASP A08:2021 - Fallos en la Integridad de Datos y Software (Contrato CSV)
+#### 8.3. OWASP A08:2021 - Fallos en la Integridad de Datos y Software (Backup JSON)
 
-* **El Riesgo:** Durante la importación de datos históricos mediante la **HU 8**, el usuario podría cargar un archivo `.csv` corrupto, malformado o modificado con intenciones maliciosas, lo que provocaría denegación de servicio local (crash de la PWA) o corrupción del IndexedDB.
+* **El Riesgo:** Durante la importación de datos históricos mediante la **HU 8**, el usuario podría cargar un archivo `.json` corrupto, malformado o con versión incorrecta, lo que provocaría denegación de servicio local (crash de la PWA) o corrupción del IndexedDB.
 * **Regla de Implementación:**
-* **Validación de Tipo Estricta:** Antes de procesar el archivo parseado, el módulo de importación debe validar exhaustivamente que los *headers* correspondan exactamente al contrato definido y que los tipos de datos de cada columna sean correctos (ej. verificar con JavaScript que la columna `peso` y `repeticiones` contengan exclusivamente valores numéricos mayores o iguales a cero antes de enviarlos a PGLite).
-* **Aislamiento por Transacciones:** Toda la importación de filas del CSV debe envolverse dentro de una transacción SQL única (`BEGIN; ... COMMIT;`). Si una sola fila falla o está corrupta, se debe ejecutar un `ROLLBACK;` automático para devolver la base de datos a su estado perfectamente íntegro anterior.
+* **Validación de Versión:** El módulo de importación verifica que `datos.version === BACKUP_VERSION` antes de procesar. Si la versión no coincide, retorna `{ error: '...' }` sin tocar la DB.
+* **Aislamiento por Transacciones:** Toda la importación debe envolverse dentro de una transacción SQL única (`BEGIN; ... COMMIT;`). Si cualquier inserción falla, se ejecuta un `ROLLBACK;` automático que devuelve la base de datos a su estado íntegro anterior.
 
 #### 8.4. OWASP A05:2021 - Configuración de Seguridad Incorrecta (Principio de Menor Privilegio)
 
@@ -491,7 +489,7 @@ Dado que la aplicación es *Local-First* y corre en el navegador, el agente de I
 * **Casos de Test Obligatorios por Componente:**
 * **Módulo DB:** Validar inserciones correctas, restricciones de claves únicas, y la mitigación de inyecciones (verificación de prepared statements).
 * **Módulo Analítico:** Tests unitarios específicos para la fórmula de Epley, asegurando que un peso de `0` (BW) devuelva estrictamente `0` y no un error matemático o infinito (`Infinity`).
-* **Módulo CSV:** Validar que la cadena exportada contenga la primera fila de contrato exacta y que la importación de un string corrupto ejecute el `ROLLBACK` de seguridad.
+* **Módulo Backup (csv.js):** Validar que el JSON exportado contenga las claves estructurales correctas (`version`, `ejercicios`, `rutinas`, `series`, etc.) y que la importación de un JSON corrupto o con versión incorrecta ejecute el `ROLLBACK` de seguridad sin tocar la DB.
 
 #### 9.3. Bucle de Depuración Obligatorio (Ciclo de Calidad Agéntica)
 
