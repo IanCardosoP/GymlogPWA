@@ -353,17 +353,25 @@ export async function clearRutinaDia(dia) {
   );
 }
 
-export async function getAllSeriesForExport() {
-  const result = await db.query(`
-    SELECT se.fecha, r.nombre AS rutina_nombre,
-           e.nombre AS ejercicio_nombre, e.grupo_muscular,
-           s.numero_serie, s.peso, s.repeticiones,
-           se.peso_corporal, se.energia_sueno
-    FROM series s
-    JOIN sesiones se ON se.id = s.sesion_id
-    JOIN ejercicios e ON e.id = s.ejercicio_id
-    LEFT JOIN rutinas r ON r.id = se.rutina_id
-    ORDER BY se.fecha ASC, s.sesion_id ASC, s.numero_serie ASC
-  `);
-  return result.rows;
+export async function getAllDataForExport() {
+  const [conf, ejercicios, rutinas, reRows, rdRows, sesiones, series] = await Promise.all([
+    db.query('SELECT pref_unit, pref_acento FROM conf WHERE id = 1'),
+    db.query('SELECT id, nombre, grupo_muscular FROM ejercicios ORDER BY id'),
+    db.query('SELECT id, nombre FROM rutinas ORDER BY id'),
+    db.query('SELECT rutina_id, ejercicio_id, orden, activo_hoy FROM rutina_ejercicios ORDER BY rutina_id, orden'),
+    db.query('SELECT rutina_id, dia FROM rutina_dias ORDER BY rutina_id, dia'),
+    db.query('SELECT id, fecha::text AS fecha, rutina_id, energia_sueno, peso_corporal FROM sesiones ORDER BY fecha, id'),
+    db.query('SELECT sesion_id, ejercicio_id, numero_serie, peso, repeticiones FROM series ORDER BY sesion_id, numero_serie'),
+  ]);
+  return {
+    version: 1,
+    exported_at: new Date().toLocaleDateString('en-CA'),
+    conf: conf.rows[0] ?? { pref_unit: 'lb', pref_acento: 'verde' },
+    ejercicios: ejercicios.rows,
+    rutinas: rutinas.rows,
+    rutina_ejercicios: reRows.rows,
+    rutina_dias: rdRows.rows,
+    sesiones: sesiones.rows,
+    series: series.rows,
+  };
 }
