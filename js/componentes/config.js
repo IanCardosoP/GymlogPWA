@@ -162,8 +162,17 @@ export async function render(state) {
   container.appendChild(secReset);
 
   // Footer
-  container.appendChild(cel('footer', 'config-footer',
-    'GymLog v1.0.0-wasm | DB: idb://gym-log-db (Postgres)'));
+  const footer = cel('footer', 'config-footer',
+    'GymLog v1.1.0-wasm | DB: idb://gym-log-db (Postgres)');
+  footer.appendChild(document.createElement('br'));
+  const credLink = document.createElement('a');
+  credLink.href = 'https://github.com/IanCardosoP';
+  credLink.textContent = 'Ian Cardoso - 2026';
+  credLink.target = '_blank';
+  credLink.rel = 'noopener noreferrer';
+  credLink.className = 'config-footer-link';
+  footer.appendChild(credLink);
+  container.appendChild(footer);
 
   // ── Eventos ──────────────────────────────────────────────────────────────
 
