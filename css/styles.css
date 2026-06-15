@@ -118,6 +118,11 @@ select {
   border-radius: 2px;
 }
 
+select:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* Acordeones nativos */
 details {
   border: 1px solid var(--color-texto-dim);

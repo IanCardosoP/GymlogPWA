@@ -1,5 +1,5 @@
 // Componente Progreso: gráfica de barras ASCII por 1RM estimado (Fórmula de Epley)
-import { getEjerciciosOrdenadosPorUso, getSeriesPorEjercicio } from '../db.js';
+import { getRutinas, getRutinaEjercicios, getSeriesPorEjercicio } from '../db.js';
 import { METRICAS_REGISTRY, prepararDatosProgreso } from '../analitico.js';
 
 function cel(tag, clase, texto) {
@@ -14,9 +14,33 @@ export async function render(state) {
   if (!container) return;
   container.textContent = '';
 
-  const ejercicios = await getEjerciciosOrdenadosPorUso();
+  const rutinas = await getRutinas();
 
-  // Select ejercicio
+  // ── Select Rutina ──────────────────────────────────────────────────────────
+  const rutLabel = document.createElement('label');
+  rutLabel.setAttribute('for', 'select-rutina');
+  rutLabel.textContent = 'Rutina: ';
+  rutLabel.className = 'progreso-label';
+  container.appendChild(rutLabel);
+
+  const selectRut = document.createElement('select');
+  selectRut.id = 'select-rutina';
+  selectRut.className = 'select-rutina';
+
+  const optRutVacio = document.createElement('option');
+  optRutVacio.value = '';
+  optRutVacio.textContent = '— Seleccionar rutina —';
+  selectRut.appendChild(optRutVacio);
+
+  for (const r of rutinas) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.nombre;
+    selectRut.appendChild(opt);
+  }
+  container.appendChild(selectRut);
+
+  // ── Select Ejercicio (deshabilitado hasta elegir rutina) ───────────────────
   const ejLabel = document.createElement('label');
   ejLabel.setAttribute('for', 'select-ejercicio');
   ejLabel.textContent = 'Ejercicio: ';
@@ -26,21 +50,15 @@ export async function render(state) {
   const selectEj = document.createElement('select');
   selectEj.id = 'select-ejercicio';
   selectEj.className = 'select-ejercicio';
+  selectEj.disabled = true;
 
-  const optVacio = document.createElement('option');
-  optVacio.value = '';
-  optVacio.textContent = '— Seleccionar ejercicio —';
-  selectEj.appendChild(optVacio);
-
-  for (const ej of ejercicios) {
-    const opt = document.createElement('option');
-    opt.value = ej.id;
-    opt.textContent = ej.nombre;
-    selectEj.appendChild(opt);
-  }
+  const optEjVacio = document.createElement('option');
+  optEjVacio.value = '';
+  optEjVacio.textContent = '— Seleccionar ejercicio —';
+  selectEj.appendChild(optEjVacio);
   container.appendChild(selectEj);
 
-  // Select métrica
+  // ── Select Métrica ─────────────────────────────────────────────────────────
   const metLabel = document.createElement('label');
   metLabel.setAttribute('for', 'select-metrica');
   metLabel.textContent = 'Métrica: ';
@@ -69,6 +87,27 @@ export async function render(state) {
   historialArea.id = 'historial-area';
   container.appendChild(historialArea);
 
+  // ── Cascada Rutina → Ejercicio ─────────────────────────────────────────────
+  selectRut.addEventListener('change', async () => {
+    selectEj.textContent = '';
+    selectEj.appendChild(optEjVacio.cloneNode(true));
+    graficaArea.textContent  = '';
+    historialArea.textContent = '';
+
+    const rutinaId = selectRut.value;
+    if (!rutinaId) { selectEj.disabled = true; return; }
+
+    const ejercicios = await getRutinaEjercicios(parseInt(rutinaId));
+    for (const ej of ejercicios) {
+      const opt = document.createElement('option');
+      opt.value = ej.ejercicio_id;
+      opt.textContent = ej.nombre;
+      selectEj.appendChild(opt);
+    }
+    selectEj.disabled = false;
+  });
+
+  // ── Render gráfica/historial ───────────────────────────────────────────────
   async function actualizarGrafica() {
     graficaArea.textContent = '';
     historialArea.textContent = '';
@@ -79,7 +118,6 @@ export async function render(state) {
     const datos   = prepararDatosProgreso(series);
     const unit    = state.prefUnit || 'lb';
 
-    // Últimas 5 sesiones con barra
     graficaArea.appendChild(cel('p', 'grafica-titulo', 'Evolución últimas 5 sesiones:'));
 
     const ultimas5 = datos.slice(-5).filter(d => d.barra !== null);
@@ -99,7 +137,6 @@ export async function render(state) {
       graficaArea.appendChild(fila);
     }
 
-    // Historial reciente (descendente)
     historialArea.appendChild(cel('p', 'historial-titulo', 'Historial Reciente:'));
     const lista = cel('ul', 'historial-lista');
 
