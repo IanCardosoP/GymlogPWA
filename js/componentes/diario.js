@@ -591,10 +591,10 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
     const series    = seriesFilt[i];
     totalSeries    += series.length;
     const mejorPeso = Math.max(...series.map(s => s.peso));
-    const mejorReps = series.find(s => s.peso === mejorPeso)?.repeticiones ?? 0;
     const isBW      = mejorPeso === 0;
     const unidad    = store.prefUnit ?? 'kg';
-    const orm       = isBW ? '——' : `~${Math.round(calculateEpley1RM(mejorPeso, mejorReps))}${unidad}`;
+    const max1RM    = Math.max(...series.map(s => calculateEpley1RM(Number(s.peso), Number(s.repeticiones))));
+    const orm       = max1RM === 0 ? '——' : `~${Math.round(max1RM)}${unidad}`;
     const pesoStr   = isBW ? 'BW' : `${mejorPeso}${unidad}`;
 
     tabla.appendChild(cel('span', 'fin-td', ej.nombre));
