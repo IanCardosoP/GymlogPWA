@@ -5,7 +5,7 @@
   --color-fondo-alt: #121212;
   --color-acento: #00ff88;
   --color-texto: #e0e0e0;
-  --color-texto-dim: #555555;
+  --color-texto-dim: #c0c0c0;
   --font-mono: 'Courier New', Courier, monospace;
   --max-width: 450px;
 }
@@ -185,7 +185,6 @@ details > div {
 .ejercicio-nombre {
   flex: 1;
   color: var(--color-texto);
-  text-decoration: underline dotted;
 }
 
 .ejercicio-historial {
