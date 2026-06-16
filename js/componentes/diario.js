@@ -62,14 +62,22 @@ export async function render(state) {
   }
 
   // Ejercicios activos (máx MAX_ROUTINE_SLOTS) + suplentes para swap
-  let ejercicios = [];
-  let suplentesSwap = [];
   const todos = await getRutinaEjercicios(rutinaHoy.id);
-  const activos = todos.filter(e => e.activo_hoy);
-  ejercicios = activos.slice(0, MAX_ROUTINE_SLOTS);
-  const inactivos    = todos.filter(e => !e.activo_hoy);
-  const activosExtra = activos.slice(MAX_ROUTINE_SLOTS);
-  suplentesSwap = [...inactivos, ...activosExtra];
+  let activos   = todos.filter(e => e.activo_hoy);
+  let inactivos = todos.filter(e => !e.activo_hoy);
+
+  // Auto-promover inactivos si hay slots libres bajo MAX_ROUTINE_SLOTS
+  const slotsLibres = MAX_ROUTINE_SLOTS - activos.length;
+  if (slotsLibres > 0 && inactivos.length > 0) {
+    const aPromover = inactivos.slice(0, slotsLibres);
+    await Promise.all(aPromover.map(e => updateActivoHoy(e.id, true)));
+    activos   = [...activos, ...aPromover];
+    inactivos = inactivos.slice(aPromover.length);
+  }
+
+  const ejercicios    = activos.slice(0, MAX_ROUTINE_SLOTS);
+  const activosExtra  = activos.slice(MAX_ROUTINE_SLOTS);
+  const suplentesSwap = [...inactivos, ...activosExtra];
 
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
