@@ -34,8 +34,7 @@ export async function render(state) {
 
   // Rutina del día (por día de semana: 0=Dom … 6=Sáb) via tabla rutina_dias
   const diaSemana = new Date().getDay();
-  const rutinas     = await getRutinas();
-  const rutinaDias  = await getRutinasDias();
+  const [rutinas, rutinaDias] = await Promise.all([getRutinas(), getRutinasDias()]);
   const asignacion  = rutinaDias.find(rd => rd.dia === diaSemana);
   const rutinaHoy   = asignacion
     ? rutinas.find(r => r.id === asignacion.rutina_id) ?? null
@@ -75,12 +74,14 @@ export async function render(state) {
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
+  // Pre-fetch todos los datos en paralelo — evita el efecto "uno a uno"
   const hasSuplentes = suplentesSwap.length > 0;
-  for (let i = 0; i < ejercicios.length; i++) {
-    lista.appendChild(await construirBloque(ejercicios[i], i, sesion, hasSuplentes));
+  const slots = [...ejercicios, null]; // null = slot vacío de añadir
+  const datosSlots = await Promise.all(slots.map(ej => fetchDatosBloque(ej, sesion)));
+
+  for (let i = 0; i < slots.length; i++) {
+    lista.appendChild(construirBloque(slots[i], i, sesion, hasSuplentes, datosSlots[i]));
   }
-  // Un slot extra para añadir el siguiente ejercicio
-  lista.appendChild(await construirBloque(null, ejercicios.length, sesion, false));
 
   // Botón fin
   const finBtn = cel('button', 'btn-fin-entrenamiento', '[ FIN DEL ENTRENAMIENTO ]');
@@ -204,7 +205,19 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   }
 }
 
-async function construirBloque(ej, idx, sesion, hasSuplentes) {
+// Pre-fetcha los datos de DB para un bloque — se llaman todos en paralelo desde render()
+async function fetchDatosBloque(ej, sesion) {
+  if (!ej || !sesion) return { seriesHoy: [], ref: null };
+  const [seriesHoy, ultimaSerie] = await Promise.all([
+    getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id),
+    getUltimaSerie(ej.ejercicio_id),
+  ]);
+  const ref = seriesHoy.length > 0 ? seriesHoy[seriesHoy.length - 1] : ultimaSerie;
+  return { seriesHoy, ref };
+}
+
+// Construcción DOM síncrona — recibe datos ya cargados, no hace queries
+function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = null } = {}) {
   const details = document.createElement('details');
   details.className = 'ejercicio-bloque';
 
@@ -243,14 +256,6 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
 
   if (ej && sesion) {
     const cuerpo = cel('div', 'ejercicio-cuerpo');
-
-    // Series ya guardadas hoy para este ejercicio
-    const seriesHoy = await getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id);
-
-    // Placeholder = última serie de hoy, o última de sesiones anteriores si no hay ninguna hoy
-    const ref = seriesHoy.length > 0
-      ? seriesHoy[seriesHoy.length - 1]
-      : await getUltimaSerie(ej.ejercicio_id);
     const phPeso = ref ? (Number(ref.peso) === 0 ? 'BW' : String(ref.peso)) : '';
     const phReps = ref ? String(ref.repeticiones) : '';
 
@@ -258,7 +263,6 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
     filaWrapper.dataset.ejId = ej.ejercicio_id;
     filaWrapper.dataset.reId = ej.id;
 
-    // Hidratar series guardadas
     for (const serie of seriesHoy) {
       const displayPeso = Number(serie.peso) === 0 ? 'BW' : String(serie.peso);
       const fila = construirFilaSerie(serie.numero_serie, displayPeso, String(serie.repeticiones));
@@ -266,10 +270,8 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
       filaWrapper.appendChild(fila);
     }
 
-    // Fila vacía para la siguiente serie
     filaWrapper.appendChild(construirFilaSerie(seriesHoy.length + 1, phPeso, phReps));
     cuerpo.appendChild(filaWrapper);
-
     details.appendChild(cuerpo);
   }
 
