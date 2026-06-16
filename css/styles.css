@@ -8,6 +8,7 @@
   --color-texto-dim: #c0c0c0;
   --font-mono: 'Courier New', Courier, monospace;
   --max-width: 450px;
+  color-scheme: dark;
 }
 
 *, *::before, *::after {
@@ -23,6 +24,10 @@ body {
   font-size: 15px;
   line-height: 1.5;
   min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 #app-wrapper {
@@ -91,6 +96,8 @@ input[inputmode="decimal"] {
   padding: 10px 12px;
   width: 100%;
   border-radius: 2px;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 input:focus {
@@ -102,6 +109,10 @@ input:focus {
 button {
   cursor: pointer;
   font-family: var(--font-mono);
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -116,6 +127,8 @@ select {
   padding: 8px 10px;
   width: 100%;
   border-radius: 2px;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 select:disabled {
