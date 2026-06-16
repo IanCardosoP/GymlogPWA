@@ -228,6 +228,7 @@ async function fetchDatosBloque(ej, sesion) {
 function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = null } = {}) {
   const details = document.createElement('details');
   details.className = 'ejercicio-bloque';
+  if (ej) details.dataset.progreso = Math.min(seriesHoy.length, 4);
 
   const summary = document.createElement('summary');
   summary.className = 'ejercicio-summary';

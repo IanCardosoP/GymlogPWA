@@ -143,6 +143,26 @@ details {
   border-radius: 2px;
 }
 
+/* Borde izquierdo de progreso — intensidad según series completadas */
+.ejercicio-bloque {
+  border-left-width: 4px;
+}
+.ejercicio-bloque[data-progreso="0"] {
+  border-left-color: var(--color-texto-dim);
+}
+.ejercicio-bloque[data-progreso="1"] {
+  border-left-color: color-mix(in srgb, var(--color-acento) 25%, transparent);
+}
+.ejercicio-bloque[data-progreso="2"] {
+  border-left-color: color-mix(in srgb, var(--color-acento) 50%, transparent);
+}
+.ejercicio-bloque[data-progreso="3"] {
+  border-left-color: color-mix(in srgb, var(--color-acento) 75%, transparent);
+}
+.ejercicio-bloque[data-progreso="4"] {
+  border-left-color: var(--color-acento);
+}
+
 summary {
   padding: 12px;
   cursor: pointer;
