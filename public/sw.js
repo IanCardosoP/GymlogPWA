@@ -1,7 +1,7 @@
 // Service Worker: estrategia Cache-First. Cachea recursos al vuelo en la primera carga.
 // Sin ASSETS_TO_CACHE hardcodeados — compatible con filenames hasheados de Vite.
 
-const CACHE_NAME = 'gymlog-v5';
+const CACHE_NAME = 'gymlog-v6';
 
 self.addEventListener('install', () => self.skipWaiting());
 

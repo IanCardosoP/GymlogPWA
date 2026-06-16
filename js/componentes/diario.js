@@ -1,5 +1,6 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
 import { store, navigateTo } from '../app.js';
+import { calculateEpley1RM } from '../analitico.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
 import motivArt     from '/icons/motiv.txt?raw';
 import {
@@ -34,8 +35,7 @@ export async function render(state) {
 
   // Rutina del día (por día de semana: 0=Dom … 6=Sáb) via tabla rutina_dias
   const diaSemana = new Date().getDay();
-  const rutinas     = await getRutinas();
-  const rutinaDias  = await getRutinasDias();
+  const [rutinas, rutinaDias] = await Promise.all([getRutinas(), getRutinasDias()]);
   const asignacion  = rutinaDias.find(rd => rd.dia === diaSemana);
   const rutinaHoy   = asignacion
     ? rutinas.find(r => r.id === asignacion.rutina_id) ?? null
@@ -63,24 +63,34 @@ export async function render(state) {
   }
 
   // Ejercicios activos (máx MAX_ROUTINE_SLOTS) + suplentes para swap
-  let ejercicios = [];
-  let suplentesSwap = [];
   const todos = await getRutinaEjercicios(rutinaHoy.id);
-  const activos = todos.filter(e => e.activo_hoy);
-  ejercicios = activos.slice(0, MAX_ROUTINE_SLOTS);
-  const inactivos    = todos.filter(e => !e.activo_hoy);
-  const activosExtra = activos.slice(MAX_ROUTINE_SLOTS);
-  suplentesSwap = [...inactivos, ...activosExtra];
+  let activos   = todos.filter(e => e.activo_hoy);
+  let inactivos = todos.filter(e => !e.activo_hoy);
+
+  // Auto-promover inactivos si hay slots libres bajo MAX_ROUTINE_SLOTS
+  const slotsLibres = MAX_ROUTINE_SLOTS - activos.length;
+  if (slotsLibres > 0 && inactivos.length > 0) {
+    const aPromover = inactivos.slice(0, slotsLibres);
+    await Promise.all(aPromover.map(e => updateActivoHoy(e.id, true)));
+    activos   = [...activos, ...aPromover];
+    inactivos = inactivos.slice(aPromover.length);
+  }
+
+  const ejercicios    = activos.slice(0, MAX_ROUTINE_SLOTS);
+  const activosExtra  = activos.slice(MAX_ROUTINE_SLOTS);
+  const suplentesSwap = [...inactivos, ...activosExtra];
 
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
+  // Pre-fetch todos los datos en paralelo — evita el efecto "uno a uno"
   const hasSuplentes = suplentesSwap.length > 0;
-  for (let i = 0; i < ejercicios.length; i++) {
-    lista.appendChild(await construirBloque(ejercicios[i], i, sesion, hasSuplentes));
+  const slots = [...ejercicios, null]; // null = slot vacío de añadir
+  const datosSlots = await Promise.all(slots.map(ej => fetchDatosBloque(ej, sesion)));
+
+  for (let i = 0; i < slots.length; i++) {
+    lista.appendChild(construirBloque(slots[i], i, sesion, hasSuplentes, datosSlots[i]));
   }
-  // Un slot extra para añadir el siguiente ejercicio
-  lista.appendChild(await construirBloque(null, ejercicios.length, sesion, false));
 
   // Botón fin
   const finBtn = cel('button', 'btn-fin-entrenamiento', '[ FIN DEL ENTRENAMIENTO ]');
@@ -114,10 +124,18 @@ export async function render(state) {
         const guardarBtn = fila.querySelector('.btn-guardar');
         if (guardarBtn) guardarBtn.dataset.numSerie = num;
       });
+      actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
       return;
     }
 
-    if (e.target.closest('[data-action="fin"]')) { mostrarPantallaFin(container); return; }
+    if (e.target.closest('[data-action="fin"]')) { await mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios); return; }
+    if (e.target.closest('[data-action="volver-diario"]')) { navigateTo('diario'); return; }
+
+    const btnDeleteSuplente = e.target.closest('.btn-delete-suplente');
+    if (btnDeleteSuplente) {
+      handleEliminarSuplente(btnDeleteSuplente);
+      return;
+    }
 
     const suplanteItem = e.target.closest('.suplente-item');
     if (suplanteItem && rutinaHoy) {
@@ -198,9 +216,22 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   }
 }
 
-async function construirBloque(ej, idx, sesion, hasSuplentes) {
+// Pre-fetcha los datos de DB para un bloque — se llaman todos en paralelo desde render()
+async function fetchDatosBloque(ej, sesion) {
+  if (!ej || !sesion) return { seriesHoy: [], ref: null };
+  const [seriesHoy, ultimaSerie] = await Promise.all([
+    getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id),
+    getUltimaSerie(ej.ejercicio_id),
+  ]);
+  const ref = seriesHoy.length > 0 ? seriesHoy[seriesHoy.length - 1] : ultimaSerie;
+  return { seriesHoy, ref };
+}
+
+// Construcción DOM síncrona — recibe datos ya cargados, no hace queries
+function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = null } = {}) {
   const details = document.createElement('details');
   details.className = 'ejercicio-bloque';
+  if (ej) details.dataset.progreso = Math.min(seriesHoy.length, 4);
 
   const summary = document.createElement('summary');
   summary.className = 'ejercicio-summary';
@@ -237,14 +268,6 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
 
   if (ej && sesion) {
     const cuerpo = cel('div', 'ejercicio-cuerpo');
-
-    // Series ya guardadas hoy para este ejercicio
-    const seriesHoy = await getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id);
-
-    // Placeholder = última serie de hoy, o última de sesiones anteriores si no hay ninguna hoy
-    const ref = seriesHoy.length > 0
-      ? seriesHoy[seriesHoy.length - 1]
-      : await getUltimaSerie(ej.ejercicio_id);
     const phPeso = ref ? (Number(ref.peso) === 0 ? 'BW' : String(ref.peso)) : '';
     const phReps = ref ? String(ref.repeticiones) : '';
 
@@ -252,7 +275,6 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
     filaWrapper.dataset.ejId = ej.ejercicio_id;
     filaWrapper.dataset.reId = ej.id;
 
-    // Hidratar series guardadas
     for (const serie of seriesHoy) {
       const displayPeso = Number(serie.peso) === 0 ? 'BW' : String(serie.peso);
       const fila = construirFilaSerie(serie.numero_serie, displayPeso, String(serie.repeticiones));
@@ -260,10 +282,8 @@ async function construirBloque(ej, idx, sesion, hasSuplentes) {
       filaWrapper.appendChild(fila);
     }
 
-    // Fila vacía para la siguiente serie
     filaWrapper.appendChild(construirFilaSerie(seriesHoy.length + 1, phPeso, phReps));
     cuerpo.appendChild(filaWrapper);
-
     details.appendChild(cuerpo);
   }
 
@@ -313,6 +333,12 @@ function construirFilaSerie(num, phPeso, phReps) {
   return fila;
 }
 
+function actualizarProgreso(bloqueEl) {
+  if (!bloqueEl) return;
+  const guardadas = bloqueEl.querySelectorAll('.btn-delete-serie:not([hidden])').length;
+  bloqueEl.dataset.progreso = Math.min(guardadas, 4);
+}
+
 async function handleGuardar(btnGuardar, sesionId) {
   const fila = btnGuardar.closest('.serie-fila');
   const filaWrapper = fila.closest('.serie-filas');
@@ -333,6 +359,7 @@ async function handleGuardar(btnGuardar, sesionId) {
 
   marcarComoGuardada(fila, peso, reps, serie.id);
   filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
+  actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
 }
 
 async function handleSuplentesDropdown(btnSwap, suplentes) {
@@ -341,17 +368,26 @@ async function handleSuplentesDropdown(btnSwap, suplentes) {
   if (existente) { existente.remove(); return; }
   if (suplentes.length === 0) return;
 
-  if (details) details.open = true; // abre el acordeón si estaba colapsado
+  if (details) details.open = true;
 
   const reId = parseInt(btnSwap.dataset.reId);
   const dropdown = cel('div', 'suplentes-dropdown');
   dropdown.appendChild(cel('p', 'suplentes-titulo', 'Suplentes:'));
 
   for (const sup of suplentes) {
+    const fila = cel('div', 'suplente-fila');
+
     const btn = cel('button', 'suplente-item', sup.nombre);
     btn.dataset.reId = sup.id;
     btn.dataset.anteriorReId = reId;
-    dropdown.appendChild(btn);
+    fila.appendChild(btn);
+
+    const btnDel = cel('button', 'btn-delete-suplente', '[ ✕ ]');
+    btnDel.dataset.ejId   = sup.ejercicio_id;
+    btnDel.dataset.nombre = sup.nombre;
+    fila.appendChild(btnDel);
+
+    dropdown.appendChild(fila);
   }
 
   const cuerpo = details?.querySelector('.ejercicio-cuerpo');
@@ -465,6 +501,26 @@ function handleEliminar(btnDelete, state) {
   else details?.appendChild(panel);
 }
 
+function handleEliminarSuplente(btn) {
+  const fila = btn.closest('.suplente-fila');
+  const existente = fila.querySelector('.confirm-delete-panel');
+  if (existente) { existente.remove(); return; }
+
+  const ejId  = parseInt(btn.dataset.ejId);
+  const nombre = btn.dataset.nombre ?? '?';
+
+  const panel = cel('div', 'confirm-delete-panel');
+  panel.appendChild(cel('span', 'confirm-delete-msg', `¿Eliminar "${nombre}"?`));
+
+  const btnSi = cel('button', 'btn-confirmar-eliminar', '[ ELIMINAR ]');
+  btnSi.dataset.ejId = ejId;
+  const btnNo = cel('button', 'btn-cancelar-eliminar', '[ CANCELAR ]');
+  panel.appendChild(btnSi);
+  panel.appendChild(btnNo);
+
+  fila.appendChild(panel);
+}
+
 function mostrarPantallaDescanso(container) {
   const div = cel('div', 'diario-descanso');
 
@@ -491,33 +547,84 @@ function mostrarPantallaDescanso(container) {
   }, { signal: clickAbort.signal });
 }
 
-function mostrarPantallaFin(container) {
+async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   container.textContent = '';
+
+  // Listener dedicado para la pantalla de fin — mismo patrón que render()
+  clickAbort?.abort();
+  clickAbort = new AbortController();
+  container.addEventListener('click', e => {
+    if (e.target.closest('[data-action="volver-diario"]')) {
+      document.querySelector('.tab-btn[data-tab="diario"]')?.click();
+    }
+  }, { signal: clickAbort.signal });
 
   const finDiv = cel('div', 'diario-fin');
   finDiv.id = 'diario-fin';
 
-  finDiv.appendChild(cel('h2', 'fin-titulo', '¡Entrenamiento Registrado!'));
+  finDiv.appendChild(cel('h2', 'fin-titulo', '¡ Entrenamiento Finalizado !'));
 
   const arte = cel('pre', 'fin-arte');
   arte.textContent = asciiFinArt;
   finDiv.appendChild(arte);
 
-  finDiv.appendChild(cel('p', 'fin-msg', 'Descansa. Recupera. Vuelve mañana.'));
+  const fecha = new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+  finDiv.appendChild(cel('p', 'fin-fecha', fecha));
+  if (rutinaHoy) finDiv.appendChild(cel('p', 'fin-rutina', rutinaHoy.nombre.toUpperCase()));
 
-  const countdown = cel('p', 'fin-countdown', 'Volviendo en 5...');
-  finDiv.appendChild(countdown);
+  const todasSeries = sesion
+    ? await Promise.all(ejercicios.map(ej => getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id)))
+    : ejercicios.map(() => []);
+
+  const conSeries  = ejercicios.filter((_, i) => todasSeries[i].length > 0);
+  const seriesFilt = todasSeries.filter(s => s.length > 0);
+
+  const tabla = cel('div', 'fin-tabla');
+  tabla.appendChild(cel('span', 'fin-th', 'EJERCICIO'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'SERIES'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'PESO'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', '1RM'));
+  tabla.appendChild(cel('div', 'fin-sep'));
+
+  let totalSeries = 0;
+  conSeries.forEach((ej, i) => {
+    const series    = seriesFilt[i];
+    totalSeries    += series.length;
+    const mejorPeso = Math.max(...series.map(s => s.peso));
+    const mejorReps = series.find(s => s.peso === mejorPeso)?.repeticiones ?? 0;
+    const isBW      = mejorPeso === 0;
+    const unidad    = store.prefUnit ?? 'kg';
+    const orm       = isBW ? '——' : `~${Math.round(calculateEpley1RM(mejorPeso, mejorReps))}${unidad}`;
+    const pesoStr   = isBW ? 'BW' : `${mejorPeso}${unidad}`;
+
+    tabla.appendChild(cel('span', 'fin-td', ej.nombre));
+    tabla.appendChild(cel('span', 'fin-td fin-td-r', `×${series.length}`));
+    tabla.appendChild(cel('span', 'fin-td fin-td-r', pesoStr));
+    tabla.appendChild(cel('span', 'fin-td fin-td-r', orm));
+  });
+
+  tabla.appendChild(cel('div', 'fin-sep'));
+  const totalesEl = cel('div', 'fin-totales');
+  totalesEl.textContent = `${conSeries.length} EJERC · ${totalSeries} SERIES`;
+  tabla.appendChild(totalesEl);
+  finDiv.appendChild(tabla);
+
+  const cta = cel('div', 'fin-cta');
+  const qr  = document.createElement('img');
+  qr.src    = import.meta.env.BASE_URL + 'assets/appUrl.jpg';
+  qr.alt    = 'QR GymLog PWA';
+  qr.className = 'fin-qr';
+  cta.appendChild(qr);
+  const texto = cel('div', 'fin-cta-texto');
+  texto.appendChild(cel('p', 'fin-cta-titulo', 'GYMLOG PWA'));
+  texto.appendChild(cel('p', null, 'Sin cuenta · Offline · Gratis para siempre'));
+  texto.appendChild(cel('p', null, 'Lleva tu registro de entrenamiento en el móvil'));
+  cta.appendChild(texto);
+  finDiv.appendChild(cta);
+
+  const btnVolver = cel('button', 'btn-fin-volver', '[ VOLVER AL DIARIO ]');
+  btnVolver.dataset.action = 'volver-diario';
+  finDiv.appendChild(btnVolver);
 
   container.appendChild(finDiv);
-
-  let secs = 5;
-  const timer = setInterval(() => {
-    secs--;
-    if (secs <= 0) {
-      clearInterval(timer);
-      if (document.getElementById('diario-fin')) navigateTo('diario');
-    } else {
-      if (countdown.isConnected) countdown.textContent = `Volviendo en ${secs}...`;
-    }
-  }, 1000);
 }
