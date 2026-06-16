@@ -1,5 +1,6 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
 import { store, navigateTo } from '../app.js';
+import { calculateEpley1RM } from '../analitico.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
 import motivArt     from '/icons/motiv.txt?raw';
 import {
@@ -127,7 +128,8 @@ export async function render(state) {
       return;
     }
 
-    if (e.target.closest('[data-action="fin"]')) { mostrarPantallaFin(container); return; }
+    if (e.target.closest('[data-action="fin"]')) { await mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios); return; }
+    if (e.target.closest('[data-action="volver-diario"]')) { navigateTo('diario'); return; }
 
     const btnDeleteSuplente = e.target.closest('.btn-delete-suplente');
     if (btnDeleteSuplente) {
@@ -545,33 +547,84 @@ function mostrarPantallaDescanso(container) {
   }, { signal: clickAbort.signal });
 }
 
-function mostrarPantallaFin(container) {
+async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   container.textContent = '';
+
+  // Listener dedicado para la pantalla de fin — mismo patrón que render()
+  clickAbort?.abort();
+  clickAbort = new AbortController();
+  container.addEventListener('click', e => {
+    if (e.target.closest('[data-action="volver-diario"]')) {
+      document.querySelector('.tab-btn[data-tab="diario"]')?.click();
+    }
+  }, { signal: clickAbort.signal });
 
   const finDiv = cel('div', 'diario-fin');
   finDiv.id = 'diario-fin';
 
-  finDiv.appendChild(cel('h2', 'fin-titulo', '¡Entrenamiento Registrado!'));
+  finDiv.appendChild(cel('h2', 'fin-titulo', '¡ Entrenamiento Finalizado !'));
 
   const arte = cel('pre', 'fin-arte');
   arte.textContent = asciiFinArt;
   finDiv.appendChild(arte);
 
-  finDiv.appendChild(cel('p', 'fin-msg', 'Descansa. Recupera. Vuelve mañana.'));
+  const fecha = new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+  finDiv.appendChild(cel('p', 'fin-fecha', fecha));
+  if (rutinaHoy) finDiv.appendChild(cel('p', 'fin-rutina', rutinaHoy.nombre.toUpperCase()));
 
-  const countdown = cel('p', 'fin-countdown', 'Volviendo en 5...');
-  finDiv.appendChild(countdown);
+  const todasSeries = sesion
+    ? await Promise.all(ejercicios.map(ej => getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id)))
+    : ejercicios.map(() => []);
+
+  const conSeries  = ejercicios.filter((_, i) => todasSeries[i].length > 0);
+  const seriesFilt = todasSeries.filter(s => s.length > 0);
+
+  const tabla = cel('div', 'fin-tabla');
+  tabla.appendChild(cel('span', 'fin-th', 'EJERCICIO'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'SERIES'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'PESO'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', '1RM'));
+  tabla.appendChild(cel('div', 'fin-sep'));
+
+  let totalSeries = 0;
+  conSeries.forEach((ej, i) => {
+    const series    = seriesFilt[i];
+    totalSeries    += series.length;
+    const mejorPeso = Math.max(...series.map(s => s.peso));
+    const mejorReps = series.find(s => s.peso === mejorPeso)?.repeticiones ?? 0;
+    const isBW      = mejorPeso === 0;
+    const unidad    = store.prefUnit ?? 'kg';
+    const orm       = isBW ? '——' : `~${Math.round(calculateEpley1RM(mejorPeso, mejorReps))}${unidad}`;
+    const pesoStr   = isBW ? 'BW' : `${mejorPeso}${unidad}`;
+
+    tabla.appendChild(cel('span', 'fin-td', ej.nombre));
+    tabla.appendChild(cel('span', 'fin-td fin-td-r', `×${series.length}`));
+    tabla.appendChild(cel('span', 'fin-td fin-td-r', pesoStr));
+    tabla.appendChild(cel('span', 'fin-td fin-td-r', orm));
+  });
+
+  tabla.appendChild(cel('div', 'fin-sep'));
+  const totalesEl = cel('div', 'fin-totales');
+  totalesEl.textContent = `${conSeries.length} EJERC · ${totalSeries} SERIES`;
+  tabla.appendChild(totalesEl);
+  finDiv.appendChild(tabla);
+
+  const cta = cel('div', 'fin-cta');
+  const qr  = document.createElement('img');
+  qr.src    = import.meta.env.BASE_URL + 'assets/appUrl.jpg';
+  qr.alt    = 'QR GymLog PWA';
+  qr.className = 'fin-qr';
+  cta.appendChild(qr);
+  const texto = cel('div', 'fin-cta-texto');
+  texto.appendChild(cel('p', 'fin-cta-titulo', 'GYMLOG PWA'));
+  texto.appendChild(cel('p', null, 'Sin cuenta · Offline · Gratis para siempre'));
+  texto.appendChild(cel('p', null, 'Lleva tu registro de entrenamiento en el móvil'));
+  cta.appendChild(texto);
+  finDiv.appendChild(cta);
+
+  const btnVolver = cel('button', 'btn-fin-volver', '[ VOLVER AL DIARIO ]');
+  btnVolver.dataset.action = 'volver-diario';
+  finDiv.appendChild(btnVolver);
 
   container.appendChild(finDiv);
-
-  let secs = 5;
-  const timer = setInterval(() => {
-    secs--;
-    if (secs <= 0) {
-      clearInterval(timer);
-      if (document.getElementById('diario-fin')) navigateTo('diario');
-    } else {
-      if (countdown.isConnected) countdown.textContent = `Volviendo en ${secs}...`;
-    }
-  }, 1000);
 }
