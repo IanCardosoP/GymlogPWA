@@ -119,6 +119,12 @@ export async function render(state) {
 
     if (e.target.closest('[data-action="fin"]')) { mostrarPantallaFin(container); return; }
 
+    const btnDeleteSuplente = e.target.closest('.btn-delete-suplente');
+    if (btnDeleteSuplente) {
+      handleEliminarSuplente(btnDeleteSuplente);
+      return;
+    }
+
     const suplanteItem = e.target.closest('.suplente-item');
     if (suplanteItem && rutinaHoy) {
       const nuevoReId    = parseInt(suplanteItem.dataset.reId);
@@ -341,17 +347,26 @@ async function handleSuplentesDropdown(btnSwap, suplentes) {
   if (existente) { existente.remove(); return; }
   if (suplentes.length === 0) return;
 
-  if (details) details.open = true; // abre el acordeón si estaba colapsado
+  if (details) details.open = true;
 
   const reId = parseInt(btnSwap.dataset.reId);
   const dropdown = cel('div', 'suplentes-dropdown');
   dropdown.appendChild(cel('p', 'suplentes-titulo', 'Suplentes:'));
 
   for (const sup of suplentes) {
+    const fila = cel('div', 'suplente-fila');
+
     const btn = cel('button', 'suplente-item', sup.nombre);
     btn.dataset.reId = sup.id;
     btn.dataset.anteriorReId = reId;
-    dropdown.appendChild(btn);
+    fila.appendChild(btn);
+
+    const btnDel = cel('button', 'btn-delete-suplente', '[ ✕ ]');
+    btnDel.dataset.ejId   = sup.ejercicio_id;
+    btnDel.dataset.nombre = sup.nombre;
+    fila.appendChild(btnDel);
+
+    dropdown.appendChild(fila);
   }
 
   const cuerpo = details?.querySelector('.ejercicio-cuerpo');
@@ -463,6 +478,26 @@ function handleEliminar(btnDelete, state) {
   const cuerpo = details?.querySelector('.ejercicio-cuerpo');
   if (cuerpo) details.insertBefore(panel, cuerpo);
   else details?.appendChild(panel);
+}
+
+function handleEliminarSuplente(btn) {
+  const fila = btn.closest('.suplente-fila');
+  const existente = fila.querySelector('.confirm-delete-panel');
+  if (existente) { existente.remove(); return; }
+
+  const ejId  = parseInt(btn.dataset.ejId);
+  const nombre = btn.dataset.nombre ?? '?';
+
+  const panel = cel('div', 'confirm-delete-panel');
+  panel.appendChild(cel('span', 'confirm-delete-msg', `¿Eliminar "${nombre}"?`));
+
+  const btnSi = cel('button', 'btn-confirmar-eliminar', '[ ELIMINAR ]');
+  btnSi.dataset.ejId = ejId;
+  const btnNo = cel('button', 'btn-cancelar-eliminar', '[ CANCELAR ]');
+  panel.appendChild(btnSi);
+  panel.appendChild(btnNo);
+
+  fila.appendChild(panel);
 }
 
 function mostrarPantallaDescanso(container) {
