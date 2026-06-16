@@ -123,6 +123,7 @@ export async function render(state) {
         const guardarBtn = fila.querySelector('.btn-guardar');
         if (guardarBtn) guardarBtn.dataset.numSerie = num;
       });
+      actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
       return;
     }
 
@@ -330,6 +331,12 @@ function construirFilaSerie(num, phPeso, phReps) {
   return fila;
 }
 
+function actualizarProgreso(bloqueEl) {
+  if (!bloqueEl) return;
+  const guardadas = bloqueEl.querySelectorAll('.btn-delete-serie:not([hidden])').length;
+  bloqueEl.dataset.progreso = Math.min(guardadas, 4);
+}
+
 async function handleGuardar(btnGuardar, sesionId) {
   const fila = btnGuardar.closest('.serie-fila');
   const filaWrapper = fila.closest('.serie-filas');
@@ -350,6 +357,7 @@ async function handleGuardar(btnGuardar, sesionId) {
 
   marcarComoGuardada(fila, peso, reps, serie.id);
   filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
+  actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
 }
 
 async function handleSuplentesDropdown(btnSwap, suplentes) {
