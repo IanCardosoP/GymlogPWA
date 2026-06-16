@@ -20,7 +20,7 @@ body {
   background-color: var(--color-fondo);
   color: var(--color-texto);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   min-height: 100dvh;
 }
