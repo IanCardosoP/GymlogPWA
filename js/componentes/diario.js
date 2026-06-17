@@ -6,7 +6,9 @@ import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
-  saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesDeSesionEjercicio,
+  saveSerie, deleteSerie, renumerarSeries,
+  getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
+  getSeriesConEjerciciosBySesion,
   saveEjercicio, updateEjercicioNombre, deleteEjercicio,
   updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
@@ -83,10 +85,29 @@ export async function render(state) {
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
-  // Pre-fetch todos los datos en paralelo — evita el efecto "uno a uno"
+  // Batch fetch — 2 queries para todos los slots en lugar de 2×N
   const hasSuplentes = suplentesSwap.length > 0;
+  const ejIds = ejercicios.map(e => e.ejercicio_id);
+  const [todasSeriesHoy, ultimasPorEj] = await Promise.all([
+    getTodasSeriesDeHoy(sesion?.id ?? null),
+    getUltimasSeriesPorEjercicio(ejIds),
+  ]);
+  const seriesHoyMap = new Map();
+  for (const s of todasSeriesHoy) {
+    if (!seriesHoyMap.has(s.ejercicio_id)) seriesHoyMap.set(s.ejercicio_id, []);
+    seriesHoyMap.get(s.ejercicio_id).push(s);
+  }
+  const ultimaMap = new Map(ultimasPorEj.map(s => [s.ejercicio_id, s]));
+
   const slots = [...ejercicios, null]; // null = slot vacío de añadir
-  const datosSlots = await Promise.all(slots.map(ej => fetchDatosBloque(ej, sesion)));
+  const datosSlots = slots.map(ej => {
+    if (!ej || !sesion) return { seriesHoy: [], ref: null };
+    const seriesHoy = seriesHoyMap.get(ej.ejercicio_id) ?? [];
+    const ref = seriesHoy.length > 0
+      ? seriesHoy[seriesHoy.length - 1]
+      : (ultimaMap.get(ej.ejercicio_id) ?? null);
+    return { seriesHoy, ref };
+  });
 
   for (let i = 0; i < slots.length; i++) {
     lista.appendChild(construirBloque(slots[i], i, sesion, hasSuplentes, datosSlots[i]));
@@ -141,8 +162,10 @@ export async function render(state) {
     if (suplanteItem && rutinaHoy) {
       const nuevoReId    = parseInt(suplanteItem.dataset.reId);
       const anteriorReId = parseInt(suplanteItem.dataset.anteriorReId);
-      await updateActivoHoy(nuevoReId, true);
-      await updateActivoHoy(anteriorReId, false);
+      await Promise.all([
+        updateActivoHoy(nuevoReId, true),
+        updateActivoHoy(anteriorReId, false),
+      ]);
       await swapOrden(nuevoReId, anteriorReId);
       await render(state);
       return;
@@ -216,16 +239,6 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   }
 }
 
-// Pre-fetcha los datos de DB para un bloque — se llaman todos en paralelo desde render()
-async function fetchDatosBloque(ej, sesion) {
-  if (!ej || !sesion) return { seriesHoy: [], ref: null };
-  const [seriesHoy, ultimaSerie] = await Promise.all([
-    getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id),
-    getUltimaSerie(ej.ejercicio_id),
-  ]);
-  const ref = seriesHoy.length > 0 ? seriesHoy[seriesHoy.length - 1] : ultimaSerie;
-  return { seriesHoy, ref };
-}
 
 // Construcción DOM síncrona — recibe datos ya cargados, no hace queries
 function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = null } = {}) {
@@ -236,15 +249,17 @@ function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = 
   const summary = document.createElement('summary');
   summary.className = 'ejercicio-summary';
 
-  const numSpan = cel('span', 'ejercicio-num', `${idx + 1}. `);
   const nombreSpan = cel('span', 'ejercicio-nombre', ej ? ej.nombre : '[ + Añadir Ejercicio ]');
   if (ej) {
     nombreSpan.dataset.reId   = ej.id;
     nombreSpan.dataset.ejId   = ej.ejercicio_id;
     nombreSpan.dataset.nombre = ej.nombre;
+    const numSpan = cel('span', 'ejercicio-num', `${idx + 1}. `);
+    summary.appendChild(numSpan);
+  } else {
+    nombreSpan.classList.add('is-acento');
   }
 
-  summary.appendChild(numSpan);
   summary.appendChild(nombreSpan);
 
   if (ej && hasSuplentes) {
@@ -372,7 +387,7 @@ async function handleSuplentesDropdown(btnSwap, suplentes) {
 
   const reId = parseInt(btnSwap.dataset.reId);
   const dropdown = cel('div', 'suplentes-dropdown');
-  dropdown.appendChild(cel('p', 'suplentes-titulo', 'Suplentes:'));
+  dropdown.appendChild(cel('p', 'suplentes-titulo', 'Ejercicios Suplentes:'));
 
   for (const sup of suplentes) {
     const fila = cel('div', 'suplente-fila');
@@ -572,12 +587,19 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   finDiv.appendChild(cel('p', 'fin-fecha', fecha));
   if (rutinaHoy) finDiv.appendChild(cel('p', 'fin-rutina', rutinaHoy.nombre.toUpperCase()));
 
-  const todasSeries = sesion
-    ? await Promise.all(ejercicios.map(ej => getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id)))
-    : ejercicios.map(() => []);
+  // Traer TODAS las series de la sesión (incluyendo ejercicios intercambiados en caliente)
+  const todasLasFilas = sesion ? await getSeriesConEjerciciosBySesion(sesion.id) : [];
 
-  const conSeries  = ejercicios.filter((_, i) => todasSeries[i].length > 0);
-  const seriesFilt = todasSeries.filter(s => s.length > 0);
+  // Agrupar por ejercicio_id preservando el orden de aparición
+  const porEjercicio = new Map();
+  for (const fila of todasLasFilas) {
+    if (!porEjercicio.has(fila.ejercicio_id)) {
+      porEjercicio.set(fila.ejercicio_id, { nombre: fila.nombre, series: [] });
+    }
+    porEjercicio.get(fila.ejercicio_id).series.push(fila);
+  }
+
+  const conSeries = [...porEjercicio.values()];
 
   const tabla = cel('div', 'fin-tabla');
   tabla.appendChild(cel('span', 'fin-th', 'EJERCICIO'));
@@ -587,8 +609,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   tabla.appendChild(cel('div', 'fin-sep'));
 
   let totalSeries = 0;
-  conSeries.forEach((ej, i) => {
-    const series    = seriesFilt[i];
+  conSeries.forEach(({ nombre, series }) => {
     totalSeries    += series.length;
     const mejorPeso = Math.max(...series.map(s => s.peso));
     const isBW      = mejorPeso === 0;
@@ -597,7 +618,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
     const orm       = max1RM === 0 ? '——' : `~${Math.round(max1RM)}${unidad}`;
     const pesoStr   = isBW ? 'BW' : `${mejorPeso}${unidad}`;
 
-    tabla.appendChild(cel('span', 'fin-td', ej.nombre));
+    tabla.appendChild(cel('span', 'fin-td', nombre));
     tabla.appendChild(cel('span', 'fin-td fin-td-r', `×${series.length}`));
     tabla.appendChild(cel('span', 'fin-td fin-td-r', pesoStr));
     tabla.appendChild(cel('span', 'fin-td fin-td-r', orm));

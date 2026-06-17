@@ -137,6 +137,14 @@ export async function removeRutinaDia(rutinaId, dia) {
   );
 }
 
+// Un día solo puede pertenecer a una rutina: desvincula cualquier asignación previa y asigna la nueva
+export async function assignRutinaDiaExclusivo(rutinaId, dia) {
+  await db.query('BEGIN');
+  await db.query('DELETE FROM rutina_dias WHERE dia = $1', [dia]);
+  await db.query('INSERT INTO rutina_dias (rutina_id, dia) VALUES ($1, $2)', [rutinaId, dia]);
+  await db.query('COMMIT');
+}
+
 export async function updateRutinaNombre(rutinaId, nuevoNombre) {
   const { rows } = await db.query(
     'UPDATE rutinas SET nombre = $1 WHERE id = $2 RETURNING *',
@@ -205,13 +213,15 @@ export async function deleteSerie(serieId) {
 }
 
 export async function renumerarSeries(sesionId, ejercicioId) {
-  const { rows } = await db.query(
-    'SELECT id FROM series WHERE sesion_id = $1 AND ejercicio_id = $2 ORDER BY numero_serie ASC',
+  await db.query(
+    `WITH ordered AS (
+       SELECT id, ROW_NUMBER() OVER (ORDER BY numero_serie ASC) AS n
+       FROM series WHERE sesion_id = $1 AND ejercicio_id = $2
+     )
+     UPDATE series SET numero_serie = ordered.n
+     FROM ordered WHERE series.id = ordered.id`,
     [sesionId, ejercicioId]
   );
-  for (let i = 0; i < rows.length; i++) {
-    await db.query('UPDATE series SET numero_serie = $1 WHERE id = $2', [i + 1, rows[i].id]);
-  }
 }
 
 export async function saveSerie(sesionId, ejercicioId, numeroSerie, peso, repeticiones) {
@@ -241,6 +251,40 @@ export async function getSeriesDeSesionEjercicio(sesionId, ejercicioId) {
      WHERE sesion_id = $1 AND ejercicio_id = $2
      ORDER BY numero_serie ASC`,
     [sesionId, ejercicioId]
+  );
+  return result.rows;
+}
+
+export async function getTodasSeriesDeHoy(sesionId) {
+  if (!sesionId) return [];
+  const result = await db.query(
+    'SELECT * FROM series WHERE sesion_id = $1 ORDER BY ejercicio_id, numero_serie ASC',
+    [sesionId]
+  );
+  return result.rows;
+}
+
+export async function getUltimasSeriesPorEjercicio(ejIds) {
+  if (!ejIds || ejIds.length === 0) return [];
+  const result = await db.query(
+    `SELECT DISTINCT ON (s.ejercicio_id) s.*
+     FROM series s
+     JOIN sesiones se ON se.id = s.sesion_id
+     WHERE s.ejercicio_id = ANY($1)
+     ORDER BY s.ejercicio_id, se.fecha DESC, s.numero_serie DESC`,
+    [ejIds]
+  );
+  return result.rows;
+}
+
+export async function getSeriesConEjerciciosBySesion(sesionId) {
+  const result = await db.query(
+    `SELECT s.*, e.nombre, e.grupo_muscular
+     FROM series s
+     JOIN ejercicios e ON e.id = s.ejercicio_id
+     WHERE s.sesion_id = $1
+     ORDER BY s.ejercicio_id, s.numero_serie ASC`,
+    [sesionId]
   );
   return result.rows;
 }
@@ -339,11 +383,15 @@ export async function updateRutinaDia(rutinaId, diaSugerido) {
 }
 
 export async function swapOrden(reId1, reId2) {
-  const { rows: r1 } = await db.query('SELECT orden FROM rutina_ejercicios WHERE id = $1', [reId1]);
-  const { rows: r2 } = await db.query('SELECT orden FROM rutina_ejercicios WHERE id = $1', [reId2]);
+  const [{ rows: r1 }, { rows: r2 }] = await Promise.all([
+    db.query('SELECT orden FROM rutina_ejercicios WHERE id = $1', [reId1]),
+    db.query('SELECT orden FROM rutina_ejercicios WHERE id = $1', [reId2]),
+  ]);
   if (!r1[0] || !r2[0]) return;
-  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [r2[0].orden, reId1]);
-  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [r1[0].orden, reId2]);
+  await Promise.all([
+    db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [r2[0].orden, reId1]),
+    db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [r1[0].orden, reId2]),
+  ]);
 }
 
 export async function clearRutinaDia(dia) {

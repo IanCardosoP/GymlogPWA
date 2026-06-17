@@ -220,6 +220,10 @@ details > div {
   color: var(--color-texto);
 }
 
+.ejercicio-nombre.is-acento {
+  color: var(--color-acento);
+}
+
 .ejercicio-historial {
   font-size: 11px;
   color: var(--color-texto-dim);
@@ -457,15 +461,10 @@ input.is-saved::placeholder {
   margin-top: 24px;
   padding: 14px;
   background: none;
-  border: 1px solid var(--color-texto-dim);
-  color: var(--color-texto-dim);
+  border: 1px solid var(--color-acento);
+  color: var(--color-acento);
   font-size: 13px;
   letter-spacing: 0.05em;
-}
-
-.btn-fin-entrenamiento:hover {
-  border-color: var(--color-acento);
-  color: var(--color-acento);
 }
 
 /* Pantalla descanso / sin rutina */
@@ -766,7 +765,8 @@ input.is-saved::placeholder {
 .config-radio { margin-right: 8px; accent-color: var(--color-acento); }
 
 .btn-exportar-csv,
-.btn-importar-csv {
+.btn-importar-csv,
+.btn-actualizar-app {
   display: block;
   width: 100%;
   background: none;
