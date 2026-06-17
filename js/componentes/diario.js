@@ -249,15 +249,17 @@ function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = 
   const summary = document.createElement('summary');
   summary.className = 'ejercicio-summary';
 
-  const numSpan = cel('span', 'ejercicio-num', `${idx + 1}. `);
   const nombreSpan = cel('span', 'ejercicio-nombre', ej ? ej.nombre : '[ + Añadir Ejercicio ]');
   if (ej) {
     nombreSpan.dataset.reId   = ej.id;
     nombreSpan.dataset.ejId   = ej.ejercicio_id;
     nombreSpan.dataset.nombre = ej.nombre;
+    const numSpan = cel('span', 'ejercicio-num', `${idx + 1}. `);
+    summary.appendChild(numSpan);
+  } else {
+    nombreSpan.classList.add('is-acento');
   }
 
-  summary.appendChild(numSpan);
   summary.appendChild(nombreSpan);
 
   if (ej && hasSuplentes) {
