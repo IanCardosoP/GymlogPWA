@@ -2,7 +2,7 @@
 import { dispatch, aplicarAcento, ACENTOS } from '../app.js';
 import {
   getRutinas, saveRutina,
-  getRutinasDias, addRutinaDia, removeRutinaDia,
+  getRutinasDias, addRutinaDia, removeRutinaDia, assignRutinaDiaExclusivo,
   updateRutinaNombre, deleteRutina,
   getConf, updatePrefUnit, updatePrefAcento,
   getDB, getAllDataForExport,
@@ -164,9 +164,10 @@ export async function render(state) {
   const secReset = cel('section', 'config-seccion');
   secReset.appendChild(cel('h3', 'config-titulo', '[6. ELIMINAR DATOS]'));
   secReset.appendChild(cel('p', 'reset-advertencia',
-    '⚠ Esta acción elimina toda la base de datos, caché y datos de la app. ' +
+    '⚠ Los datos son tuyos y viven en tu dispositivo.' +
+    'Esta acción elimina toda la base de datos, caché y datos de la app. ' +
     'Recomendamos exportar un backup .json antes de continuar.'));
-  const btnReset = cel('button', 'btn-reset-datos', '[ ⚠ REINICIO DE FÁBRICA ]');
+  const btnReset = cel('button', 'btn-reset-datos', '[ ⚠ ELIMINAR DATOS ]');
   secReset.appendChild(btnReset);
   container.appendChild(secReset);
 
@@ -226,7 +227,7 @@ export async function render(state) {
       if (chip.classList.contains('is-active')) {
         await removeRutinaDia(rutinaId, dia);
       } else {
-        await addRutinaDia(rutinaId, dia);
+        await assignRutinaDiaExclusivo(rutinaId, dia);
       }
       await render(state);
       return;
