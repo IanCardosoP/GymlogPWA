@@ -6,7 +6,8 @@ import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
-  saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesDeSesionEjercicio,
+  saveSerie, deleteSerie, renumerarSeries,
+  getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
   saveEjercicio, updateEjercicioNombre, deleteEjercicio,
   updateActivoHoy, linkEjercicioToRutina, swapOrden,
@@ -84,10 +85,29 @@ export async function render(state) {
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
-  // Pre-fetch todos los datos en paralelo — evita el efecto "uno a uno"
+  // Batch fetch — 2 queries para todos los slots en lugar de 2×N
   const hasSuplentes = suplentesSwap.length > 0;
+  const ejIds = ejercicios.map(e => e.ejercicio_id);
+  const [todasSeriesHoy, ultimasPorEj] = await Promise.all([
+    getTodasSeriesDeHoy(sesion?.id ?? null),
+    getUltimasSeriesPorEjercicio(ejIds),
+  ]);
+  const seriesHoyMap = new Map();
+  for (const s of todasSeriesHoy) {
+    if (!seriesHoyMap.has(s.ejercicio_id)) seriesHoyMap.set(s.ejercicio_id, []);
+    seriesHoyMap.get(s.ejercicio_id).push(s);
+  }
+  const ultimaMap = new Map(ultimasPorEj.map(s => [s.ejercicio_id, s]));
+
   const slots = [...ejercicios, null]; // null = slot vacío de añadir
-  const datosSlots = await Promise.all(slots.map(ej => fetchDatosBloque(ej, sesion)));
+  const datosSlots = slots.map(ej => {
+    if (!ej || !sesion) return { seriesHoy: [], ref: null };
+    const seriesHoy = seriesHoyMap.get(ej.ejercicio_id) ?? [];
+    const ref = seriesHoy.length > 0
+      ? seriesHoy[seriesHoy.length - 1]
+      : (ultimaMap.get(ej.ejercicio_id) ?? null);
+    return { seriesHoy, ref };
+  });
 
   for (let i = 0; i < slots.length; i++) {
     lista.appendChild(construirBloque(slots[i], i, sesion, hasSuplentes, datosSlots[i]));
@@ -142,8 +162,10 @@ export async function render(state) {
     if (suplanteItem && rutinaHoy) {
       const nuevoReId    = parseInt(suplanteItem.dataset.reId);
       const anteriorReId = parseInt(suplanteItem.dataset.anteriorReId);
-      await updateActivoHoy(nuevoReId, true);
-      await updateActivoHoy(anteriorReId, false);
+      await Promise.all([
+        updateActivoHoy(nuevoReId, true),
+        updateActivoHoy(anteriorReId, false),
+      ]);
       await swapOrden(nuevoReId, anteriorReId);
       await render(state);
       return;
@@ -217,16 +239,6 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   }
 }
 
-// Pre-fetcha los datos de DB para un bloque — se llaman todos en paralelo desde render()
-async function fetchDatosBloque(ej, sesion) {
-  if (!ej || !sesion) return { seriesHoy: [], ref: null };
-  const [seriesHoy, ultimaSerie] = await Promise.all([
-    getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id),
-    getUltimaSerie(ej.ejercicio_id),
-  ]);
-  const ref = seriesHoy.length > 0 ? seriesHoy[seriesHoy.length - 1] : ultimaSerie;
-  return { seriesHoy, ref };
-}
 
 // Construcción DOM síncrona — recibe datos ya cargados, no hace queries
 function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = null } = {}) {
@@ -373,7 +385,7 @@ async function handleSuplentesDropdown(btnSwap, suplentes) {
 
   const reId = parseInt(btnSwap.dataset.reId);
   const dropdown = cel('div', 'suplentes-dropdown');
-  dropdown.appendChild(cel('p', 'suplentes-titulo', 'Suplentes:'));
+  dropdown.appendChild(cel('p', 'suplentes-titulo', 'Ejercicios Suplentes:'));
 
   for (const sup of suplentes) {
     const fila = cel('div', 'suplente-fila');
