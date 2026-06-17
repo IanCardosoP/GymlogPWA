@@ -151,9 +151,18 @@ export async function render(state) {
   secAcento.appendChild(selectorEl);
   container.appendChild(secAcento);
 
-  // ── 5. Eliminar datos ────────────────────────────────────────────────────
+  // ── 5. Actualizar app ────────────────────────────────────────────────────
+  const secApp = cel('section', 'config-seccion');
+  secApp.appendChild(cel('h3', 'config-titulo', '[5. ACTUALIZAR APP]'));
+  secApp.appendChild(cel('p', 'reset-advertencia',
+    'Borra el caché del navegador y recarga la versión más reciente de la app.'));
+  const btnActualizar = cel('button', 'btn-actualizar-app', '[ ↻ ACTUALIZAR APP ]');
+  secApp.appendChild(btnActualizar);
+  container.appendChild(secApp);
+
+  // ── 6. Eliminar datos ────────────────────────────────────────────────────
   const secReset = cel('section', 'config-seccion');
-  secReset.appendChild(cel('h3', 'config-titulo', '[5. ELIMINAR DATOS]'));
+  secReset.appendChild(cel('h3', 'config-titulo', '[6. ELIMINAR DATOS]'));
   secReset.appendChild(cel('p', 'reset-advertencia',
     '⚠ Esta acción elimina toda la base de datos, caché y datos de la app. ' +
     'Recomendamos exportar un backup .json antes de continuar.'));
@@ -352,6 +361,18 @@ export async function render(state) {
         `Restaurado: ${r.rutinas} rutinas, ${r.ejercicios} ejercicios, ${r.sesiones} sesiones, ${r.series} series.`;
       location.reload();
     }
+  });
+
+  btnActualizar.addEventListener('click', async () => {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.update()));
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    location.reload();
   });
 
   btnReset.addEventListener('click', () => {

@@ -766,7 +766,8 @@ input.is-saved::placeholder {
 .config-radio { margin-right: 8px; accent-color: var(--color-acento); }
 
 .btn-exportar-csv,
-.btn-importar-csv {
+.btn-importar-csv,
+.btn-actualizar-app {
   display: block;
   width: 100%;
   background: none;
