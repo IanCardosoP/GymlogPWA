@@ -7,6 +7,7 @@ import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesDeSesionEjercicio,
+  getSeriesConEjerciciosBySesion,
   saveEjercicio, updateEjercicioNombre, deleteEjercicio,
   updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
@@ -572,12 +573,19 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   finDiv.appendChild(cel('p', 'fin-fecha', fecha));
   if (rutinaHoy) finDiv.appendChild(cel('p', 'fin-rutina', rutinaHoy.nombre.toUpperCase()));
 
-  const todasSeries = sesion
-    ? await Promise.all(ejercicios.map(ej => getSeriesDeSesionEjercicio(sesion.id, ej.ejercicio_id)))
-    : ejercicios.map(() => []);
+  // Traer TODAS las series de la sesión (incluyendo ejercicios intercambiados en caliente)
+  const todasLasFilas = sesion ? await getSeriesConEjerciciosBySesion(sesion.id) : [];
 
-  const conSeries  = ejercicios.filter((_, i) => todasSeries[i].length > 0);
-  const seriesFilt = todasSeries.filter(s => s.length > 0);
+  // Agrupar por ejercicio_id preservando el orden de aparición
+  const porEjercicio = new Map();
+  for (const fila of todasLasFilas) {
+    if (!porEjercicio.has(fila.ejercicio_id)) {
+      porEjercicio.set(fila.ejercicio_id, { nombre: fila.nombre, series: [] });
+    }
+    porEjercicio.get(fila.ejercicio_id).series.push(fila);
+  }
+
+  const conSeries = [...porEjercicio.values()];
 
   const tabla = cel('div', 'fin-tabla');
   tabla.appendChild(cel('span', 'fin-th', 'EJERCICIO'));
@@ -587,8 +595,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   tabla.appendChild(cel('div', 'fin-sep'));
 
   let totalSeries = 0;
-  conSeries.forEach((ej, i) => {
-    const series    = seriesFilt[i];
+  conSeries.forEach(({ nombre, series }) => {
     totalSeries    += series.length;
     const mejorPeso = Math.max(...series.map(s => s.peso));
     const isBW      = mejorPeso === 0;
@@ -597,7 +604,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
     const orm       = max1RM === 0 ? '——' : `~${Math.round(max1RM)}${unidad}`;
     const pesoStr   = isBW ? 'BW' : `${mejorPeso}${unidad}`;
 
-    tabla.appendChild(cel('span', 'fin-td', ej.nombre));
+    tabla.appendChild(cel('span', 'fin-td', nombre));
     tabla.appendChild(cel('span', 'fin-td fin-td-r', `×${series.length}`));
     tabla.appendChild(cel('span', 'fin-td fin-td-r', pesoStr));
     tabla.appendChild(cel('span', 'fin-td fin-td-r', orm));

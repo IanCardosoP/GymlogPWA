@@ -245,6 +245,18 @@ export async function getSeriesDeSesionEjercicio(sesionId, ejercicioId) {
   return result.rows;
 }
 
+export async function getSeriesConEjerciciosBySesion(sesionId) {
+  const result = await db.query(
+    `SELECT s.*, e.nombre, e.grupo_muscular
+     FROM series s
+     JOIN ejercicios e ON e.id = s.ejercicio_id
+     WHERE s.sesion_id = $1
+     ORDER BY s.ejercicio_id, s.numero_serie ASC`,
+    [sesionId]
+  );
+  return result.rows;
+}
+
 export async function getSeriesPorEjercicio(ejercicioId) {
   const result = await db.query(
     `SELECT s.*, se.fecha
