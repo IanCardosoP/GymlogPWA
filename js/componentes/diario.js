@@ -1,4 +1,5 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
+import html2canvas from 'html2canvas';
 import { store, navigateTo } from '../app.js';
 import { calculateEpley1RM } from '../analitico.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
@@ -569,9 +570,38 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   // Listener dedicado para la pantalla de fin — mismo patrón que render()
   clickAbort?.abort();
   clickAbort = new AbortController();
-  container.addEventListener('click', e => {
+  container.addEventListener('click', async e => {
     if (e.target.closest('[data-action="volver-diario"]')) {
       document.querySelector('.tab-btn[data-tab="diario"]')?.click();
+    }
+    if (e.target.closest('[data-action="compartir"]')) {
+      actionsRow.classList.add('fin-capture-hidden');
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('fin-capture-wrapper');
+      finDiv.parentNode.insertBefore(wrapper, finDiv);
+      wrapper.appendChild(finDiv);
+      const canvas = await html2canvas(wrapper, {
+        scale: 2,
+        backgroundColor: '#000000',
+        useCORS: false,
+        logging: false,
+      });
+      wrapper.parentNode.insertBefore(finDiv, wrapper);
+      wrapper.parentNode.removeChild(wrapper);
+      actionsRow.classList.remove('fin-capture-hidden');
+
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      const file = new File([blob], 'gymlog-entrenamiento.png', { type: 'image/png' });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Mi entrenamiento — GymLog' });
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'gymlog-entrenamiento.png';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
     }
   }, { signal: clickAbort.signal });
 
@@ -646,21 +676,30 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
 
   const cta = cel('div', 'fin-cta');
   const qr  = document.createElement('img');
-  qr.src    = import.meta.env.BASE_URL + 'assets/appUrl.jpg';
+  qr.src    = import.meta.env.BASE_URL + 'assets/appUrl.png';
   qr.alt    = 'QR GymLog PWA';
   qr.className = 'fin-qr';
   cta.appendChild(qr);
   const texto = cel('div', 'fin-cta-texto');
   texto.appendChild(cel('p', 'fin-cta-titulo', 'GYMLOG PWA'));
-  texto.appendChild(cel('p', null, 'Multiplataforma · Soberanía y Privacidad'));
-  texto.appendChild(cel('p', null, 'Sin cuenta · Offline · Gratis para siempre'));
+  texto.appendChild(cel('p', null, 'Gratis siempre · Soberanía y Privacidad'));
+  texto.appendChild(cel('p', null, 'Multiplataforma · Sin cuenta · Offline'));
   texto.appendChild(cel('p', null, 'Lleva tu registro de entrenamiento en el móvil'));
   cta.appendChild(texto);
   finDiv.appendChild(cta);
 
+  const actionsRow = cel('div', 'btn-fin-actions');
+
   const btnVolver = cel('button', 'btn-fin-volver', '[ VOLVER AL DIARIO ]');
   btnVolver.dataset.action = 'volver-diario';
-  finDiv.appendChild(btnVolver);
+  actionsRow.appendChild(btnVolver);
+
+  const btnCompartir = cel('button', 'btn-fin-compartir');
+  btnCompartir.dataset.action = 'compartir';
+  btnCompartir.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>`;
+  actionsRow.appendChild(btnCompartir);
+
+  finDiv.appendChild(actionsRow);
 
   container.appendChild(finDiv);
 }

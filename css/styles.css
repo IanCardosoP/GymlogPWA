@@ -553,8 +553,12 @@ input.is-saved::placeholder {
 .fin-cta-texto { font-size: 10px; color: var(--color-texto-dim); flex: 1; }
 .fin-cta-titulo { color: var(--color-acento); font-size: 12px; margin: 0 0 4px; }
 .fin-cta-texto p { margin: 0; }
-.fin-qr { width: 80px; height: 80px; flex-shrink: 0; image-rendering: auto; }
-.btn-fin-volver { display: block; width: 100%; margin-top: 12px; padding: 10px; background: none; border: 1px solid var(--color-acento); color: var(--color-acento); font-size: 14px; cursor: pointer; font-family: inherit; }
+.fin-qr { width: 80px; height: 80px; flex-shrink: 0; image-rendering: pixelated; }
+.btn-fin-actions   { display: flex; gap: 8px; margin-top: 12px; }
+.btn-fin-volver    { flex: 1; padding: 10px; background: none; border: 1px solid var(--color-acento); color: var(--color-acento); font-size: 14px; cursor: pointer; font-family: inherit; }
+.btn-fin-compartir { width: 44px; flex-shrink: 0; padding: 10px; background: none; border: 1px solid var(--color-acento); color: var(--color-acento); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.fin-capture-hidden  { display: none; }
+.fin-capture-wrapper { padding: 6px; background-color: var(--color-fondo); box-sizing: border-box; }
 
 /* ── Progreso ────────────────────────────────────────────────────────────────── */
 
