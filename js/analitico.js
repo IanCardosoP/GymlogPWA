@@ -151,18 +151,20 @@ export function calcularRacha(fechas, hoy) {
   if (!fechas || fechas.length === 0) return 0;
   const set = new Set(fechas);
   let racha = 0;
+  let diasDescanso = 0;
+  const MAX_DESCANSO = 2; // hasta 2 días sin entrenar no cortan la racha
   const cursor = new Date(hoy + 'T12:00:00Z');
-
-  if (!set.has(hoy)) cursor.setUTCDate(cursor.getUTCDate() - 1);
 
   while (true) {
     const key = cursor.toISOString().slice(0, 10);
     if (set.has(key)) {
       racha++;
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
+      diasDescanso = 0;
     } else {
-      break;
+      diasDescanso++;
+      if (diasDescanso > MAX_DESCANSO) break;
     }
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return racha;
 }
