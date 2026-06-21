@@ -30,12 +30,13 @@ export async function render(state) {
   const tabBar = cel('div', 'progreso-tabs');
   const tabNames = ['GLOBAL', 'EJERCICIOS', 'RÉCORDS'];
   for (const nombre of tabNames) {
-    const btn = cel('button', 'progreso-tab-btn', `[ ${nombre} ]`);
+    const btn = cel('button', 'progreso-tab-btn', nombre);
     if (nombre === tabActivo) btn.classList.add('is-active');
     btn.dataset.tab = nombre;
     tabBar.appendChild(btn);
   }
   container.appendChild(tabBar);
+  container.appendChild(cel('div', 'progreso-tab-sep'));
 
   const tabContent = cel('div', 'progreso-tab-content');
   container.appendChild(tabContent);
@@ -70,80 +71,88 @@ async function renderGlobal(container, state) {
     getVolumenPorGrupoMuscular(fechaHoy, 4),
   ]);
 
-  // ── Stat chips ─────────────────────────────────────────────────────────────
+  const racha   = calcularRacha(stats.fechas, fechaHoy);
+  const frecSem = stats.sesiones_4_sem > 0 ? (stats.sesiones_4_sem / 4).toFixed(1) : '0';
+  const volFmt  = formatVolumen(stats.volumen_total);
+
+  // ── Stat chips 2×2 ────────────────────────────────────────────────────────
   const grid = cel('div', 'global-chips');
-
-  const racha = calcularRacha(stats.fechas, fechaHoy);
-  const frecSem = stats.sesiones_4_sem > 0
-    ? (stats.sesiones_4_sem / 4).toFixed(1)
-    : '0';
-  const volFmt = formatVolumen(stats.volumen_total);
-
   grid.appendChild(crearChip(String(stats.total_sesiones), 'SESIONES TOTALES'));
-  grid.appendChild(crearChip(`${racha}D`, 'RACHA ACTIVA'));
-  grid.appendChild(crearChip(volFmt, 'VOL. ACUMULADO'));
-  grid.appendChild(crearChip(`${frecSem}/SEM`, 'FREC. ÚLTIMAS 4 SEM'));
-
+  grid.appendChild(crearChip(`${racha}D`,                 'RACHA ACTIVA'));
+  grid.appendChild(crearChip(volFmt,                      'VOL. ACUMULADO'));
+  grid.appendChild(crearChip(`${frecSem}/SEM`,            'FREC. ÚLTIMAS 4 SEM'));
   container.appendChild(grid);
 
   // ── Frecuencia semanal ─────────────────────────────────────────────────────
-  container.appendChild(cel('p', 'global-seccion-titulo', 'FRECUENCIA SEMANAL'));
-
+  const cardFraq = crearSeccion('FRECUENCIA SEMANAL — ÚLTIMAS 8 SEMANAS');
   if (actividad.length === 0) {
-    container.appendChild(cel('p', 'global-vacio', 'Sin sesiones registradas.'));
+    cardFraq.appendChild(cel('p', 'global-vacio', 'Sin sesiones registradas.'));
   } else {
-    const maxSesiones = Math.max(...actividad.map(r => r.sesiones));
-    const bloque = cel('div', 'global-barras');
-
+    const maxSes = Math.max(...actividad.map(r => r.sesiones));
     for (const semana of actividad) {
-      const fila = cel('div', 'global-barra-fila');
-      const label = formatSemana(semana.semana_lunes);
-      fila.appendChild(cel('span', 'global-barra-fecha', label));
-      const activas = maxSesiones > 0
-        ? Math.round((semana.sesiones / maxSesiones) * 12)
-        : 0;
-      const barra = '█'.repeat(activas) + '░'.repeat(12 - activas);
-      fila.appendChild(cel('span', 'global-barra-ascii', barra));
-      fila.appendChild(cel('span', 'global-barra-num', `${semana.sesiones} ses`));
-      bloque.appendChild(fila);
+      const pct = maxSes > 0 ? semana.sesiones / maxSes : 0;
+      cardFraq.appendChild(crearFilaBarra(
+        formatSemana(semana.semana_lunes),
+        pct,
+        `${semana.sesiones} ses`,
+        'global-barra-fecha',
+      ));
     }
-    container.appendChild(bloque);
   }
+  container.appendChild(cardFraq);
 
   // ── Distribución muscular ──────────────────────────────────────────────────
-  container.appendChild(cel('p', 'global-seccion-titulo', 'GRUPOS MUSCULARES — ÚLTIMAS 4 SEM'));
-
+  const cardMus = crearSeccion('GRUPOS MUSCULARES — ÚLTIMAS 4 SEMANAS');
   if (distribucion.length === 0) {
-    container.appendChild(cel('p', 'global-vacio', 'Sin series en las últimas 4 semanas.'));
+    cardMus.appendChild(cel('p', 'global-vacio', 'Sin series en las últimas 4 semanas.'));
   } else {
     const totalVol = distribucion.reduce((sum, r) => sum + r.volumen, 0);
-    const maxVol   = distribucion[0].volumen; // ya ordenado DESC
-    const bloque   = cel('div', 'global-barras');
-
+    const maxVol   = distribucion[0].volumen;
     for (const grupo of distribucion) {
-      const fila = cel('div', 'global-barra-fila');
-      const pct  = totalVol > 0 ? Math.round((grupo.volumen / totalVol) * 100) : 0;
-      const activas = maxVol > 0 ? Math.round((grupo.volumen / maxVol) * 16) : 0;
-      const barra = '█'.repeat(activas) + '░'.repeat(16 - activas);
-      fila.appendChild(cel('span', 'global-barra-grupo', grupo.grupo_muscular));
-      fila.appendChild(cel('span', 'global-barra-ascii', barra));
-      fila.appendChild(cel('span', 'global-barra-num', `${pct}%`));
-      bloque.appendChild(fila);
+      const pct    = maxVol > 0 ? grupo.volumen / maxVol : 0;
+      const pctStr = totalVol > 0 ? `${Math.round((grupo.volumen / totalVol) * 100)}%` : '0%';
+      cardMus.appendChild(crearFilaBarra(
+        grupo.grupo_muscular,
+        pct,
+        pctStr,
+        'global-barra-grupo',
+      ));
     }
-    container.appendChild(bloque);
   }
+  container.appendChild(cardMus);
 }
 
 function crearChip(valor, etiqueta) {
   const chip = cel('div', 'global-chip');
-  chip.appendChild(cel('span', 'global-chip-valor', valor));
-  chip.appendChild(cel('span', 'global-chip-label', etiqueta));
+  chip.appendChild(cel('div', 'global-chip-valor', valor));
+  chip.appendChild(cel('div', 'global-chip-label', etiqueta));
   return chip;
+}
+
+function crearSeccion(titulo) {
+  const card = cel('div', 'global-seccion');
+  card.appendChild(cel('p', 'global-seccion-titulo', titulo));
+  return card;
+}
+
+function crearFilaBarra(label, pct, numStr, labelClass) {
+  const fila = cel('div', 'global-barra-fila');
+  fila.appendChild(cel('span', labelClass, label));
+  const track = cel('div', 'global-barra-track');
+  const fill  = cel('div', 'global-barra-fill');
+  fill.dataset.pct = Math.round(pct * 100);
+  track.appendChild(fill);
+  fila.appendChild(track);
+  fila.appendChild(cel('span', 'global-barra-num', numStr));
+
+  // Width via CSS custom property (dato dinámico, no estilo)
+  fill.style.setProperty('--fill-pct', `${Math.round(pct * 100)}%`);
+  return fila;
 }
 
 function formatVolumen(kg) {
   if (kg >= 1000) return `${(kg / 1000).toFixed(1)}T`;
-  return `${Math.round(kg)}KG`;
+  return `${Math.round(kg)} KG`;
 }
 
 function formatSemana(lunes) {
