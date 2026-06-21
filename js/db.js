@@ -61,6 +61,9 @@ export async function initDB(uri = 'idb://gym-log-db') {
 
     ALTER TABLE conf ADD COLUMN IF NOT EXISTS pref_acento TEXT NOT NULL DEFAULT 'verde';
 
+    ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_inicio TIMESTAMPTZ;
+    ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_fin    TIMESTAMPTZ;
+
     CREATE TABLE IF NOT EXISTS rutina_dias (
       id        SERIAL PRIMARY KEY,
       rutina_id INT REFERENCES rutinas(id) ON DELETE CASCADE,
@@ -204,6 +207,16 @@ export async function getSesionDelDia(fechaLocal) {
     [fechaLocal]
   );
   return result.rows[0] ?? null;
+}
+
+export async function touchSesionTiempo(sesionId) {
+  await db.query(
+    `UPDATE sesiones
+     SET hora_inicio = COALESCE(hora_inicio, NOW()),
+         hora_fin    = NOW()
+     WHERE id = $1`,
+    [sesionId]
+  );
 }
 
 // ── Series ────────────────────────────────────────────────────────────────────

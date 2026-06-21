@@ -6,7 +6,7 @@ import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
-  saveSerie, deleteSerie, renumerarSeries,
+  saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo,
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
   saveEjercicio, updateEjercicioNombre, deleteEjercicio,
@@ -114,7 +114,7 @@ export async function render(state) {
   }
 
   // Botón fin
-  const finBtn = cel('button', 'btn-fin-entrenamiento', '[ FIN DEL ENTRENAMIENTO ]');
+  const finBtn = cel('button', 'btn-fin-entrenamiento', '[ RESUMEN DE LA SESIÓN ]');
   finBtn.dataset.action = 'fin';
   container.appendChild(finBtn);
 
@@ -368,6 +368,7 @@ async function handleGuardar(btnGuardar, sesionId) {
   const reps = parseInt(repsStr, 10)  || 0;
 
   const serie = await saveSerie(sesionId, ejId, numSerie, peso, reps);
+  await touchSesionTiempo(sesionId);
 
   const displayPeso = peso === 0 ? 'BW' : String(peso);
   const displayReps = String(reps);
@@ -587,6 +588,11 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   finDiv.appendChild(cel('p', 'fin-fecha', fecha));
   if (rutinaHoy) finDiv.appendChild(cel('p', 'fin-rutina', rutinaHoy.nombre.toUpperCase()));
 
+  // Re-fetch sesión para obtener hora_inicio y hora_fin actualizadas (el objeto closure puede ser stale)
+  const sesionFresh = sesion
+    ? await getSesionDelDia(new Date().toLocaleDateString('en-CA'))
+    : null;
+
   // Traer TODAS las series de la sesión (incluyendo ejercicios intercambiados en caliente)
   const todasLasFilas = sesion ? await getSeriesConEjerciciosBySesion(sesion.id) : [];
 
@@ -603,7 +609,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
 
   const tabla = cel('div', 'fin-tabla');
   tabla.appendChild(cel('span', 'fin-th', 'EJERCICIO'));
-  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'SERIES'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'SETS'));
   tabla.appendChild(cel('span', 'fin-th fin-th-r', 'PESO'));
   tabla.appendChild(cel('span', 'fin-th fin-th-r', '1RM'));
   tabla.appendChild(cel('div', 'fin-sep'));
@@ -626,7 +632,15 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
 
   tabla.appendChild(cel('div', 'fin-sep'));
   const totalesEl = cel('div', 'fin-totales');
-  totalesEl.textContent = `${conSeries.length} EJERC · ${totalSeries} SERIES`;
+  let duracionStr = '';
+  if (sesionFresh?.hora_inicio && sesionFresh?.hora_fin) {
+    const diffMs   = new Date(sesionFresh.hora_fin) - new Date(sesionFresh.hora_inicio);
+    const totalMin = Math.floor(diffMs / 60000);
+    const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+    const mm = String(totalMin % 60).padStart(2, '0');
+    duracionStr = ` · ${hh}h:${mm}m`;
+  }
+  totalesEl.textContent = `${conSeries.length} EJERC · ${totalSeries} SERIES${duracionStr}`;
   tabla.appendChild(totalesEl);
   finDiv.appendChild(tabla);
 
@@ -638,6 +652,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   cta.appendChild(qr);
   const texto = cel('div', 'fin-cta-texto');
   texto.appendChild(cel('p', 'fin-cta-titulo', 'GYMLOG PWA'));
+  texto.appendChild(cel('p', null, 'Multiplataforma · Soberanía y Privacidad'));
   texto.appendChild(cel('p', null, 'Sin cuenta · Offline · Gratis para siempre'));
   texto.appendChild(cel('p', null, 'Lleva tu registro de entrenamiento en el móvil'));
   cta.appendChild(texto);

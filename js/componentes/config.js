@@ -164,7 +164,7 @@ export async function render(state) {
   const secReset = cel('section', 'config-seccion');
   secReset.appendChild(cel('h3', 'config-titulo', '[6. ELIMINAR DATOS]'));
   secReset.appendChild(cel('p', 'reset-advertencia',
-    '⚠ Los datos son tuyos y viven en tu dispositivo.' +
+    '⚠ Los datos son tuyos y viven en tu dispositivo. ' +
     'Esta acción elimina toda la base de datos, caché y datos de la app. ' +
     'Recomendamos exportar un backup .json antes de continuar.'));
   const btnReset = cel('button', 'btn-reset-datos', '[ ⚠ ELIMINAR DATOS ]');
