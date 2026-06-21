@@ -1,23 +1,26 @@
 // Backup completo en JSON — exportación e importación con transacción obligatoria
+// Nombrado csv por compatibilidad con versiones anteriores, aunque ahora es JSON
 
 export const BACKUP_VERSION = 1;
 
 export function exportarBackup(datos) {
-  const json = JSON.stringify(datos, null, 2);
+  return JSON.stringify(datos);
+}
 
-  if (typeof document !== 'undefined') {
-    const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gymlog-backup-${new Date().toLocaleDateString('en-CA')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+async function insertarEnLotes(dbInstance, tabla, columnas, filas, tamanoLote = 500) {
+  if (filas.length === 0) return;
+  const n = columnas.length;
+  for (let i = 0; i < filas.length; i += tamanoLote) {
+    const lote = filas.slice(i, i + tamanoLote);
+    const placeholders = lote
+      .map((_, fi) => `(${columnas.map((_, ci) => `$${fi * n + ci + 1}`).join(',')})`)
+      .join(',');
+    const valores = lote.flatMap(fila => columnas.map(col => fila[col] ?? null));
+    await dbInstance.query(
+      `INSERT INTO ${tabla} (${columnas.join(',')}) VALUES ${placeholders}`,
+      valores
+    );
   }
-
-  return json;
 }
 
 export async function importarBackup(textoJson, dbInstance) {
@@ -53,35 +56,23 @@ export async function importarBackup(textoJson, dbInstance) {
     await dbInstance.exec('DELETE FROM rutinas');
     await dbInstance.exec('DELETE FROM ejercicios');
 
-    for (const e of ejercicios)
-      await dbInstance.query(
-        'INSERT INTO ejercicios (id, nombre, grupo_muscular) VALUES ($1, $2, $3)',
-        [e.id, e.nombre, e.grupo_muscular]);
+    await insertarEnLotes(dbInstance, 'ejercicios',
+      ['id', 'nombre', 'grupo_muscular'], ejercicios);
 
-    for (const r of rutinas)
-      await dbInstance.query(
-        'INSERT INTO rutinas (id, nombre) VALUES ($1, $2)',
-        [r.id, r.nombre]);
+    await insertarEnLotes(dbInstance, 'rutinas',
+      ['id', 'nombre'], rutinas);
 
-    for (const re of rutina_ejercicios)
-      await dbInstance.query(
-        'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden, activo_hoy) VALUES ($1, $2, $3, $4)',
-        [re.rutina_id, re.ejercicio_id, re.orden, re.activo_hoy]);
+    await insertarEnLotes(dbInstance, 'rutina_ejercicios',
+      ['rutina_id', 'ejercicio_id', 'orden', 'activo_hoy'], rutina_ejercicios);
 
-    for (const rd of rutina_dias)
-      await dbInstance.query(
-        'INSERT INTO rutina_dias (rutina_id, dia) VALUES ($1, $2)',
-        [rd.rutina_id, rd.dia]);
+    await insertarEnLotes(dbInstance, 'rutina_dias',
+      ['rutina_id', 'dia'], rutina_dias);
 
-    for (const s of sesiones)
-      await dbInstance.query(
-        'INSERT INTO sesiones (id, fecha, rutina_id, energia_sueno, peso_corporal) VALUES ($1, $2, $3, $4, $5)',
-        [s.id, s.fecha, s.rutina_id, s.energia_sueno ?? null, s.peso_corporal ?? null]);
+    await insertarEnLotes(dbInstance, 'sesiones',
+      ['id', 'fecha', 'rutina_id', 'energia_sueno', 'peso_corporal'], sesiones);
 
-    for (const sr of series)
-      await dbInstance.query(
-        'INSERT INTO series (sesion_id, ejercicio_id, numero_serie, peso, repeticiones) VALUES ($1, $2, $3, $4, $5)',
-        [sr.sesion_id, sr.ejercicio_id, sr.numero_serie, sr.peso, sr.repeticiones]);
+    await insertarEnLotes(dbInstance, 'series',
+      ['sesion_id', 'ejercicio_id', 'numero_serie', 'peso', 'repeticiones'], series);
 
     if (conf)
       await dbInstance.query(
