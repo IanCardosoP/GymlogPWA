@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   initDB,
-  getEjercicios, saveEjercicio, getOrCreateEjercicio, updateEjercicioNombre, deleteEjercicio,
+  getEjercicios, saveEjercicio, getOrCreateEjercicio, updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
@@ -370,5 +370,59 @@ describe('getOrCreateEjercicio', () => {
     await getOrCreateEjercicio('Extensión de pierna', 'Pierna');
     const todos = await getEjercicios();
     expect(todos.length).toBe(1);
+  });
+});
+
+// ── removeEjercicioDeRutina ───────────────────────────────────────────────────
+
+describe('removeEjercicioDeRutina', () => {
+  it('elimina el ejercicio del diccionario si no queda en ninguna rutina', async () => {
+    const db     = (await import('../js/db.js')).getDB();
+    const rutina = await saveRutina('Pierna', 3);
+    const ej     = await saveEjercicio('Extensión de pierna', 'Pierna');
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutina.id, ej.id]
+    );
+    await removeEjercicioDeRutina(rutina.id, ej.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(0);
+  });
+
+  it('mantiene el ejercicio en el diccionario si aún vive en otra rutina', async () => {
+    const db      = (await import('../js/db.js')).getDB();
+    const rutinaA = await saveRutina('Pierna', 3);
+    const rutinaB = await saveRutina('Pierna Ligera', 6);
+    const ej      = await saveEjercicio('Extensión de pierna', 'Pierna');
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutinaA.id, ej.id]
+    );
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutinaB.id, ej.id]
+    );
+    await removeEjercicioDeRutina(rutinaA.id, ej.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+    const reB = await getRutinaEjercicios(rutinaB.id);
+    expect(reB.some(r => r.ejercicio_id === ej.id)).toBe(true);
+  });
+
+  it('elimina también las series cuando el ejercicio queda huérfano', async () => {
+    const db     = (await import('../js/db.js')).getDB();
+    const rutina = await saveRutina('Pierna', 3);
+    const ej     = await saveEjercicio('Extensión de pierna', 'Pierna');
+    const sesion = await saveSesion('2026-06-21', rutina.id, null);
+    await saveSerie(sesion.id, ej.id, 1, 50, 12);
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutina.id, ej.id]
+    );
+    await removeEjercicioDeRutina(rutina.id, ej.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(0);
+    const series = await getSeriesPorEjercicio(ej.id);
+    expect(series.length).toBe(0);
   });
 });

@@ -11,7 +11,7 @@ import {
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
   saveEjercicio, getOrCreateEjercicio, getEjercicios,
-  updateEjercicioNombre, deleteEjercicio,
+  updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
 
@@ -181,7 +181,7 @@ export async function render(state) {
 
     const btnConfirmar = e.target.closest('.btn-confirmar-eliminar');
     if (btnConfirmar) {
-      await deleteEjercicio(parseInt(btnConfirmar.dataset.ejId));
+      await removeEjercicioDeRutina(rutinaHoy.id, parseInt(btnConfirmar.dataset.ejId));
       await render(state);
       return;
     }
