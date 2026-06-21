@@ -366,49 +366,84 @@ async function renderEjercicios(container, state) {
 
 // ── Vista RÉCORDS ─────────────────────────────────────────────────────────────
 
+const GRUPOS_ORDEN = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', 'GENERAL'];
+
 async function renderRecords(container, state) {
   const unit = state.prefUnit || 'lb';
-  const prs = await getPR1RMPorEjercicio();
+  const prs  = await getPR1RMPorEjercicio();
 
   if (prs.length === 0) {
     container.appendChild(cel('p', 'global-vacio', 'Aún no hay series registradas.'));
     return;
   }
 
-  const haceUnMes = new Date();
-  haceUnMes.setDate(haceUnMes.getDate() - 28);
-  const limiteReciente = haceUnMes.toLocaleDateString('en-CA');
+  const hoy = new Date();
+  hoy.setDate(hoy.getDate() - 28);
+  const limiteReciente = hoy.toLocaleDateString('en-CA');
 
-  // ── PRs logrados este mes ──────────────────────────────────────────────────
-  const recientes = prs.filter(r => r.fecha_pr >= limiteReciente);
-  if (recientes.length > 0) {
-    container.appendChild(cel('p', 'global-seccion-titulo', '↑ NUEVO PR ESTE MES'));
-    const listaR = cel('div', 'records-lista');
-    for (const pr of recientes) {
-      const fila = crearFilaPR(pr, unit, true);
-      listaR.appendChild(fila);
+  // ── Sección 1: MEJOR POR GRUPO MUSCULAR ───────────────────────────────────
+  const mejorPorGrupo = new Map();
+  for (const pr of prs) {
+    const g = (pr.grupo_muscular ?? 'GENERAL').toUpperCase();
+    const actual = mejorPorGrupo.get(g);
+    if (!actual || pr.pr_1rm > actual.pr_1rm) mejorPorGrupo.set(g, pr);
+  }
+
+  const cardGrupo = crearSeccion('MEJOR POR GRUPO MUSCULAR');
+  const listaGrupo = cel('div', 'records-lista');
+  for (const grupo of GRUPOS_ORDEN) {
+    const fila = cel('div', 'records-fila');
+    const best = mejorPorGrupo.get(grupo);
+    fila.appendChild(cel('span', 'records-grupo', grupo));
+    if (best) {
+      fila.appendChild(cel('span', 'records-nombre-dim', best.nombre));
+      fila.appendChild(cel('span', 'records-valor', `~${Math.round(best.pr_1rm)} ${unit}`));
+    } else {
+      fila.appendChild(cel('span', 'records-vacio', '—'));
     }
-    container.appendChild(listaR);
+    listaGrupo.appendChild(fila);
   }
+  cardGrupo.appendChild(listaGrupo);
+  container.appendChild(cardGrupo);
 
-  // ── Records personales todos ───────────────────────────────────────────────
-  container.appendChild(cel('p', 'global-seccion-titulo', 'RÉCORDS PERSONALES'));
-  const sortedByFecha = [...prs].sort((a, b) => b.fecha_pr.localeCompare(a.fecha_pr));
-  const lista = cel('div', 'records-lista');
-  for (const pr of sortedByFecha) {
-    const fila = crearFilaPR(pr, unit, pr.fecha_pr >= limiteReciente);
-    lista.appendChild(fila);
+  // ── Sección 2: TOP 5 LIFTS ─────────────────────────────────────────────────
+  const top5 = [...prs].sort((a, b) => b.pr_1rm - a.pr_1rm).slice(0, 5);
+  const cardTop = crearSeccion('TOP 5 LIFTS');
+  const listaTop = cel('div', 'records-lista');
+  top5.forEach((pr, i) => {
+    const fila = cel('div', 'records-fila');
+    fila.appendChild(cel('span', 'records-rank', String(i + 1)));
+    fila.appendChild(cel('span', 'records-nombre', pr.nombre));
+    fila.appendChild(cel('span', 'records-valor', `~${Math.round(pr.pr_1rm)} ${unit}`));
+    fila.appendChild(cel('span', 'records-fecha', formatFechaPR(pr.fecha_pr)));
+    listaTop.appendChild(fila);
+  });
+  cardTop.appendChild(listaTop);
+  container.appendChild(cardTop);
+
+  // ── Sección 3: NUEVOS PRs RECIENTES (máx 5) ───────────────────────────────
+  const recientes = prs
+    .filter(r => r.fecha_pr >= limiteReciente)
+    .sort((a, b) => b.fecha_pr.localeCompare(a.fecha_pr))
+    .slice(0, 5);
+
+  if (recientes.length > 0) {
+    const cardRec = crearSeccion('↑ NUEVOS PRs — ÚLTIMAS 4 SEMANAS');
+    const listaRec = cel('div', 'records-lista');
+    for (const pr of recientes) {
+      const fila = cel('div', 'records-fila is-destacado');
+      fila.appendChild(cel('span', 'records-nombre', pr.nombre));
+      fila.appendChild(cel('span', 'records-valor', `~${Math.round(pr.pr_1rm)} ${unit}`));
+      fila.appendChild(cel('span', 'records-fecha', formatFechaPR(pr.fecha_pr)));
+      listaRec.appendChild(fila);
+    }
+    cardRec.appendChild(listaRec);
+    container.appendChild(cardRec);
   }
-  container.appendChild(lista);
 }
 
-function crearFilaPR(pr, unit, destacado) {
-  const fila = cel('div', destacado ? 'records-fila is-destacado' : 'records-fila');
-  const d = new Date(pr.fecha_pr + 'T12:00:00Z');
-  const fechaStr = d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).toUpperCase();
-  fila.appendChild(cel('span', 'records-nombre', pr.nombre));
-  fila.appendChild(cel('span', 'records-valor',
-    `~${Math.round(pr.pr_1rm)} ${unit}`));
-  fila.appendChild(cel('span', 'records-fecha', fechaStr));
-  return fila;
+function formatFechaPR(fechaStr) {
+  return new Date(fechaStr + 'T12:00:00Z')
+    .toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+    .toUpperCase();
 }

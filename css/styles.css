@@ -791,16 +791,14 @@ input.is-saved::placeholder {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-bottom: 12px;
-  border: 1px solid #2a2a2a;
 }
 
 .records-fila {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   font-size: 12px;
-  padding: 8px 12px;
+  padding: 7px 0;
   border-bottom: 1px solid #1e1e1e;
 }
 
@@ -808,36 +806,68 @@ input.is-saved::placeholder {
   border-bottom: none;
 }
 
-.records-fila.is-destacado {
-  background-color: #0d1f16;
+.records-fila.is-destacado .records-nombre,
+.records-fila.is-destacado .records-valor {
+  color: var(--color-acento);
 }
 
+/* Columna grupo (mejor por grupo) */
+.records-grupo {
+  width: 60px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--color-texto-dim);
+  letter-spacing: 0.06em;
+}
+
+/* Columna nombre principal */
 .records-nombre {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-texto);
+  font-size: 12px;
 }
 
-.records-fila.is-destacado .records-nombre {
-  color: var(--color-acento);
+/* Nombre secundario (ejercicio dentro de grupo) */
+.records-nombre-dim {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-texto-dim);
+  font-size: 11px;
+}
+
+/* Grupo sin datos */
+.records-vacio {
+  flex: 1;
+  color: #444;
+  font-size: 11px;
+}
+
+/* Ranking numérico Top 5 */
+.records-rank {
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--color-texto-dim);
+  font-size: 10px;
+  text-align: right;
 }
 
 .records-valor {
   flex-shrink: 0;
   color: var(--color-texto);
   font-size: 11px;
-}
-
-.records-fila.is-destacado .records-valor {
-  color: var(--color-acento);
+  white-space: nowrap;
 }
 
 .records-fecha {
   flex-shrink: 0;
   font-size: 10px;
   color: var(--color-texto-dim);
+  white-space: nowrap;
 }
 
 .grafica-sin-datos {
