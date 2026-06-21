@@ -195,7 +195,7 @@ describe('calcularTendencia', () => {
   });
 });
 
-describe('calcularRacha', () => {
+describe('calcularRacha (gracia de 2 días)', () => {
   it('retorna 0 sin fechas', () => {
     expect(calcularRacha([], '2026-06-21')).toBe(0);
   });
@@ -204,18 +204,34 @@ describe('calcularRacha', () => {
     expect(calcularRacha(['2026-06-21'], '2026-06-21')).toBe(1);
   });
 
-  it('racha de 3 días consecutivos terminando hoy', () => {
+  it('racha de 3 con días consecutivos', () => {
     expect(calcularRacha(['2026-06-21', '2026-06-20', '2026-06-19'], '2026-06-21')).toBe(3);
   });
 
-  it('racha se rompe al haber un día sin entrenar', () => {
-    // Entrenó ayer y el martes pasado pero no hoy ni el miércoles
-    const fechas = ['2026-06-20', '2026-06-17'];
-    expect(calcularRacha(fechas, '2026-06-21')).toBe(1);
+  it('1 día de descanso NO corta la racha', () => {
+    // Hoy + anteayer (1 día de gap)
+    expect(calcularRacha(['2026-06-21', '2026-06-19'], '2026-06-21')).toBe(2);
   });
 
-  it('si no entrenó hoy, cuenta desde ayer', () => {
-    const fechas = ['2026-06-20', '2026-06-19', '2026-06-18'];
+  it('2 días de descanso consecutivos NO cortan la racha', () => {
+    // Hoy + hace 3 días (2 días de gap)
+    expect(calcularRacha(['2026-06-21', '2026-06-18'], '2026-06-21')).toBe(2);
+  });
+
+  it('3 días de descanso consecutivos SÍ cortan la racha', () => {
+    // Hoy + hace 4 días (3 días de gap → rompe)
+    expect(calcularRacha(['2026-06-21', '2026-06-17'], '2026-06-21')).toBe(1);
+  });
+
+  it('si no entrenó hoy ni ayer, cuenta desde anteayer con gracia', () => {
+    // 2 días de descanso al final (hoy y ayer), antes entrenó 3 días seguidos
+    const fechas = ['2026-06-19', '2026-06-18', '2026-06-17'];
     expect(calcularRacha(fechas, '2026-06-21')).toBe(3);
+  });
+
+  it('3 días sin entrenar al final sí cortan la racha aunque antes haya sesiones', () => {
+    // 3 días de descanso: hoy, ayer, anteayer → corta
+    const fechas = ['2026-06-18', '2026-06-17', '2026-06-16'];
+    expect(calcularRacha(fechas, '2026-06-21')).toBe(0);
   });
 });

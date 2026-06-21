@@ -80,7 +80,7 @@ async function renderGlobal(container, state) {
   grid.appendChild(crearChip(String(stats.total_sesiones), 'SESIONES TOTALES'));
   grid.appendChild(crearChip(`${racha}D`,                 'RACHA ACTIVA'));
   grid.appendChild(crearChip(volFmt,                      'VOL. ACUMULADO'));
-  grid.appendChild(crearChip(`${frecSem}/SEM`,            'FREC. ÚLTIMAS 4 SEM'));
+  grid.appendChild(crearChip(`${frecSem}/SEM`,            'PROM. SEMANAL — 4 SEM'));
   container.appendChild(grid);
 
   // ── Frecuencia semanal ─────────────────────────────────────────────────────

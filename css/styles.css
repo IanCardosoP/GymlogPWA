@@ -600,9 +600,11 @@ input.is-saved::placeholder {
 
 /* ── Progreso ────────────────────────────────────────────────────────────────── */
 
-/* Sub-tabs — mismo estilo que las tabs principales */
+/* Sub-tabs — centradas, mismo lenguaje visual que las tabs principales */
 .progreso-tabs {
   display: flex;
+  justify-content: center;
+  gap: 4px;
   border-bottom: 1px solid var(--color-texto-dim);
   margin: 0 -16px 0;
   padding: 0 16px;
@@ -613,8 +615,7 @@ input.is-saved::placeholder {
 }
 
 .progreso-tab-btn {
-  flex: 1;
-  padding: 10px 2px;
+  padding: 10px 14px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
@@ -625,7 +626,7 @@ input.is-saved::placeholder {
   cursor: pointer;
   letter-spacing: 0.04em;
   transition: color 0.15s;
-  text-align: center;
+  white-space: nowrap;
 }
 
 .progreso-tab-btn:hover {
