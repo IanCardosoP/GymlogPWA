@@ -298,7 +298,10 @@ async function renderEjercicios(container, state) {
     }
     if (series.length > 0) {
       const ultima = series[series.length - 1];
-      const fechaStr = new Date(String(ultima.fecha).slice(0, 10) + 'T12:00:00Z')
+      const fechaISO = ultima.fecha instanceof Date
+        ? ultima.fecha.toISOString().slice(0, 10)
+        : String(ultima.fecha).slice(0, 10);
+      const fechaStr = new Date(fechaISO + 'T12:00:00Z')
         .toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
         .toUpperCase();
       const ultimaRow = cel('div', 'ej-header-fila');
