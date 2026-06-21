@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   initDB,
-  getEjercicios, saveEjercicio, updateEjercicioNombre, deleteEjercicio,
+  getEjercicios, saveEjercicio, getOrCreateEjercicio, updateEjercicioNombre, deleteEjercicio,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
@@ -335,5 +335,40 @@ describe('getSeriesDeSesionEjercicio', () => {
 
     const result = await getSeriesDeSesionEjercicio(sesion.id, ej.id);
     expect(result).toEqual([]);
+  });
+});
+
+// ── getOrCreateEjercicio ──────────────────────────────────────────────────────
+
+describe('getOrCreateEjercicio', () => {
+  it('crea un ejercicio nuevo si el nombre no existe', async () => {
+    const ej = await getOrCreateEjercicio('Sentadilla', 'Pierna');
+    expect(ej.id).toBeDefined();
+    expect(ej.nombre).toBe('Sentadilla');
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+
+  it('retorna el existente en match exacto sin crear duplicado', async () => {
+    const original = await saveEjercicio('Press Banca', 'Pecho');
+    const result   = await getOrCreateEjercicio('Press Banca', 'Pecho');
+    expect(result.id).toBe(original.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+
+  it('retorna el existente en match case-insensitive', async () => {
+    const original = await saveEjercicio('Press Banca', 'Pecho');
+    const result   = await getOrCreateEjercicio('press BANCA', 'Pecho');
+    expect(result.id).toBe(original.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+
+  it('no crea duplicado si se llama dos veces con el mismo nombre', async () => {
+    await getOrCreateEjercicio('Extensión de pierna', 'Pierna');
+    await getOrCreateEjercicio('Extensión de pierna', 'Pierna');
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
   });
 });

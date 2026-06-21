@@ -114,6 +114,19 @@ export async function saveEjercicio(nombre, grupoMuscular) {
   return result.rows[0];
 }
 
+export async function getOrCreateEjercicio(nombre, grupoMuscular) {
+  const { rows } = await db.query(
+    'SELECT * FROM ejercicios WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+    [nombre]
+  );
+  if (rows.length > 0) return rows[0];
+  const result = await db.query(
+    'INSERT INTO ejercicios (nombre, grupo_muscular) VALUES ($1, $2) RETURNING *',
+    [nombre, grupoMuscular]
+  );
+  return result.rows[0];
+}
+
 // ── Rutinas ───────────────────────────────────────────────────────────────────
 
 export async function getRutinas() {

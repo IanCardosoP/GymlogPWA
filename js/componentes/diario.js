@@ -10,7 +10,8 @@ import {
   saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo,
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
-  saveEjercicio, updateEjercicioNombre, deleteEjercicio,
+  saveEjercicio, getOrCreateEjercicio, getEjercicios,
+  updateEjercicioNombre, deleteEjercicio,
   updateActivoHoy, linkEjercicioToRutina, swapOrden,
 } from '../db.js';
 
@@ -412,26 +413,40 @@ async function handleSuplentesDropdown(btnSwap, suplentes) {
   else details?.appendChild(dropdown);
 }
 
-function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
+async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   const nombreActual = nombreEl.textContent;
+
+  const ejerciciosExistentes = await getEjercicios();
+  const datalist = document.createElement('datalist');
+  datalist.id = 'ejercicios-datalist';
+  ejerciciosExistentes.forEach(ej => {
+    const opt = document.createElement('option');
+    opt.value = ej.nombre;
+    datalist.appendChild(opt);
+  });
+  document.body.appendChild(datalist);
 
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'ejercicio-nombre-input';
   input.placeholder = 'Nombre del ejercicio...';
+  input.setAttribute('list', 'ejercicios-datalist');
   nombreEl.replaceWith(input);
   input.focus();
 
+  const limpiar = () => datalist.remove();
+
   const guardar = async () => {
+    limpiar();
     const nuevoNombre = input.value.trim();
     if (!nuevoNombre || !rutinaHoy) {
       const span = cel('span', 'ejercicio-nombre', nombreActual);
       input.replaceWith(span);
       return;
     }
-    const nuevoEj = await saveEjercicio(nuevoNombre, 'General');
+    const ej = await getOrCreateEjercicio(nuevoNombre, 'General');
     const todos = await getRutinaEjercicios(rutinaHoy.id);
-    await linkEjercicioToRutina(rutinaHoy.id, nuevoEj.id, todos.length + 1);
+    await linkEjercicioToRutina(rutinaHoy.id, ej.id, todos.length + 1);
     await render(state);
   };
 
@@ -439,6 +454,7 @@ function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
     if (e.key === 'Escape') {
+      limpiar();
       const span = cel('span', 'ejercicio-nombre', nombreActual);
       input.replaceWith(span);
     }
