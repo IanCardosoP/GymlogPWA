@@ -17,6 +17,8 @@ import {
 
 export const MAX_ROUTINE_SLOTS = 8;
 
+const GRUPOS_MUSCULARES = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', 'GENERAL'];
+
 let clickAbort = null;
 
 
@@ -415,8 +417,8 @@ async function handleSuplentesDropdown(btnSwap, suplentes) {
 
 async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   const nombreActual = nombreEl.textContent;
-
   const ejerciciosExistentes = await getEjercicios();
+
   const datalist = document.createElement('datalist');
   datalist.id = 'ejercicios-datalist';
   ejerciciosExistentes.forEach(ej => {
@@ -434,29 +436,52 @@ async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   nombreEl.replaceWith(input);
   input.focus();
 
-  const limpiar = () => datalist.remove();
-
-  const guardar = async () => {
-    limpiar();
-    const nuevoNombre = input.value.trim();
-    if (!nuevoNombre || !rutinaHoy) {
-      const span = cel('span', 'ejercicio-nombre', nombreActual);
-      input.replaceWith(span);
-      return;
-    }
-    const ej = await getOrCreateEjercicio(nuevoNombre, 'General');
+  const vincular = async (nombre, grupo) => {
+    datalist.remove();
+    const ej = await getOrCreateEjercicio(nombre, grupo);
     const todos = await getRutinaEjercicios(rutinaHoy.id);
     await linkEjercicioToRutina(rutinaHoy.id, ej.id, todos.length + 1);
     await render(state);
   };
 
-  input.addEventListener('blur', guardar);
+  const mostrarSelectorGrupo = (nombre, anchorEl) => {
+    datalist.remove();
+    const selector = cel('div', 'grupo-muscular-selector');
+    selector.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
+    const fila = cel('div', 'grupo-muscular-btns');
+    GRUPOS_MUSCULARES.forEach(grupo => {
+      const btn = cel('button', 'btn-grupo-muscular', grupo);
+      if (grupo === 'GENERAL') btn.classList.add('is-active');
+      btn.addEventListener('click', () => vincular(nombre, grupo));
+      fila.appendChild(btn);
+    });
+    selector.appendChild(fila);
+    anchorEl.replaceWith(selector);
+  };
+
+  const procesarNombre = () => {
+    const nuevoNombre = input.value.trim();
+    if (!nuevoNombre || !rutinaHoy) {
+      datalist.remove();
+      input.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
+      return;
+    }
+    const existente = ejerciciosExistentes.find(
+      e => e.nombre.toLowerCase() === nuevoNombre.toLowerCase()
+    );
+    if (existente) {
+      vincular(nuevoNombre, existente.grupo_muscular || 'GENERAL');
+    } else {
+      mostrarSelectorGrupo(nuevoNombre, input);
+    }
+  };
+
+  input.addEventListener('blur', procesarNombre);
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
     if (e.key === 'Escape') {
-      limpiar();
-      const span = cel('span', 'ejercicio-nombre', nombreActual);
-      input.replaceWith(span);
+      datalist.remove();
+      input.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
     }
   });
 }

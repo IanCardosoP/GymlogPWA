@@ -442,6 +442,87 @@ export async function clearRutinaDia(dia) {
   );
 }
 
+// ── Analítica y estadísticas ──────────────────────────────────────────────────
+
+export async function getEstadisticasGlobales(fechaHoy) {
+  const { rows: [stats] } = await db.query(`
+    SELECT
+      (SELECT COUNT(*)::int FROM sesiones) AS total_sesiones,
+      (SELECT COALESCE(SUM(peso * repeticiones)::float, 0) FROM series) AS volumen_total,
+      (SELECT COUNT(*)::int FROM sesiones
+       WHERE fecha >= $1::date - INTERVAL '27 days') AS sesiones_4_sem
+  `, [fechaHoy]);
+
+  const { rows: fechaRows } = await db.query(
+    `SELECT DISTINCT fecha::text FROM sesiones ORDER BY fecha DESC`
+  );
+
+  return {
+    total_sesiones: stats.total_sesiones,
+    volumen_total: stats.volumen_total,
+    sesiones_4_sem: stats.sesiones_4_sem,
+    fechas: fechaRows.map(r => r.fecha),
+  };
+}
+
+export async function getActividadSemanal(fechaHoy, semanas = 8) {
+  const { rows } = await db.query(`
+    SELECT
+      date_trunc('week', fecha)::date::text AS semana_lunes,
+      COUNT(*)::int AS sesiones
+    FROM sesiones
+    WHERE fecha >= $1::date - ($2 || ' weeks')::interval
+    GROUP BY semana_lunes
+    ORDER BY semana_lunes ASC
+  `, [fechaHoy, semanas]);
+  return rows;
+}
+
+export async function getVolumenPorGrupoMuscular(fechaHoy, semanas = 4) {
+  const { rows } = await db.query(`
+    SELECT
+      e.grupo_muscular,
+      COALESCE(SUM(s.peso * s.repeticiones)::float, 0) AS volumen
+    FROM series s
+    JOIN sesiones se ON se.id = s.sesion_id
+    JOIN ejercicios e ON e.id = s.ejercicio_id
+    WHERE se.fecha >= $1::date - ($2 || ' weeks')::interval
+    GROUP BY e.grupo_muscular
+    ORDER BY volumen DESC
+  `, [fechaHoy, semanas]);
+  return rows;
+}
+
+export async function getPR1RMPorEjercicio() {
+  const { rows } = await db.query(`
+    SELECT DISTINCT ON (e.id)
+      e.id AS ejercicio_id,
+      e.nombre,
+      (s.peso * (1 + s.repeticiones / 30.0))::float AS pr_1rm,
+      se.fecha::text AS fecha_pr
+    FROM series s
+    JOIN sesiones se ON se.id = s.sesion_id
+    JOIN ejercicios e ON e.id = s.ejercicio_id
+    WHERE s.peso > 0
+    ORDER BY e.id, pr_1rm DESC
+  `);
+  return rows;
+}
+
+export async function getVolumenPorSesion(ejId) {
+  const { rows } = await db.query(`
+    SELECT
+      se.fecha::text AS fecha,
+      COALESCE(SUM(s.peso * s.repeticiones)::float, 0) AS volumen
+    FROM series s
+    JOIN sesiones se ON se.id = s.sesion_id
+    WHERE s.ejercicio_id = $1
+    GROUP BY se.fecha
+    ORDER BY se.fecha ASC
+  `, [ejId]);
+  return rows;
+}
+
 export async function getAllDataForExport() {
   const [conf, ejercicios, rutinas, reRows, rdRows, sesiones, series] = await Promise.all([
     db.query('SELECT pref_unit, pref_acento FROM conf WHERE id = 1'),

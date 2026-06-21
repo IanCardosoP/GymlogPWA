@@ -10,6 +10,22 @@ export const METRICAS_REGISTRY = {
     ],
     calcular: (seriesArray) => prepararDatosProgreso(seriesArray),
   },
+  'peso_max': {
+    nombre: 'Peso Máximo',
+    descripcion: [
+      '¿Qué es? El peso más alto que pusiste en la barra en esa sesión.',
+      '¿Para qué sirve? Muestra directamente si estás manejando más carga, sin fórmulas. Ideal para seguir récords de levantamiento.',
+    ],
+    calcular: (seriesArray) => prepararDatosPesoMax(seriesArray),
+  },
+  'volumen_sesion': {
+    nombre: 'Volumen Total',
+    descripcion: [
+      '¿Qué es? La suma de peso × repeticiones de todas tus series en esa sesión.',
+      '¿Para qué sirve? Mide cuánto trabajo total hiciste. Puedes progresar aunque no suba el peso máximo, simplemente haciendo más series o reps.',
+    ],
+    calcular: (seriesArray) => prepararDatosVolumen(seriesArray),
+  },
 };
 
 export function calculateEpley1RM(peso, reps) {
@@ -52,4 +68,101 @@ export function prepararDatosProgreso(seriesArray) {
     barra: s.max1RM > 0 ? calcularBarraProgreso(s.max1RM, maxAbsoluto) : null,
     maxAbsoluto,
   }));
+}
+
+export function prepararDatosPesoMax(seriesArray) {
+  const porFecha = {};
+  for (const serie of seriesArray) {
+    const fecha = serie.fecha instanceof Date
+      ? serie.fecha.toISOString().slice(0, 10)
+      : String(serie.fecha).slice(0, 10);
+    if (!porFecha[fecha]) porFecha[fecha] = [];
+    porFecha[fecha].push(serie);
+  }
+
+  const sesiones = Object.entries(porFecha)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, series]) => {
+      const maxPeso = Math.max(...series.map(s => Number(s.peso)));
+      return { fecha, series, maxPeso };
+    });
+
+  const maxAbsoluto = sesiones.reduce((m, s) => Math.max(m, s.maxPeso), 0);
+
+  return sesiones.map(s => ({
+    fecha: s.fecha,
+    series: s.series,
+    valor: s.maxPeso,
+    barra: s.maxPeso > 0 ? calcularBarraProgreso(s.maxPeso, maxAbsoluto) : null,
+    maxAbsoluto,
+  }));
+}
+
+export function prepararDatosVolumen(seriesArray) {
+  const porFecha = {};
+  for (const serie of seriesArray) {
+    const fecha = serie.fecha instanceof Date
+      ? serie.fecha.toISOString().slice(0, 10)
+      : String(serie.fecha).slice(0, 10);
+    if (!porFecha[fecha]) porFecha[fecha] = [];
+    porFecha[fecha].push(serie);
+  }
+
+  const sesiones = Object.entries(porFecha)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, series]) => {
+      const volumen = series.reduce(
+        (sum, s) => sum + Number(s.peso) * Number(s.repeticiones), 0
+      );
+      return { fecha, series, volumen };
+    });
+
+  const maxAbsoluto = sesiones.reduce((m, s) => Math.max(m, s.volumen), 0);
+
+  return sesiones.map(s => ({
+    fecha: s.fecha,
+    series: s.series,
+    valor: s.volumen,
+    barra: s.volumen > 0 ? calcularBarraProgreso(s.volumen, maxAbsoluto) : null,
+    maxAbsoluto,
+  }));
+}
+
+export function calcularTendencia(sesiones) {
+  if (!sesiones || sesiones.length < 4) return null;
+  const ultimas4 = sesiones.slice(-4);
+  const previas = sesiones.slice(0, sesiones.length - 4);
+  if (previas.length === 0) return null;
+  const previas4 = previas.slice(-4);
+
+  const avg = (arr) => arr.reduce((sum, s) => sum + (s.max1RM ?? s.valor ?? 0), 0) / arr.length;
+  const avgUltimas = avg(ultimas4);
+  const avgPrevias = avg(previas4);
+
+  if (avgPrevias === 0) return null;
+
+  const delta = ((avgUltimas - avgPrevias) / avgPrevias) * 100;
+  if (delta > 3)  return { icono: '↑', texto: `+${delta.toFixed(1)}%`, clase: 'positivo' };
+  if (delta < -3) return { icono: '↓', texto: `${delta.toFixed(1)}%`,  clase: 'negativo' };
+  return { icono: '→', texto: 'meseta', clase: 'neutro' };
+}
+
+export function calcularRacha(fechas, hoy) {
+  if (!fechas || fechas.length === 0) return 0;
+  const set = new Set(fechas);
+  let racha = 0;
+  const cursor = new Date(hoy + 'T12:00:00Z');
+
+  if (!set.has(hoy)) cursor.setUTCDate(cursor.getUTCDate() - 1);
+
+  while (true) {
+    const key = cursor.toISOString().slice(0, 10);
+    if (set.has(key)) {
+      racha++;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return racha;
 }

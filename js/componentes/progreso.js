@@ -1,6 +1,12 @@
-// Componente Progreso: gráfica de barras ASCII por 1RM estimado (Fórmula de Epley)
-import { getRutinas, getRutinaEjercicios, getSeriesPorEjercicio } from '../db.js';
-import { METRICAS_REGISTRY, prepararDatosProgreso } from '../analitico.js';
+// Componente Progreso: 3 tabs — Global, Ejercicios, Récords
+import {
+  getRutinas, getRutinaEjercicios, getSeriesPorEjercicio,
+  getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
+  getPR1RMPorEjercicio, getVolumenPorSesion,
+} from '../db.js';
+import {
+  METRICAS_REGISTRY, prepararDatosProgreso, calcularTendencia, calcularRacha,
+} from '../analitico.js';
 
 function cel(tag, clase, texto) {
   const e = document.createElement(tag);
@@ -9,29 +15,160 @@ function cel(tag, clase, texto) {
   return e;
 }
 
+let tabActivo = 'GLOBAL';
+let progresoAbort = null;
+
 export async function render(state) {
   const container = document.getElementById('progreso-container');
   if (!container) return;
   container.textContent = '';
 
+  progresoAbort?.abort();
+  progresoAbort = new AbortController();
+
+  // ── Tab bar ────────────────────────────────────────────────────────────────
+  const tabBar = cel('div', 'progreso-tabs');
+  const tabNames = ['GLOBAL', 'EJERCICIOS', 'RÉCORDS'];
+  for (const nombre of tabNames) {
+    const btn = cel('button', 'progreso-tab-btn', `[ ${nombre} ]`);
+    if (nombre === tabActivo) btn.classList.add('is-active');
+    btn.dataset.tab = nombre;
+    tabBar.appendChild(btn);
+  }
+  container.appendChild(tabBar);
+
+  const tabContent = cel('div', 'progreso-tab-content');
+  container.appendChild(tabContent);
+
+  tabBar.addEventListener('click', e => {
+    const btn = e.target.closest('.progreso-tab-btn');
+    if (!btn) return;
+    tabActivo = btn.dataset.tab;
+    tabBar.querySelectorAll('.progreso-tab-btn').forEach(b => {
+      b.classList.toggle('is-active', b.dataset.tab === tabActivo);
+    });
+    renderTabContent(tabContent, state);
+  }, { signal: progresoAbort.signal });
+
+  await renderTabContent(tabContent, state);
+}
+
+async function renderTabContent(container, state) {
+  container.textContent = '';
+  if (tabActivo === 'GLOBAL')     await renderGlobal(container, state);
+  if (tabActivo === 'EJERCICIOS') await renderEjercicios(container, state);
+  if (tabActivo === 'RÉCORDS')    await renderRecords(container, state);
+}
+
+// ── Vista GLOBAL ──────────────────────────────────────────────────────────────
+
+async function renderGlobal(container, state) {
+  const fechaHoy = new Date().toLocaleDateString('en-CA');
+  const [stats, actividad, distribucion] = await Promise.all([
+    getEstadisticasGlobales(fechaHoy),
+    getActividadSemanal(fechaHoy, 8),
+    getVolumenPorGrupoMuscular(fechaHoy, 4),
+  ]);
+
+  // ── Stat chips ─────────────────────────────────────────────────────────────
+  const grid = cel('div', 'global-chips');
+
+  const racha = calcularRacha(stats.fechas, fechaHoy);
+  const frecSem = stats.sesiones_4_sem > 0
+    ? (stats.sesiones_4_sem / 4).toFixed(1)
+    : '0';
+  const volFmt = formatVolumen(stats.volumen_total);
+
+  grid.appendChild(crearChip(String(stats.total_sesiones), 'SESIONES TOTALES'));
+  grid.appendChild(crearChip(`${racha}D`, 'RACHA ACTIVA'));
+  grid.appendChild(crearChip(volFmt, 'VOL. ACUMULADO'));
+  grid.appendChild(crearChip(`${frecSem}/SEM`, 'FREC. ÚLTIMAS 4 SEM'));
+
+  container.appendChild(grid);
+
+  // ── Frecuencia semanal ─────────────────────────────────────────────────────
+  container.appendChild(cel('p', 'global-seccion-titulo', 'FRECUENCIA SEMANAL'));
+
+  if (actividad.length === 0) {
+    container.appendChild(cel('p', 'global-vacio', 'Sin sesiones registradas.'));
+  } else {
+    const maxSesiones = Math.max(...actividad.map(r => r.sesiones));
+    const bloque = cel('div', 'global-barras');
+
+    for (const semana of actividad) {
+      const fila = cel('div', 'global-barra-fila');
+      const label = formatSemana(semana.semana_lunes);
+      fila.appendChild(cel('span', 'global-barra-fecha', label));
+      const activas = maxSesiones > 0
+        ? Math.round((semana.sesiones / maxSesiones) * 12)
+        : 0;
+      const barra = '█'.repeat(activas) + '░'.repeat(12 - activas);
+      fila.appendChild(cel('span', 'global-barra-ascii', barra));
+      fila.appendChild(cel('span', 'global-barra-num', `${semana.sesiones} ses`));
+      bloque.appendChild(fila);
+    }
+    container.appendChild(bloque);
+  }
+
+  // ── Distribución muscular ──────────────────────────────────────────────────
+  container.appendChild(cel('p', 'global-seccion-titulo', 'GRUPOS MUSCULARES — ÚLTIMAS 4 SEM'));
+
+  if (distribucion.length === 0) {
+    container.appendChild(cel('p', 'global-vacio', 'Sin series en las últimas 4 semanas.'));
+  } else {
+    const totalVol = distribucion.reduce((sum, r) => sum + r.volumen, 0);
+    const maxVol   = distribucion[0].volumen; // ya ordenado DESC
+    const bloque   = cel('div', 'global-barras');
+
+    for (const grupo of distribucion) {
+      const fila = cel('div', 'global-barra-fila');
+      const pct  = totalVol > 0 ? Math.round((grupo.volumen / totalVol) * 100) : 0;
+      const activas = maxVol > 0 ? Math.round((grupo.volumen / maxVol) * 16) : 0;
+      const barra = '█'.repeat(activas) + '░'.repeat(16 - activas);
+      fila.appendChild(cel('span', 'global-barra-grupo', grupo.grupo_muscular));
+      fila.appendChild(cel('span', 'global-barra-ascii', barra));
+      fila.appendChild(cel('span', 'global-barra-num', `${pct}%`));
+      bloque.appendChild(fila);
+    }
+    container.appendChild(bloque);
+  }
+}
+
+function crearChip(valor, etiqueta) {
+  const chip = cel('div', 'global-chip');
+  chip.appendChild(cel('span', 'global-chip-valor', valor));
+  chip.appendChild(cel('span', 'global-chip-label', etiqueta));
+  return chip;
+}
+
+function formatVolumen(kg) {
+  if (kg >= 1000) return `${(kg / 1000).toFixed(1)}T`;
+  return `${Math.round(kg)}KG`;
+}
+
+function formatSemana(lunes) {
+  const d = new Date(lunes + 'T12:00:00Z');
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }).toUpperCase();
+}
+
+// ── Vista EJERCICIOS ──────────────────────────────────────────────────────────
+
+async function renderEjercicios(container, state) {
   const rutinas = await getRutinas();
+  const unit = state.prefUnit || 'lb';
 
   // ── Select Rutina ──────────────────────────────────────────────────────────
-  const rutLabel = document.createElement('label');
+  const rutLabel = cel('label', 'progreso-label', 'Rutina: ');
   rutLabel.setAttribute('for', 'select-rutina');
-  rutLabel.textContent = 'Rutina: ';
-  rutLabel.className = 'progreso-label';
   container.appendChild(rutLabel);
 
   const selectRut = document.createElement('select');
   selectRut.id = 'select-rutina';
   selectRut.className = 'select-rutina';
-
   const optRutVacio = document.createElement('option');
   optRutVacio.value = '';
   optRutVacio.textContent = '— Seleccionar rutina —';
   selectRut.appendChild(optRutVacio);
-
   for (const r of rutinas) {
     const opt = document.createElement('option');
     opt.value = r.id;
@@ -40,18 +177,15 @@ export async function render(state) {
   }
   container.appendChild(selectRut);
 
-  // ── Select Ejercicio (deshabilitado hasta elegir rutina) ───────────────────
-  const ejLabel = document.createElement('label');
+  // ── Select Ejercicio ───────────────────────────────────────────────────────
+  const ejLabel = cel('label', 'progreso-label', 'Ejercicio: ');
   ejLabel.setAttribute('for', 'select-ejercicio');
-  ejLabel.textContent = 'Ejercicio: ';
-  ejLabel.className = 'progreso-label';
   container.appendChild(ejLabel);
 
   const selectEj = document.createElement('select');
   selectEj.id = 'select-ejercicio';
   selectEj.className = 'select-ejercicio';
   selectEj.disabled = true;
-
   const optEjVacio = document.createElement('option');
   optEjVacio.value = '';
   optEjVacio.textContent = '— Seleccionar ejercicio —';
@@ -59,16 +193,13 @@ export async function render(state) {
   container.appendChild(selectEj);
 
   // ── Select Métrica ─────────────────────────────────────────────────────────
-  const metLabel = document.createElement('label');
+  const metLabel = cel('label', 'progreso-label', 'Métrica: ');
   metLabel.setAttribute('for', 'select-metrica');
-  metLabel.textContent = 'Métrica: ';
-  metLabel.className = 'progreso-label';
   container.appendChild(metLabel);
 
   const selectMet = document.createElement('select');
   selectMet.id = 'select-metrica';
   selectMet.className = 'select-metrica';
-
   for (const [key, val] of Object.entries(METRICAS_REGISTRY)) {
     const opt = document.createElement('option');
     opt.value = key;
@@ -87,36 +218,35 @@ export async function render(state) {
   metricaInfo.appendChild(metricaBody);
   container.appendChild(metricaInfo);
 
-  function actualizarInfoMetrica() {
+  const actualizarInfoMetrica = () => {
     metricaBody.textContent = '';
     const metrica = METRICAS_REGISTRY[selectMet.value];
     if (!metrica?.descripcion) return;
     for (const linea of metrica.descripcion) {
       metricaBody.appendChild(cel('p', 'metrica-info-p', linea));
     }
-  }
+  };
   actualizarInfoMetrica();
-
   container.appendChild(document.createElement('hr'));
 
+  const ejHeaderArea = cel('div', 'ej-header-area');
+  container.appendChild(ejHeaderArea);
+
   const graficaArea = cel('div', 'grafica-area');
-  graficaArea.id = 'grafica-area';
   container.appendChild(graficaArea);
 
   const historialArea = cel('div', 'historial-area');
-  historialArea.id = 'historial-area';
   container.appendChild(historialArea);
 
   // ── Cascada Rutina → Ejercicio ─────────────────────────────────────────────
   selectRut.addEventListener('change', async () => {
     selectEj.textContent = '';
     selectEj.appendChild(optEjVacio.cloneNode(true));
+    ejHeaderArea.textContent = '';
     graficaArea.textContent  = '';
     historialArea.textContent = '';
-
     const rutinaId = selectRut.value;
     if (!rutinaId) { selectEj.disabled = true; return; }
-
     const ejercicios = await getRutinaEjercicios(parseInt(rutinaId));
     for (const ej of ejercicios) {
       const opt = document.createElement('option');
@@ -127,57 +257,146 @@ export async function render(state) {
     selectEj.disabled = false;
   });
 
-  // ── Render gráfica/historial ───────────────────────────────────────────────
-  async function actualizarGrafica() {
-    graficaArea.textContent = '';
+  const actualizarGrafica = async () => {
+    ejHeaderArea.textContent  = '';
+    graficaArea.textContent   = '';
     historialArea.textContent = '';
     const ejId = parseInt(selectEj.value);
     if (!ejId) return;
 
-    const series  = await getSeriesPorEjercicio(ejId);
-    const datos   = prepararDatosProgreso(series);
-    const unit    = state.prefUnit || 'lb';
+    const series = await getSeriesPorEjercicio(ejId);
+    const metricaKey = selectMet.value;
+    const metrica = METRICAS_REGISTRY[metricaKey];
+    const datos = metrica.calcular(series);
 
-    graficaArea.appendChild(cel('p', 'grafica-titulo', 'Evolución últimas 5 sesiones:'));
+    // ── Cabecera del ejercicio ─────────────────────────────────────────────
+    const nombre = selectEj.options[selectEj.selectedIndex]?.textContent ?? '';
+    ejHeaderArea.appendChild(cel('p', 'ej-header-nombre', nombre.toUpperCase()));
 
-    const ultimas5 = datos.slice(-5).filter(d => d.barra !== null);
+    const datosEpley = prepararDatosProgreso(series);
+    const tendencia  = calcularTendencia(datosEpley);
+    const prDato     = datosEpley.length > 0
+      ? datosEpley.reduce((m, d) => d.max1RM > m.max1RM ? d : m)
+      : null;
 
-    if (ultimas5.length === 0) {
+    const meta = cel('div', 'ej-header-meta');
+    if (prDato) {
+      const prRow = cel('div', 'ej-header-fila');
+      prRow.appendChild(cel('span', 'ej-header-key', 'PR 1RM EST.'));
+      prRow.appendChild(cel('span', 'ej-header-val',
+        `~${Math.round(prDato.max1RM)} ${unit}  ${tendencia ? tendencia.icono : ''}`));
+      meta.appendChild(prRow);
+    }
+    if (series.length > 0) {
+      const ultima = series[series.length - 1];
+      const fechaStr = new Date(String(ultima.fecha).slice(0, 10) + 'T12:00:00Z')
+        .toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
+        .toUpperCase();
+      const ultimaRow = cel('div', 'ej-header-fila');
+      ultimaRow.appendChild(cel('span', 'ej-header-key', 'ÚLTIMA SESIÓN'));
+      ultimaRow.appendChild(cel('span', 'ej-header-val', fechaStr));
+      meta.appendChild(ultimaRow);
+    }
+    if (tendencia) {
+      const tendRow = cel('div', 'ej-header-fila');
+      tendRow.appendChild(cel('span', 'ej-header-key', 'TENDENCIA 4 SEM'));
+      const tendVal = cel('span', `ej-header-val ej-tendencia-${tendencia.clase}`,
+        `${tendencia.icono} ${tendencia.texto}`);
+      tendRow.appendChild(tendVal);
+      meta.appendChild(tendRow);
+    }
+    const totalRow = cel('div', 'ej-header-fila');
+    totalRow.appendChild(cel('span', 'ej-header-key', 'SESIONES TOTALES'));
+    totalRow.appendChild(cel('span', 'ej-header-val', String(datosEpley.length)));
+    meta.appendChild(totalRow);
+    ejHeaderArea.appendChild(meta);
+
+    // ── Gráfico últimas 10 sesiones ────────────────────────────────────────
+    graficaArea.appendChild(cel('p', 'grafica-titulo',
+      `Evolución últimas 10 sesiones · ${metrica.nombre}:`));
+
+    const ultimas10 = datos.slice(-10).filter(d => d.barra !== null);
+    if (ultimas10.length === 0) {
       graficaArea.appendChild(cel('p', 'grafica-sin-datos', 'Sin datos con peso registrado.'));
     }
-
-    for (const d of ultimas5) {
+    for (const d of ultimas10) {
       const fila = cel('div', 'grafica-fila');
       const fecha = new Date(d.fecha + 'T00:00:00')
         .toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+      const valorDisplay = d.max1RM !== undefined
+        ? `${Math.round(d.max1RM)} ${unit}`
+        : `${Math.round(d.valor)} ${unit}`;
       fila.appendChild(cel('span', 'grafica-fecha', `${fecha}: `));
-      fila.appendChild(cel('span', 'grafica-valor',
-        `${Math.round(d.max1RM)} ${unit}  `));
+      fila.appendChild(cel('span', 'grafica-valor', `${valorDisplay}  `));
       fila.appendChild(cel('span', 'grafica-barra', `|${d.barra}|`));
       graficaArea.appendChild(fila);
     }
 
+    // ── Historial últimas 15 entradas ──────────────────────────────────────
     historialArea.appendChild(cel('p', 'historial-titulo', 'Historial Reciente:'));
     const lista = cel('ul', 'historial-lista');
-
-    for (const d of [...datos].reverse()) {
+    for (const d of [...datosEpley].reverse().slice(0, 15)) {
       const fecha = new Date(d.fecha + 'T00:00:00')
         .toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
       const pesoRef = d.series[0] ? Number(d.series[0].peso) : null;
       const pesoStr = pesoRef === 0 ? 'BW' : pesoRef !== null ? `${pesoRef} ${unit}` : '';
       const repsStr = d.series.map(s => s.repeticiones).join(', ');
       const rm1Str  = d.max1RM > 0 ? ` (1RM Est: ${Math.round(d.max1RM)} ${unit})` : '';
-
-      const li = cel('li', 'historial-item',
-        `* ${fecha}: ${pesoStr} × ${repsStr}${rm1Str}`);
-      lista.appendChild(li);
+      lista.appendChild(cel('li', 'historial-item',
+        `* ${fecha}: ${pesoStr} × ${repsStr}${rm1Str}`));
     }
     historialArea.appendChild(lista);
-  }
+  };
 
   selectEj.addEventListener('change', actualizarGrafica);
-  selectMet.addEventListener('change', () => {
-    actualizarInfoMetrica();
-    actualizarGrafica();
-  });
+  selectMet.addEventListener('change', () => { actualizarInfoMetrica(); actualizarGrafica(); });
+}
+
+// ── Vista RÉCORDS ─────────────────────────────────────────────────────────────
+
+async function renderRecords(container, state) {
+  const unit = state.prefUnit || 'lb';
+  const prs = await getPR1RMPorEjercicio();
+
+  if (prs.length === 0) {
+    container.appendChild(cel('p', 'global-vacio', 'Aún no hay series registradas.'));
+    return;
+  }
+
+  const haceUnMes = new Date();
+  haceUnMes.setDate(haceUnMes.getDate() - 28);
+  const limiteReciente = haceUnMes.toLocaleDateString('en-CA');
+
+  // ── PRs logrados este mes ──────────────────────────────────────────────────
+  const recientes = prs.filter(r => r.fecha_pr >= limiteReciente);
+  if (recientes.length > 0) {
+    container.appendChild(cel('p', 'global-seccion-titulo', '↑ NUEVO PR ESTE MES'));
+    const listaR = cel('div', 'records-lista');
+    for (const pr of recientes) {
+      const fila = crearFilaPR(pr, unit, true);
+      listaR.appendChild(fila);
+    }
+    container.appendChild(listaR);
+  }
+
+  // ── Records personales todos ───────────────────────────────────────────────
+  container.appendChild(cel('p', 'global-seccion-titulo', 'RÉCORDS PERSONALES'));
+  const sortedByFecha = [...prs].sort((a, b) => b.fecha_pr.localeCompare(a.fecha_pr));
+  const lista = cel('div', 'records-lista');
+  for (const pr of sortedByFecha) {
+    const fila = crearFilaPR(pr, unit, pr.fecha_pr >= limiteReciente);
+    lista.appendChild(fila);
+  }
+  container.appendChild(lista);
+}
+
+function crearFilaPR(pr, unit, destacado) {
+  const fila = cel('div', destacado ? 'records-fila is-destacado' : 'records-fila');
+  const d = new Date(pr.fecha_pr + 'T12:00:00Z');
+  const fechaStr = d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).toUpperCase();
+  fila.appendChild(cel('span', 'records-nombre', pr.nombre));
+  fila.appendChild(cel('span', 'records-valor',
+    `~${Math.round(pr.pr_1rm)} ${unit}`));
+  fila.appendChild(cel('span', 'records-fecha', fechaStr));
+  return fila;
 }
