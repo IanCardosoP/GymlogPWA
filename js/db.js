@@ -61,6 +61,9 @@ export async function initDB(uri = 'idb://gym-log-db') {
 
     ALTER TABLE conf ADD COLUMN IF NOT EXISTS pref_acento TEXT NOT NULL DEFAULT 'verde';
 
+    ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_inicio TIMESTAMPTZ;
+    ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_fin    TIMESTAMPTZ;
+
     CREATE TABLE IF NOT EXISTS rutina_dias (
       id        SERIAL PRIMARY KEY,
       rutina_id INT REFERENCES rutinas(id) ON DELETE CASCADE,
@@ -90,10 +93,10 @@ export async function getEjercicios() {
   return result.rows;
 }
 
-export async function updateEjercicioNombre(ejId, nuevoNombre) {
+export async function updateEjercicioNombre(ejId, nuevoNombre, nuevoGrupo) {
   const result = await db.query(
-    'UPDATE ejercicios SET nombre = $1 WHERE id = $2 RETURNING *',
-    [nuevoNombre, ejId]
+    'UPDATE ejercicios SET nombre = $1, grupo_muscular = COALESCE($3, grupo_muscular) WHERE id = $2 RETURNING *',
+    [nuevoNombre, ejId, nuevoGrupo ?? null]
   );
   return result.rows[0];
 }
@@ -103,7 +106,35 @@ export async function deleteEjercicio(ejId) {
   await db.query('DELETE FROM ejercicios WHERE id = $1', [ejId]);
 }
 
+export async function removeEjercicioDeRutina(rutinaId, ejId) {
+  await db.query(
+    'DELETE FROM rutina_ejercicios WHERE rutina_id = $1 AND ejercicio_id = $2',
+    [rutinaId, ejId]
+  );
+  const { rows } = await db.query(
+    'SELECT 1 FROM rutina_ejercicios WHERE ejercicio_id = $1 LIMIT 1',
+    [ejId]
+  );
+  if (rows.length === 0) {
+    await db.query('DELETE FROM series WHERE ejercicio_id = $1', [ejId]);
+    await db.query('DELETE FROM ejercicios WHERE id = $1', [ejId]);
+  }
+}
+
 export async function saveEjercicio(nombre, grupoMuscular) {
+  const result = await db.query(
+    'INSERT INTO ejercicios (nombre, grupo_muscular) VALUES ($1, $2) RETURNING *',
+    [nombre, grupoMuscular]
+  );
+  return result.rows[0];
+}
+
+export async function getOrCreateEjercicio(nombre, grupoMuscular) {
+  const { rows } = await db.query(
+    'SELECT * FROM ejercicios WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+    [nombre]
+  );
+  if (rows.length > 0) return rows[0];
   const result = await db.query(
     'INSERT INTO ejercicios (nombre, grupo_muscular) VALUES ($1, $2) RETURNING *',
     [nombre, grupoMuscular]
@@ -204,6 +235,16 @@ export async function getSesionDelDia(fechaLocal) {
     [fechaLocal]
   );
   return result.rows[0] ?? null;
+}
+
+export async function touchSesionTiempo(sesionId) {
+  await db.query(
+    `UPDATE sesiones
+     SET hora_inicio = COALESCE(hora_inicio, NOW()),
+         hora_fin    = NOW()
+     WHERE id = $1`,
+    [sesionId]
+  );
 }
 
 // ── Series ────────────────────────────────────────────────────────────────────
@@ -394,11 +435,133 @@ export async function swapOrden(reId1, reId2) {
   ]);
 }
 
+export async function moverEjercicioAlFondo(rutinaId, reId) {
+  const rows = await getRutinaEjercicios(rutinaId);
+  const maxOrden = Math.max(...rows.map(r => Number(r.orden)));
+  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [maxOrden + 1, reId]);
+}
+
+export async function moverEjercicioArriba(rutinaId, reId) {
+  const rows = await getRutinaEjercicios(rutinaId);
+  const minOrden = Math.min(...rows.map(r => Number(r.orden)));
+  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [minOrden - 1, reId]);
+}
+
 export async function clearRutinaDia(dia) {
   await db.query(
     'UPDATE rutinas SET dia_sugerido = NULL WHERE dia_sugerido = $1',
     [Number(dia)]
   );
+}
+
+// ── Analítica y estadísticas ──────────────────────────────────────────────────
+
+export async function getEstadisticasGlobales(fechaHoy) {
+  const { rows: [stats] } = await db.query(`
+    SELECT
+      (SELECT COUNT(*)::int FROM sesiones) AS total_sesiones,
+      (SELECT COALESCE(SUM(peso * repeticiones)::float, 0) FROM series) AS volumen_total,
+      (SELECT COUNT(*)::int FROM sesiones
+       WHERE fecha >= $1::date - INTERVAL '27 days') AS sesiones_4_sem
+  `, [fechaHoy]);
+
+  const { rows: fechaRows } = await db.query(
+    `SELECT DISTINCT fecha::text FROM sesiones ORDER BY fecha DESC`
+  );
+
+  return {
+    total_sesiones: stats.total_sesiones,
+    volumen_total: stats.volumen_total,
+    sesiones_4_sem: stats.sesiones_4_sem,
+    fechas: fechaRows.map(r => r.fecha),
+  };
+}
+
+export async function getActividadSemanal(fechaHoy, semanas = 8) {
+  const { rows } = await db.query(`
+    SELECT
+      date_trunc('week', fecha)::date::text AS semana_lunes,
+      COUNT(*)::int AS sesiones
+    FROM sesiones
+    WHERE fecha >= $1::date - ($2 || ' weeks')::interval
+    GROUP BY semana_lunes
+    ORDER BY semana_lunes ASC
+  `, [fechaHoy, semanas]);
+  return rows;
+}
+
+export async function getVolumenPorGrupoMuscular(fechaHoy, semanas = 4) {
+  const { rows } = await db.query(`
+    SELECT
+      e.grupo_muscular,
+      COALESCE(SUM(s.peso * s.repeticiones)::float, 0) AS volumen
+    FROM series s
+    JOIN sesiones se ON se.id = s.sesion_id
+    JOIN ejercicios e ON e.id = s.ejercicio_id
+    WHERE se.fecha >= $1::date - ($2 || ' weeks')::interval
+    GROUP BY e.grupo_muscular
+    ORDER BY volumen DESC
+  `, [fechaHoy, semanas]);
+  return rows;
+}
+
+export async function getPR1RMPorEjercicio() {
+  const { rows } = await db.query(`
+    SELECT DISTINCT ON (e.id)
+      e.id AS ejercicio_id,
+      e.nombre,
+      e.grupo_muscular,
+      (s.peso * (1 + s.repeticiones / 30.0))::float AS pr_1rm,
+      se.fecha::text AS fecha_pr
+    FROM series s
+    JOIN sesiones se ON se.id = s.sesion_id
+    JOIN ejercicios e ON e.id = s.ejercicio_id
+    WHERE s.peso > 0
+    ORDER BY e.id, pr_1rm DESC
+  `);
+  return rows;
+}
+
+export async function getVolumenPorSesion(ejId) {
+  const { rows } = await db.query(`
+    SELECT
+      se.fecha::text AS fecha,
+      COALESCE(SUM(s.peso * s.repeticiones)::float, 0) AS volumen
+    FROM series s
+    JOIN sesiones se ON se.id = s.sesion_id
+    WHERE s.ejercicio_id = $1
+    GROUP BY se.fecha
+    ORDER BY se.fecha ASC
+  `, [ejId]);
+  return rows;
+}
+
+export async function getUltimasSesionesConSeries(n = 2) {
+  const { rows } = await db.query(
+    `SELECT
+       se.id            AS sesion_id,
+       se.fecha::text   AS fecha,
+       se.hora_inicio,
+       se.hora_fin,
+       r.nombre         AS rutina_nombre,
+       s.ejercicio_id,
+       e.nombre         AS ejercicio_nombre,
+       s.numero_serie,
+       s.peso,
+       s.repeticiones
+     FROM (
+       SELECT id, fecha, hora_inicio, hora_fin, rutina_id
+       FROM sesiones
+       ORDER BY fecha DESC, id DESC
+       LIMIT $1
+     ) se
+     LEFT JOIN rutinas    r ON r.id = se.rutina_id
+     LEFT JOIN series     s ON s.sesion_id = se.id
+     LEFT JOIN ejercicios e ON e.id = s.ejercicio_id
+     ORDER BY se.fecha DESC, se.id DESC, s.ejercicio_id, s.numero_serie ASC`,
+    [n]
+  );
+  return rows;
 }
 
 export async function getAllDataForExport() {

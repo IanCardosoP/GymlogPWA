@@ -1,4 +1,5 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
+import html2canvas from 'html2canvas';
 import { store, navigateTo } from '../app.js';
 import { calculateEpley1RM } from '../analitico.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
@@ -6,14 +7,17 @@ import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
-  saveSerie, deleteSerie, renumerarSeries,
+  saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo,
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
-  saveEjercicio, updateEjercicioNombre, deleteEjercicio,
-  updateActivoHoy, linkEjercicioToRutina, swapOrden,
+  saveEjercicio, getOrCreateEjercicio, getEjercicios,
+  updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
+  linkEjercicioToRutina, moverEjercicioAlFondo, moverEjercicioArriba,
 } from '../db.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
+
+const GRUPOS_MUSCULARES = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', 'GENERAL'];
 
 let clickAbort = null;
 
@@ -64,30 +68,14 @@ export async function render(state) {
     return;
   }
 
-  // Ejercicios activos (máx MAX_ROUTINE_SLOTS) + suplentes para swap
+  // Todos los ejercicios de la rutina, sin límite de slots
   const todos = await getRutinaEjercicios(rutinaHoy.id);
-  let activos   = todos.filter(e => e.activo_hoy);
-  let inactivos = todos.filter(e => !e.activo_hoy);
-
-  // Auto-promover inactivos si hay slots libres bajo MAX_ROUTINE_SLOTS
-  const slotsLibres = MAX_ROUTINE_SLOTS - activos.length;
-  if (slotsLibres > 0 && inactivos.length > 0) {
-    const aPromover = inactivos.slice(0, slotsLibres);
-    await Promise.all(aPromover.map(e => updateActivoHoy(e.id, true)));
-    activos   = [...activos, ...aPromover];
-    inactivos = inactivos.slice(aPromover.length);
-  }
-
-  const ejercicios    = activos.slice(0, MAX_ROUTINE_SLOTS);
-  const activosExtra  = activos.slice(MAX_ROUTINE_SLOTS);
-  const suplentesSwap = [...inactivos, ...activosExtra];
 
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
-  // Batch fetch — 2 queries para todos los slots en lugar de 2×N
-  const hasSuplentes = suplentesSwap.length > 0;
-  const ejIds = ejercicios.map(e => e.ejercicio_id);
+  // Batch fetch — 2 queries para todos los ejercicios
+  const ejIds = todos.map(e => e.ejercicio_id);
   const [todasSeriesHoy, ultimasPorEj] = await Promise.all([
     getTodasSeriesDeHoy(sesion?.id ?? null),
     getUltimasSeriesPorEjercicio(ejIds),
@@ -99,7 +87,7 @@ export async function render(state) {
   }
   const ultimaMap = new Map(ultimasPorEj.map(s => [s.ejercicio_id, s]));
 
-  const slots = [...ejercicios, null]; // null = slot vacío de añadir
+  const slots = [...todos, null]; // null = slot vacío de añadir
   const datosSlots = slots.map(ej => {
     if (!ej || !sesion) return { seriesHoy: [], ref: null };
     const seriesHoy = seriesHoyMap.get(ej.ejercicio_id) ?? [];
@@ -110,11 +98,16 @@ export async function render(state) {
   });
 
   for (let i = 0; i < slots.length; i++) {
-    lista.appendChild(construirBloque(slots[i], i, sesion, hasSuplentes, datosSlots[i]));
+    if (i === 8 && todos.length > 8) {
+      const sep = document.createElement('hr');
+      sep.className = 'diario-separador';
+      lista.appendChild(sep);
+    }
+    lista.appendChild(construirBloque(slots[i], i, sesion, datosSlots[i]));
   }
 
   // Botón fin
-  const finBtn = cel('button', 'btn-fin-entrenamiento', '[ FIN DEL ENTRENAMIENTO ]');
+  const finBtn = cel('button', 'btn-fin-entrenamiento', '[ RESUMEN DE LA SESIÓN ]');
   finBtn.dataset.action = 'fin';
   container.appendChild(finBtn);
 
@@ -149,37 +142,26 @@ export async function render(state) {
       return;
     }
 
-    if (e.target.closest('[data-action="fin"]')) { await mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios); return; }
+    if (e.target.closest('[data-action="fin"]')) { await mostrarPantallaFin(container, sesion, rutinaHoy, todos); return; }
     if (e.target.closest('[data-action="volver-diario"]')) { navigateTo('diario'); return; }
 
-    const btnDeleteSuplente = e.target.closest('.btn-delete-suplente');
-    if (btnDeleteSuplente) {
-      handleEliminarSuplente(btnDeleteSuplente);
-      return;
-    }
-
-    const suplanteItem = e.target.closest('.suplente-item');
-    if (suplanteItem && rutinaHoy) {
-      const nuevoReId    = parseInt(suplanteItem.dataset.reId);
-      const anteriorReId = parseInt(suplanteItem.dataset.anteriorReId);
-      await Promise.all([
-        updateActivoHoy(nuevoReId, true),
-        updateActivoHoy(anteriorReId, false),
-      ]);
-      await swapOrden(nuevoReId, anteriorReId);
+    const btnAbajo = e.target.closest('.btn-mover-abajo');
+    if (btnAbajo && rutinaHoy) {
+      await moverEjercicioAlFondo(rutinaHoy.id, parseInt(btnAbajo.dataset.reId));
       await render(state);
       return;
     }
 
-    const btnSwap = e.target.closest('.btn-swap');
-    if (btnSwap && rutinaHoy) {
-      await handleSuplentesDropdown(btnSwap, suplentesSwap);
+    const btnArriba = e.target.closest('.btn-mover-arriba');
+    if (btnArriba && rutinaHoy) {
+      await moverEjercicioArriba(rutinaHoy.id, parseInt(btnArriba.dataset.reId));
+      await render(state);
       return;
     }
 
     const btnConfirmar = e.target.closest('.btn-confirmar-eliminar');
     if (btnConfirmar) {
-      await deleteEjercicio(parseInt(btnConfirmar.dataset.ejId));
+      await removeEjercicioDeRutina(rutinaHoy.id, parseInt(btnConfirmar.dataset.ejId));
       await render(state);
       return;
     }
@@ -241,7 +223,7 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
 
 
 // Construcción DOM síncrona — recibe datos ya cargados, no hace queries
-function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = null } = {}) {
+function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
   const details = document.createElement('details');
   details.className = 'ejercicio-bloque';
   if (ej) details.dataset.progreso = Math.min(seriesHoy.length, 4);
@@ -262,15 +244,17 @@ function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = 
 
   summary.appendChild(nombreSpan);
 
-  if (ej && hasSuplentes) {
-    const btnSwap = cel('button', 'btn-swap', '[ ⇄ ]');
-    btnSwap.dataset.reId = ej.id;
-    summary.appendChild(btnSwap);
+  if (ej) {
+    const btnMover = cel('button', idx < 8 ? 'btn-mover-abajo' : 'btn-mover-arriba',
+                                   idx < 8 ? '[ ↓ ]' : '[ ↑ ]');
+    btnMover.dataset.reId = ej.id;
+    summary.appendChild(btnMover);
   }
 
   if (ej) {
     const btnEdit = cel('button', 'btn-edit', '[ ✎ ]');
-    btnEdit.dataset.ejId = ej.ejercicio_id;
+    btnEdit.dataset.ejId  = ej.ejercicio_id;
+    btnEdit.dataset.grupo = ej.grupo_muscular ?? 'GENERAL';
     summary.appendChild(btnEdit);
 
     const btnDelete = cel('button', 'btn-delete', '[ ✕ ]');
@@ -368,6 +352,7 @@ async function handleGuardar(btnGuardar, sesionId) {
   const reps = parseInt(repsStr, 10)  || 0;
 
   const serie = await saveSerie(sesionId, ejId, numSerie, peso, reps);
+  await touchSesionTiempo(sesionId);
 
   const displayPeso = peso === 0 ? 'BW' : String(peso);
   const displayReps = String(reps);
@@ -377,68 +362,143 @@ async function handleGuardar(btnGuardar, sesionId) {
   actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
 }
 
-async function handleSuplentesDropdown(btnSwap, suplentes) {
-  const details = btnSwap.closest('details');
-  const existente = details?.querySelector('.suplentes-dropdown');
-  if (existente) { existente.remove(); return; }
-  if (suplentes.length === 0) return;
-
-  if (details) details.open = true;
-
-  const reId = parseInt(btnSwap.dataset.reId);
-  const dropdown = cel('div', 'suplentes-dropdown');
-  dropdown.appendChild(cel('p', 'suplentes-titulo', 'Ejercicios Suplentes:'));
-
-  for (const sup of suplentes) {
-    const fila = cel('div', 'suplente-fila');
-
-    const btn = cel('button', 'suplente-item', sup.nombre);
-    btn.dataset.reId = sup.id;
-    btn.dataset.anteriorReId = reId;
-    fila.appendChild(btn);
-
-    const btnDel = cel('button', 'btn-delete-suplente', '[ ✕ ]');
-    btnDel.dataset.ejId   = sup.ejercicio_id;
-    btnDel.dataset.nombre = sup.nombre;
-    fila.appendChild(btnDel);
-
-    dropdown.appendChild(fila);
-  }
-
-  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
-  if (cuerpo) details.insertBefore(dropdown, cuerpo);
-  else details?.appendChild(dropdown);
-}
-
-function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
+async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   const nombreActual = nombreEl.textContent;
+  const ejerciciosExistentes = await getEjercicios();
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'ejercicio-nombre-input';
+  const wrapper   = cel('div', 'autocomplete-wrapper');
+  const fila      = cel('div', 'autocomplete-fila');
+  const input     = document.createElement('input');
+  input.type        = 'text';
+  input.className   = 'ejercicio-nombre-input';
   input.placeholder = 'Nombre del ejercicio...';
-  nombreEl.replaceWith(input);
+
+  const btnOk     = cel('button', 'btn-add-ok',     '✓');
+  const btnCancel = cel('button', 'btn-add-cancel',  '✕');
+  const lista     = cel('div',   'autocomplete-lista');
+
+  fila.appendChild(input);
+  fila.appendChild(btnOk);
+  fila.appendChild(btnCancel);
+  wrapper.appendChild(fila);
+  wrapper.appendChild(lista);
+  nombreEl.replaceWith(wrapper);
   input.focus();
 
-  const guardar = async () => {
-    const nuevoNombre = input.value.trim();
-    if (!nuevoNombre || !rutinaHoy) {
-      const span = cel('span', 'ejercicio-nombre', nombreActual);
-      input.replaceWith(span);
-      return;
-    }
-    const nuevoEj = await saveEjercicio(nuevoNombre, 'General');
+  let itemActivo = -1;
+  let eligiendo  = false;
+
+  const cancelar = () => {
+    ocultarLista();
+    wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
+  };
+
+  const ocultarLista = () => {
+    lista.classList.remove('is-visible');
+    itemActivo = -1;
+  };
+
+  const actualizarLista = () => {
+    const query = input.value.trim();
+    while (lista.firstChild) lista.removeChild(lista.firstChild);
+    itemActivo = -1;
+    if (!query) { ocultarLista(); return; }
+
+    const filtrados = ejerciciosExistentes.filter(
+      e => e.nombre.toLowerCase().includes(query.toLowerCase())
+    );
+    if (filtrados.length === 0) { ocultarLista(); return; }
+
+    filtrados.slice(0, 8).forEach(ej => {
+      const item = cel('div', 'autocomplete-item', ej.nombre);
+      item.addEventListener('mousedown', e => { e.preventDefault(); }); // evita blur en desktop
+      item.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
+      item.addEventListener('click', () => {
+        eligiendo = false;
+        ocultarLista();
+        vincular(ej.nombre, ej.grupo_muscular || 'GENERAL');
+      });
+      lista.appendChild(item);
+    });
+    lista.classList.add('is-visible');
+  };
+
+  const vincular = async (nombre, grupo) => {
+    ocultarLista();
+    const ej = await getOrCreateEjercicio(nombre, grupo);
     const todos = await getRutinaEjercicios(rutinaHoy.id);
-    await linkEjercicioToRutina(rutinaHoy.id, nuevoEj.id, todos.length + 1);
+    await linkEjercicioToRutina(rutinaHoy.id, ej.id, todos.length + 1);
     await render(state);
   };
 
-  input.addEventListener('blur', guardar);
+  const mostrarSelectorGrupo = (nombre) => {
+    ocultarLista();
+    const selector    = cel('div', 'grupo-muscular-selector');
+    selector.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
+    const filaBtns = cel('div', 'grupo-muscular-btns');
+    GRUPOS_MUSCULARES.forEach(grupo => {
+      const btn = cel('button', 'btn-grupo-muscular', grupo);
+      if (grupo === 'GENERAL') btn.classList.add('is-active');
+      btn.addEventListener('click', () => vincular(nombre, grupo));
+      filaBtns.appendChild(btn);
+    });
+    selector.appendChild(filaBtns);
+    const btnCancelGrupo = cel('button', 'btn-add-cancel', '✕');
+    btnCancelGrupo.addEventListener('click', () => {
+      selector.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
+    });
+    selector.appendChild(btnCancelGrupo);
+    wrapper.replaceWith(selector);
+  };
+
+  const procesarNombre = () => {
+    if (eligiendo) return;
+    ocultarLista();
+    const nuevoNombre = input.value.trim();
+    if (!nuevoNombre || !rutinaHoy) {
+      wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
+      return;
+    }
+    const existente = ejerciciosExistentes.find(
+      e => e.nombre.toLowerCase() === nuevoNombre.toLowerCase()
+    );
+    if (existente) {
+      vincular(nuevoNombre, existente.grupo_muscular || 'GENERAL');
+    } else {
+      mostrarSelectorGrupo(nuevoNombre);
+    }
+  };
+
+  // Botones OK y Cancelar: mousedown.preventDefault() evita blur en desktop;
+  // touchstart con flag evita que blur dispare procesarNombre antes que click en móvil.
+  [btnOk, btnCancel].forEach(btn => {
+    btn.addEventListener('mousedown', e => { e.preventDefault(); });
+    btn.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
+  });
+  btnOk.addEventListener('click', () => { eligiendo = false; procesarNombre(); });
+  btnCancel.addEventListener('click', () => { eligiendo = false; cancelar(); });
+
+  input.addEventListener('input', actualizarLista);
+  input.addEventListener('blur', procesarNombre);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-    if (e.key === 'Escape') {
-      const span = cel('span', 'ejercicio-nombre', nombreActual);
-      input.replaceWith(span);
+    const items = lista.querySelectorAll('.autocomplete-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      itemActivo = Math.min(itemActivo + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      itemActivo = Math.max(itemActivo - 1, -1);
+      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (itemActivo >= 0 && items[itemActivo]) {
+        items[itemActivo].click();
+      } else {
+        input.blur();
+      }
+    } else if (e.key === 'Escape') {
+      cancelar();
     }
   });
 }
@@ -451,8 +511,9 @@ function handleRenombrar(btnEdit, state) {
   details?.querySelector('.confirm-delete-panel')?.remove();
   if (existente) { existente.remove(); return; }
 
-  const ejId = parseInt(btnEdit.dataset.ejId);
+  const ejId        = parseInt(btnEdit.dataset.ejId);
   const nombreActual = details?.querySelector('.ejercicio-nombre')?.textContent ?? '';
+  const grupoActual  = btnEdit.dataset.grupo ?? 'GENERAL';
 
   const panel = cel('div', 'rename-panel');
 
@@ -463,15 +524,33 @@ function handleRenombrar(btnEdit, state) {
   input.setAttribute('aria-label', 'Nuevo nombre del ejercicio');
   panel.appendChild(input);
 
-  const btnGuardar = cel('button', 'btn-panel-accion', '[ GUARDAR ]');
+  let grupoSeleccionado = grupoActual;
+  const selectorDiv = cel('div', 'grupo-muscular-selector');
+  selectorDiv.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
+  const filaGrupos = cel('div', 'grupo-muscular-btns');
+  GRUPOS_MUSCULARES.forEach(g => {
+    const btn = cel('button', 'btn-grupo-muscular', g);
+    if (g === grupoActual) btn.classList.add('is-active');
+    btn.addEventListener('click', () => {
+      filaGrupos.querySelectorAll('.btn-grupo-muscular').forEach(b => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      grupoSeleccionado = g;
+    });
+    filaGrupos.appendChild(btn);
+  });
+  selectorDiv.appendChild(filaGrupos);
+  panel.appendChild(selectorDiv);
+
+  const btnGuardar  = cel('button', 'btn-panel-accion',  '[ GUARDAR ]');
   const btnCancelar = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
   panel.appendChild(btnGuardar);
   panel.appendChild(btnCancelar);
 
   const guardar = async () => {
     const nuevoNombre = input.value.trim();
-    if (!nuevoNombre || nuevoNombre === nombreActual) { panel.remove(); return; }
-    await updateEjercicioNombre(ejId, nuevoNombre);
+    if (!nuevoNombre) { panel.remove(); return; }
+    const grupoFinal = grupoSeleccionado !== grupoActual ? grupoSeleccionado : null;
+    await updateEjercicioNombre(ejId, nuevoNombre, grupoFinal);
     await render(state);
   };
 
@@ -516,25 +595,6 @@ function handleEliminar(btnDelete, state) {
   else details?.appendChild(panel);
 }
 
-function handleEliminarSuplente(btn) {
-  const fila = btn.closest('.suplente-fila');
-  const existente = fila.querySelector('.confirm-delete-panel');
-  if (existente) { existente.remove(); return; }
-
-  const ejId  = parseInt(btn.dataset.ejId);
-  const nombre = btn.dataset.nombre ?? '?';
-
-  const panel = cel('div', 'confirm-delete-panel');
-  panel.appendChild(cel('span', 'confirm-delete-msg', `¿Eliminar "${nombre}"?`));
-
-  const btnSi = cel('button', 'btn-confirmar-eliminar', '[ ELIMINAR ]');
-  btnSi.dataset.ejId = ejId;
-  const btnNo = cel('button', 'btn-cancelar-eliminar', '[ CANCELAR ]');
-  panel.appendChild(btnSi);
-  panel.appendChild(btnNo);
-
-  fila.appendChild(panel);
-}
 
 function mostrarPantallaDescanso(container) {
   const div = cel('div', 'diario-descanso');
@@ -568,9 +628,38 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   // Listener dedicado para la pantalla de fin — mismo patrón que render()
   clickAbort?.abort();
   clickAbort = new AbortController();
-  container.addEventListener('click', e => {
+  container.addEventListener('click', async e => {
     if (e.target.closest('[data-action="volver-diario"]')) {
       document.querySelector('.tab-btn[data-tab="diario"]')?.click();
+    }
+    if (e.target.closest('[data-action="compartir"]')) {
+      actionsRow.classList.add('fin-capture-hidden');
+      const wrapper = document.createElement('div');
+      wrapper.classList.add('fin-capture-wrapper');
+      finDiv.parentNode.insertBefore(wrapper, finDiv);
+      wrapper.appendChild(finDiv);
+      const canvas = await html2canvas(wrapper, {
+        scale: 2,
+        backgroundColor: '#000000',
+        useCORS: false,
+        logging: false,
+      });
+      wrapper.parentNode.insertBefore(finDiv, wrapper);
+      wrapper.parentNode.removeChild(wrapper);
+      actionsRow.classList.remove('fin-capture-hidden');
+
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      const file = new File([blob], 'gymlog-entrenamiento.png', { type: 'image/png' });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Mi entrenamiento — GymLog' });
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'gymlog-entrenamiento.png';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
     }
   }, { signal: clickAbort.signal });
 
@@ -586,6 +675,11 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   const fecha = new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
   finDiv.appendChild(cel('p', 'fin-fecha', fecha));
   if (rutinaHoy) finDiv.appendChild(cel('p', 'fin-rutina', rutinaHoy.nombre.toUpperCase()));
+
+  // Re-fetch sesión para obtener hora_inicio y hora_fin actualizadas (el objeto closure puede ser stale)
+  const sesionFresh = sesion
+    ? await getSesionDelDia(new Date().toLocaleDateString('en-CA'))
+    : null;
 
   // Traer TODAS las series de la sesión (incluyendo ejercicios intercambiados en caliente)
   const todasLasFilas = sesion ? await getSeriesConEjerciciosBySesion(sesion.id) : [];
@@ -603,7 +697,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
 
   const tabla = cel('div', 'fin-tabla');
   tabla.appendChild(cel('span', 'fin-th', 'EJERCICIO'));
-  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'SERIES'));
+  tabla.appendChild(cel('span', 'fin-th fin-th-r', 'SETS'));
   tabla.appendChild(cel('span', 'fin-th fin-th-r', 'PESO'));
   tabla.appendChild(cel('span', 'fin-th fin-th-r', '1RM'));
   tabla.appendChild(cel('div', 'fin-sep'));
@@ -626,26 +720,44 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
 
   tabla.appendChild(cel('div', 'fin-sep'));
   const totalesEl = cel('div', 'fin-totales');
-  totalesEl.textContent = `${conSeries.length} EJERC · ${totalSeries} SERIES`;
+  let duracionStr = '';
+  if (sesionFresh?.hora_inicio && sesionFresh?.hora_fin) {
+    const diffMs   = new Date(sesionFresh.hora_fin) - new Date(sesionFresh.hora_inicio);
+    const totalMin = Math.floor(diffMs / 60000);
+    const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+    const mm = String(totalMin % 60).padStart(2, '0');
+    duracionStr = ` · ${hh}h:${mm}m`;
+  }
+  totalesEl.textContent = `${conSeries.length} EJERC · ${totalSeries} SERIES${duracionStr}`;
   tabla.appendChild(totalesEl);
   finDiv.appendChild(tabla);
 
   const cta = cel('div', 'fin-cta');
   const qr  = document.createElement('img');
-  qr.src    = import.meta.env.BASE_URL + 'assets/appUrl.jpg';
+  qr.src    = import.meta.env.BASE_URL + 'assets/appUrl.png';
   qr.alt    = 'QR GymLog PWA';
   qr.className = 'fin-qr';
   cta.appendChild(qr);
   const texto = cel('div', 'fin-cta-texto');
   texto.appendChild(cel('p', 'fin-cta-titulo', 'GYMLOG PWA'));
-  texto.appendChild(cel('p', null, 'Sin cuenta · Offline · Gratis para siempre'));
+  texto.appendChild(cel('p', null, 'Gratis siempre · Soberanía y Privacidad'));
+  texto.appendChild(cel('p', null, 'Multiplataforma · Sin cuenta · Offline'));
   texto.appendChild(cel('p', null, 'Lleva tu registro de entrenamiento en el móvil'));
   cta.appendChild(texto);
   finDiv.appendChild(cta);
 
+  const actionsRow = cel('div', 'btn-fin-actions');
+
   const btnVolver = cel('button', 'btn-fin-volver', '[ VOLVER AL DIARIO ]');
   btnVolver.dataset.action = 'volver-diario';
-  finDiv.appendChild(btnVolver);
+  actionsRow.appendChild(btnVolver);
+
+  const btnCompartir = cel('button', 'btn-fin-compartir');
+  btnCompartir.dataset.action = 'compartir';
+  btnCompartir.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>`;
+  actionsRow.appendChild(btnCompartir);
+
+  finDiv.appendChild(actionsRow);
 
   container.appendChild(finDiv);
 }

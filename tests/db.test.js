@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   initDB,
-  getEjercicios, saveEjercicio, updateEjercicioNombre, deleteEjercicio,
+  getEjercicios, saveEjercicio, getOrCreateEjercicio, updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
+  moverEjercicioAlFondo, moverEjercicioArriba, linkEjercicioToRutina,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit, updatePrefAcento,
+  getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
+  getPR1RMPorEjercicio, getVolumenPorSesion,
 } from '../js/db.js';
 
 beforeEach(async () => {
@@ -30,6 +33,20 @@ describe('ejercicios', () => {
     expect(updated.nombre).toBe('Press Banca Inclinado');
     const todos = await getEjercicios();
     expect(todos[0].nombre).toBe('Press Banca Inclinado');
+  });
+
+  it('updateEjercicioNombre sin tercer argumento no cambia grupo_muscular', async () => {
+    const ej = await saveEjercicio('Curl Bíceps', 'BRAZO');
+    const updated = await updateEjercicioNombre(ej.id, 'Curl Martillo');
+    expect(updated.nombre).toBe('Curl Martillo');
+    expect(updated.grupo_muscular).toBe('BRAZO');
+  });
+
+  it('updateEjercicioNombre con tercer argumento actualiza nombre y grupo_muscular', async () => {
+    const ej = await saveEjercicio('Peso Muerto', 'GENERAL');
+    const updated = await updateEjercicioNombre(ej.id, 'Peso Muerto Rumano', 'ESPALDA');
+    expect(updated.nombre).toBe('Peso Muerto Rumano');
+    expect(updated.grupo_muscular).toBe('ESPALDA');
   });
 
   it('deleteEjercicio elimina el ejercicio, sus series y su vínculo con rutinas', async () => {
@@ -120,6 +137,37 @@ describe('rutinas', () => {
     const actualEj2 = lista.find(r => r.ejercicio_id === ej2.id);
     expect(actualEj1.orden).toBe(9);
     expect(actualEj2.orden).toBe(1);
+  });
+
+  it('moverEjercicioAlFondo pone el ejercicio al final de la lista', async () => {
+    const rutina = await saveRutina('Pierna', 2);
+    const ej1 = await saveEjercicio('Sentadilla', 'PIERNA');
+    const ej2 = await saveEjercicio('Leg Press',  'PIERNA');
+    const ej3 = await saveEjercicio('Prensa',     'PIERNA');
+    await linkEjercicioToRutina(rutina.id, ej1.id, 1);
+    await linkEjercicioToRutina(rutina.id, ej2.id, 2);
+    const { id: re3 } = await linkEjercicioToRutina(rutina.id, ej3.id, 3);
+
+    await moverEjercicioAlFondo(rutina.id, re3);  // ya está al fondo; muévelo "más abajo"
+    // Ahora mover el primero al fondo
+    const lista0 = await getRutinaEjercicios(rutina.id);
+    await moverEjercicioAlFondo(rutina.id, lista0[0].id);
+    const lista = await getRutinaEjercicios(rutina.id);
+    expect(lista[lista.length - 1].ejercicio_id).toBe(ej1.id);
+  });
+
+  it('moverEjercicioArriba pone el ejercicio al principio de la lista', async () => {
+    const rutina = await saveRutina('Espalda', 3);
+    const ej1 = await saveEjercicio('Dominadas', 'ESPALDA');
+    const ej2 = await saveEjercicio('Remo T',    'ESPALDA');
+    const ej3 = await saveEjercicio('Jalón',     'ESPALDA');
+    await linkEjercicioToRutina(rutina.id, ej1.id, 1);
+    await linkEjercicioToRutina(rutina.id, ej2.id, 2);
+    const { id: re3 } = await linkEjercicioToRutina(rutina.id, ej3.id, 3);
+
+    await moverEjercicioArriba(rutina.id, re3);
+    const lista = await getRutinaEjercicios(rutina.id);
+    expect(lista[0].ejercicio_id).toBe(ej3.id);
   });
 
   it('clearRutinaDia deja el día sin rutina asignada', async () => {
@@ -335,5 +383,253 @@ describe('getSeriesDeSesionEjercicio', () => {
 
     const result = await getSeriesDeSesionEjercicio(sesion.id, ej.id);
     expect(result).toEqual([]);
+  });
+});
+
+// ── getOrCreateEjercicio ──────────────────────────────────────────────────────
+
+describe('getOrCreateEjercicio', () => {
+  it('crea un ejercicio nuevo si el nombre no existe', async () => {
+    const ej = await getOrCreateEjercicio('Sentadilla', 'Pierna');
+    expect(ej.id).toBeDefined();
+    expect(ej.nombre).toBe('Sentadilla');
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+
+  it('retorna el existente en match exacto sin crear duplicado', async () => {
+    const original = await saveEjercicio('Press Banca', 'Pecho');
+    const result   = await getOrCreateEjercicio('Press Banca', 'Pecho');
+    expect(result.id).toBe(original.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+
+  it('retorna el existente en match case-insensitive', async () => {
+    const original = await saveEjercicio('Press Banca', 'Pecho');
+    const result   = await getOrCreateEjercicio('press BANCA', 'Pecho');
+    expect(result.id).toBe(original.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+
+  it('no crea duplicado si se llama dos veces con el mismo nombre', async () => {
+    await getOrCreateEjercicio('Extensión de pierna', 'Pierna');
+    await getOrCreateEjercicio('Extensión de pierna', 'Pierna');
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+});
+
+// ── removeEjercicioDeRutina ───────────────────────────────────────────────────
+
+describe('removeEjercicioDeRutina', () => {
+  it('elimina el ejercicio del diccionario si no queda en ninguna rutina', async () => {
+    const db     = (await import('../js/db.js')).getDB();
+    const rutina = await saveRutina('Pierna', 3);
+    const ej     = await saveEjercicio('Extensión de pierna', 'Pierna');
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutina.id, ej.id]
+    );
+    await removeEjercicioDeRutina(rutina.id, ej.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(0);
+  });
+
+  it('mantiene el ejercicio en el diccionario si aún vive en otra rutina', async () => {
+    const db      = (await import('../js/db.js')).getDB();
+    const rutinaA = await saveRutina('Pierna', 3);
+    const rutinaB = await saveRutina('Pierna Ligera', 6);
+    const ej      = await saveEjercicio('Extensión de pierna', 'Pierna');
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutinaA.id, ej.id]
+    );
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutinaB.id, ej.id]
+    );
+    await removeEjercicioDeRutina(rutinaA.id, ej.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+    const reB = await getRutinaEjercicios(rutinaB.id);
+    expect(reB.some(r => r.ejercicio_id === ej.id)).toBe(true);
+  });
+
+  it('elimina también las series cuando el ejercicio queda huérfano', async () => {
+    const db     = (await import('../js/db.js')).getDB();
+    const rutina = await saveRutina('Pierna', 3);
+    const ej     = await saveEjercicio('Extensión de pierna', 'Pierna');
+    const sesion = await saveSesion('2026-06-21', rutina.id, null);
+    await saveSerie(sesion.id, ej.id, 1, 50, 12);
+    await db.query(
+      'INSERT INTO rutina_ejercicios (rutina_id, ejercicio_id, orden) VALUES ($1, $2, 1)',
+      [rutina.id, ej.id]
+    );
+    await removeEjercicioDeRutina(rutina.id, ej.id);
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(0);
+    const series = await getSeriesPorEjercicio(ej.id);
+    expect(series.length).toBe(0);
+  });
+});
+
+// ── getEstadisticasGlobales ───────────────────────────────────────────────────
+
+describe('getEstadisticasGlobales', () => {
+  it('retorna ceros con la BD vacía', async () => {
+    const stats = await getEstadisticasGlobales('2026-06-21');
+    expect(stats.total_sesiones).toBe(0);
+    expect(stats.volumen_total).toBe(0);
+    expect(stats.sesiones_4_sem).toBe(0);
+    expect(stats.fechas).toEqual([]);
+  });
+
+  it('cuenta sesiones totales correctamente', async () => {
+    await saveSesion('2026-06-19', null, null);
+    await saveSesion('2026-06-20', null, null);
+    const stats = await getEstadisticasGlobales('2026-06-21');
+    expect(stats.total_sesiones).toBe(2);
+  });
+
+  it('suma el volumen de todas las series', async () => {
+    const ej  = await saveEjercicio('Press Banca', 'PECHO');
+    const ses = await saveSesion('2026-06-21', null, null);
+    await saveSerie(ses.id, ej.id, 1, 80, 10);   // 800
+    await saveSerie(ses.id, ej.id, 2, 80, 8);    // 640 → total 1440
+    const stats = await getEstadisticasGlobales('2026-06-21');
+    expect(stats.volumen_total).toBeCloseTo(1440);
+  });
+
+  it('devuelve las fechas de sesiones en orden descendente', async () => {
+    await saveSesion('2026-06-19', null, null);
+    await saveSesion('2026-06-21', null, null);
+    const stats = await getEstadisticasGlobales('2026-06-21');
+    expect(stats.fechas[0]).toBe('2026-06-21');
+    expect(stats.fechas[1]).toBe('2026-06-19');
+  });
+
+  it('sesiones_4_sem solo cuenta sesiones en los últimos 28 días', async () => {
+    await saveSesion('2026-05-01', null, null); // fuera del rango
+    await saveSesion('2026-06-10', null, null); // dentro
+    await saveSesion('2026-06-21', null, null); // dentro
+    const stats = await getEstadisticasGlobales('2026-06-21');
+    expect(stats.sesiones_4_sem).toBe(2);
+    expect(stats.total_sesiones).toBe(3);
+  });
+});
+
+// ── getActividadSemanal ───────────────────────────────────────────────────────
+
+describe('getActividadSemanal', () => {
+  it('retorna array vacío sin sesiones', async () => {
+    const rows = await getActividadSemanal('2026-06-21', 8);
+    expect(rows).toEqual([]);
+  });
+
+  it('agrupa sesiones por semana (lunes)', async () => {
+    await saveSesion('2026-06-16', null, null); // lunes
+    await saveSesion('2026-06-17', null, null); // martes — misma semana
+    await saveSesion('2026-06-23', null, null); // lunes siguiente
+    const rows = await getActividadSemanal('2026-06-23', 8);
+    expect(rows.length).toBe(2);
+    expect(rows[0].sesiones).toBe(2);
+    expect(rows[1].sesiones).toBe(1);
+  });
+});
+
+// ── getVolumenPorGrupoMuscular ────────────────────────────────────────────────
+
+describe('getVolumenPorGrupoMuscular', () => {
+  it('retorna array vacío sin series', async () => {
+    const rows = await getVolumenPorGrupoMuscular('2026-06-21', 4);
+    expect(rows).toEqual([]);
+  });
+
+  it('agrupa volumen por grupo muscular', async () => {
+    const ejPecho  = await saveEjercicio('Press Banca', 'PECHO');
+    const ejPierna = await saveEjercicio('Sentadilla', 'PIERNA');
+    const ses = await saveSesion('2026-06-21', null, null);
+    await saveSerie(ses.id, ejPecho.id, 1, 80, 10);   // PECHO 800
+    await saveSerie(ses.id, ejPierna.id, 1, 100, 5);  // PIERNA 500
+
+    const rows = await getVolumenPorGrupoMuscular('2026-06-21', 4);
+    const pecho  = rows.find(r => r.grupo_muscular === 'PECHO');
+    const pierna = rows.find(r => r.grupo_muscular === 'PIERNA');
+    expect(pecho?.volumen).toBeCloseTo(800);
+    expect(pierna?.volumen).toBeCloseTo(500);
+  });
+
+  it('excluye sesiones fuera del rango de semanas', async () => {
+    const ej  = await saveEjercicio('Press', 'PECHO');
+    const old = await saveSesion('2026-04-01', null, null);
+    await saveSerie(old.id, ej.id, 1, 100, 10); // fuera del rango
+
+    const rows = await getVolumenPorGrupoMuscular('2026-06-21', 4);
+    expect(rows).toEqual([]);
+  });
+});
+
+// ── getPR1RMPorEjercicio ──────────────────────────────────────────────────────
+
+describe('getPR1RMPorEjercicio', () => {
+  it('retorna array vacío sin series', async () => {
+    const rows = await getPR1RMPorEjercicio();
+    expect(rows).toEqual([]);
+  });
+
+  it('retorna el mejor 1RM por ejercicio', async () => {
+    const ej  = await saveEjercicio('Press Banca', 'PECHO');
+    const s1  = await saveSesion('2026-06-01', null, null);
+    const s2  = await saveSesion('2026-06-15', null, null);
+    await saveSerie(s1.id, ej.id, 1, 80, 10);  // 1RM = 80*(1+10/30) ≈ 106.67
+    await saveSerie(s2.id, ej.id, 1, 90, 5);   // 1RM = 90*(1+5/30) ≈ 105
+    const rows = await getPR1RMPorEjercicio();
+    expect(rows.length).toBe(1);
+    expect(rows[0].pr_1rm).toBeGreaterThan(105);
+    expect(rows[0].fecha_pr).toBe('2026-06-01'); // fecha donde ocurrió el PR
+  });
+
+  it('ignora series de peso cero (BW)', async () => {
+    const ej  = await saveEjercicio('Dominadas', 'ESPALDA');
+    const ses = await saveSesion('2026-06-21', null, null);
+    await saveSerie(ses.id, ej.id, 1, 0, 10); // BW — debe ignorarse
+    const rows = await getPR1RMPorEjercicio();
+    expect(rows).toEqual([]);
+  });
+});
+
+// ── getVolumenPorSesion ───────────────────────────────────────────────────────
+
+describe('getVolumenPorSesion', () => {
+  it('retorna array vacío sin series', async () => {
+    const ej = await saveEjercicio('Press Banca', 'PECHO');
+    const rows = await getVolumenPorSesion(ej.id);
+    expect(rows).toEqual([]);
+  });
+
+  it('suma volumen por sesión para el ejercicio dado', async () => {
+    const ej = await saveEjercicio('Press Banca', 'PECHO');
+    const s1 = await saveSesion('2026-06-01', null, null);
+    const s2 = await saveSesion('2026-06-08', null, null);
+    await saveSerie(s1.id, ej.id, 1, 80, 10); // 800
+    await saveSerie(s1.id, ej.id, 2, 80, 8);  // 640 → 1440
+    await saveSerie(s2.id, ej.id, 1, 85, 8);  // 680
+    const rows = await getVolumenPorSesion(ej.id);
+    expect(rows.length).toBe(2);
+    expect(rows[0].volumen).toBeCloseTo(1440);
+    expect(rows[1].volumen).toBeCloseTo(680);
+  });
+
+  it('no incluye series de otros ejercicios', async () => {
+    const ej1 = await saveEjercicio('Press Banca', 'PECHO');
+    const ej2 = await saveEjercicio('Aperturas', 'PECHO');
+    const ses = await saveSesion('2026-06-21', null, null);
+    await saveSerie(ses.id, ej1.id, 1, 80, 10);
+    await saveSerie(ses.id, ej2.id, 1, 30, 12);
+    const rows = await getVolumenPorSesion(ej1.id);
+    expect(rows.length).toBe(1);
+    expect(rows[0].volumen).toBeCloseTo(800);
   });
 });

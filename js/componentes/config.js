@@ -117,17 +117,17 @@ export async function render(state) {
   secCSV.appendChild(cel('h3', 'config-titulo', '[3. GESTIÓN DE DATOS]'));
 
   const btnExportar = cel('button', 'btn-exportar-csv',
-    '[ Exportar backup completo (.json) ]');
+    '[ Exportar backup completo (.json.gz) ]');
   secCSV.appendChild(btnExportar);
 
   const inputArchivo = document.createElement('input');
   inputArchivo.type = 'file';
   inputArchivo.className = 'input-archivo';
-  inputArchivo.accept = '.json';
+  inputArchivo.accept = '.json,.json.gz,.gz';
   secCSV.appendChild(inputArchivo);
 
   const btnImportar = cel('button', 'btn-importar-csv',
-    '[ Restaurar desde backup (.json) ]');
+    '[ Restaurar desde backup (.json.gz / .json) ]');
   secCSV.appendChild(btnImportar);
 
   const resultadoEl = cel('p', 'resultado-importacion');
@@ -164,9 +164,9 @@ export async function render(state) {
   const secReset = cel('section', 'config-seccion');
   secReset.appendChild(cel('h3', 'config-titulo', '[6. ELIMINAR DATOS]'));
   secReset.appendChild(cel('p', 'reset-advertencia',
-    '⚠ Los datos son tuyos y viven en tu dispositivo.' +
+    '⚠ Los datos son tuyos y viven en tu dispositivo. ' +
     'Esta acción elimina toda la base de datos, caché y datos de la app. ' +
-    'Recomendamos exportar un backup .json antes de continuar.'));
+    'Recomendamos exportar un backup .json.gz antes de continuar.'));
   const btnReset = cel('button', 'btn-reset-datos', '[ ⚠ ELIMINAR DATOS ]');
   secReset.appendChild(btnReset);
   container.appendChild(secReset);
@@ -347,13 +347,38 @@ export async function render(state) {
 
   btnExportar.addEventListener('click', async () => {
     const datos = await getAllDataForExport();
-    exportarBackup(datos);
+    const json = exportarBackup(datos);
+
+    const jsonBytes = new TextEncoder().encode(json);
+    const compressedStream = new Blob([jsonBytes]).stream()
+      .pipeThrough(new CompressionStream('gzip'));
+    const blob = await new Response(compressedStream).blob();
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gymlog-backup-${new Date().toLocaleDateString('en-CA')}.json.gz`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   });
 
   btnImportar.addEventListener('click', async () => {
     const archivo = inputArchivo.files?.[0];
-    if (!archivo) { resultadoEl.textContent = 'Selecciona un archivo .json primero.'; return; }
-    const texto = await archivo.text();
+    if (!archivo) { resultadoEl.textContent = 'Selecciona un archivo primero.'; return; }
+
+    const buf = await archivo.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let texto;
+
+    if (bytes[0] === 0x1F && bytes[1] === 0x8B) {
+      const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+      texto = await new Response(stream).text();
+    } else {
+      texto = new TextDecoder().decode(buf);
+    }
+
     const r = await importarBackup(texto, getDB());
     if (r.error) {
       resultadoEl.textContent = `Error: ${r.error}`;
