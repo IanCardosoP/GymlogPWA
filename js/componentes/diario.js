@@ -420,33 +420,61 @@ async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   const nombreActual = nombreEl.textContent;
   const ejerciciosExistentes = await getEjercicios();
 
-  const datalist = document.createElement('datalist');
-  datalist.id = 'ejercicios-datalist';
-  ejerciciosExistentes.forEach(ej => {
-    const opt = document.createElement('option');
-    opt.value = ej.nombre;
-    datalist.appendChild(opt);
-  });
-  document.body.appendChild(datalist);
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'ejercicio-nombre-input';
+  const wrapper = cel('div', 'autocomplete-wrapper');
+  const input   = document.createElement('input');
+  input.type        = 'text';
+  input.className   = 'ejercicio-nombre-input';
   input.placeholder = 'Nombre del ejercicio...';
-  input.setAttribute('list', 'ejercicios-datalist');
-  nombreEl.replaceWith(input);
+
+  const lista = cel('div', 'autocomplete-lista');
+  wrapper.appendChild(input);
+  wrapper.appendChild(lista);
+  nombreEl.replaceWith(wrapper);
   input.focus();
 
+  let itemActivo = -1;
+  let eligiendo  = false;
+
+  const ocultarLista = () => {
+    lista.classList.remove('is-visible');
+    itemActivo = -1;
+  };
+
+  const actualizarLista = () => {
+    const query = input.value.trim();
+    while (lista.firstChild) lista.removeChild(lista.firstChild);
+    itemActivo = -1;
+    if (!query) { ocultarLista(); return; }
+
+    const filtrados = ejerciciosExistentes.filter(
+      e => e.nombre.toLowerCase().includes(query.toLowerCase())
+    );
+    if (filtrados.length === 0) { ocultarLista(); return; }
+
+    filtrados.slice(0, 8).forEach(ej => {
+      const item = cel('div', 'autocomplete-item', ej.nombre);
+      item.addEventListener('mousedown', e => { e.preventDefault(); }); // evita blur en desktop
+      item.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
+      item.addEventListener('click', () => {
+        eligiendo = false;
+        ocultarLista();
+        vincular(ej.nombre, ej.grupo_muscular || 'GENERAL');
+      });
+      lista.appendChild(item);
+    });
+    lista.classList.add('is-visible');
+  };
+
   const vincular = async (nombre, grupo) => {
-    datalist.remove();
+    ocultarLista();
     const ej = await getOrCreateEjercicio(nombre, grupo);
     const todos = await getRutinaEjercicios(rutinaHoy.id);
     await linkEjercicioToRutina(rutinaHoy.id, ej.id, todos.length + 1);
     await render(state);
   };
 
-  const mostrarSelectorGrupo = (nombre, anchorEl) => {
-    datalist.remove();
+  const mostrarSelectorGrupo = (nombre) => {
+    ocultarLista();
     const selector = cel('div', 'grupo-muscular-selector');
     selector.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
     const fila = cel('div', 'grupo-muscular-btns');
@@ -457,14 +485,15 @@ async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
       fila.appendChild(btn);
     });
     selector.appendChild(fila);
-    anchorEl.replaceWith(selector);
+    wrapper.replaceWith(selector);
   };
 
   const procesarNombre = () => {
+    if (eligiendo) return;
+    ocultarLista();
     const nuevoNombre = input.value.trim();
     if (!nuevoNombre || !rutinaHoy) {
-      datalist.remove();
-      input.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
+      wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
       return;
     }
     const existente = ejerciciosExistentes.find(
@@ -473,16 +502,32 @@ async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
     if (existente) {
       vincular(nuevoNombre, existente.grupo_muscular || 'GENERAL');
     } else {
-      mostrarSelectorGrupo(nuevoNombre, input);
+      mostrarSelectorGrupo(nuevoNombre);
     }
   };
 
+  input.addEventListener('input', actualizarLista);
   input.addEventListener('blur', procesarNombre);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-    if (e.key === 'Escape') {
-      datalist.remove();
-      input.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
+    const items = lista.querySelectorAll('.autocomplete-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      itemActivo = Math.min(itemActivo + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      itemActivo = Math.max(itemActivo - 1, -1);
+      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (itemActivo >= 0 && items[itemActivo]) {
+        items[itemActivo].click();
+      } else {
+        input.blur();
+      }
+    } else if (e.key === 'Escape') {
+      ocultarLista();
+      wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
     }
   });
 }

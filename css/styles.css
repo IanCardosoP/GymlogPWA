@@ -1171,4 +1171,46 @@ input.is-saved::placeholder {
   display: block;
   margin-top: 4px;
 }
+
+/* Autocomplete custom (reemplaza <datalist> para compatibilidad móvil) */
+.autocomplete-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.autocomplete-lista {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background-color: var(--color-fondo-alt);
+  border: 1px solid var(--color-acento);
+  border-top: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.autocomplete-lista.is-visible {
+  display: block;
+}
+
+.autocomplete-item {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--color-texto);
+  cursor: pointer;
+  border-bottom: 1px solid #222;
+  font-family: var(--font-mono);
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item.is-active {
+  background-color: #1a2a1a;
+  color: var(--color-acento);
+}
 .config-footer-link:hover { color: var(--color-acento); }
