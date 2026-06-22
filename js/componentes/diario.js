@@ -12,7 +12,7 @@ import {
   getSeriesConEjerciciosBySesion,
   saveEjercicio, getOrCreateEjercicio, getEjercicios,
   updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
-  updateActivoHoy, linkEjercicioToRutina, swapOrden,
+  linkEjercicioToRutina, moverEjercicioAlFondo, moverEjercicioArriba,
 } from '../db.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
@@ -68,30 +68,14 @@ export async function render(state) {
     return;
   }
 
-  // Ejercicios activos (máx MAX_ROUTINE_SLOTS) + suplentes para swap
+  // Todos los ejercicios de la rutina, sin límite de slots
   const todos = await getRutinaEjercicios(rutinaHoy.id);
-  let activos   = todos.filter(e => e.activo_hoy);
-  let inactivos = todos.filter(e => !e.activo_hoy);
-
-  // Auto-promover inactivos si hay slots libres bajo MAX_ROUTINE_SLOTS
-  const slotsLibres = MAX_ROUTINE_SLOTS - activos.length;
-  if (slotsLibres > 0 && inactivos.length > 0) {
-    const aPromover = inactivos.slice(0, slotsLibres);
-    await Promise.all(aPromover.map(e => updateActivoHoy(e.id, true)));
-    activos   = [...activos, ...aPromover];
-    inactivos = inactivos.slice(aPromover.length);
-  }
-
-  const ejercicios    = activos.slice(0, MAX_ROUTINE_SLOTS);
-  const activosExtra  = activos.slice(MAX_ROUTINE_SLOTS);
-  const suplentesSwap = [...inactivos, ...activosExtra];
 
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
-  // Batch fetch — 2 queries para todos los slots en lugar de 2×N
-  const hasSuplentes = suplentesSwap.length > 0;
-  const ejIds = ejercicios.map(e => e.ejercicio_id);
+  // Batch fetch — 2 queries para todos los ejercicios
+  const ejIds = todos.map(e => e.ejercicio_id);
   const [todasSeriesHoy, ultimasPorEj] = await Promise.all([
     getTodasSeriesDeHoy(sesion?.id ?? null),
     getUltimasSeriesPorEjercicio(ejIds),
@@ -103,7 +87,7 @@ export async function render(state) {
   }
   const ultimaMap = new Map(ultimasPorEj.map(s => [s.ejercicio_id, s]));
 
-  const slots = [...ejercicios, null]; // null = slot vacío de añadir
+  const slots = [...todos, null]; // null = slot vacío de añadir
   const datosSlots = slots.map(ej => {
     if (!ej || !sesion) return { seriesHoy: [], ref: null };
     const seriesHoy = seriesHoyMap.get(ej.ejercicio_id) ?? [];
@@ -114,7 +98,7 @@ export async function render(state) {
   });
 
   for (let i = 0; i < slots.length; i++) {
-    lista.appendChild(construirBloque(slots[i], i, sesion, hasSuplentes, datosSlots[i]));
+    lista.appendChild(construirBloque(slots[i], i, sesion, datosSlots[i]));
   }
 
   // Botón fin
@@ -153,31 +137,20 @@ export async function render(state) {
       return;
     }
 
-    if (e.target.closest('[data-action="fin"]')) { await mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios); return; }
+    if (e.target.closest('[data-action="fin"]')) { await mostrarPantallaFin(container, sesion, rutinaHoy, todos); return; }
     if (e.target.closest('[data-action="volver-diario"]')) { navigateTo('diario'); return; }
 
-    const btnDeleteSuplente = e.target.closest('.btn-delete-suplente');
-    if (btnDeleteSuplente) {
-      handleEliminarSuplente(btnDeleteSuplente);
-      return;
-    }
-
-    const suplanteItem = e.target.closest('.suplente-item');
-    if (suplanteItem && rutinaHoy) {
-      const nuevoReId    = parseInt(suplanteItem.dataset.reId);
-      const anteriorReId = parseInt(suplanteItem.dataset.anteriorReId);
-      await Promise.all([
-        updateActivoHoy(nuevoReId, true),
-        updateActivoHoy(anteriorReId, false),
-      ]);
-      await swapOrden(nuevoReId, anteriorReId);
+    const btnAbajo = e.target.closest('.btn-mover-abajo');
+    if (btnAbajo && rutinaHoy) {
+      await moverEjercicioAlFondo(rutinaHoy.id, parseInt(btnAbajo.dataset.reId));
       await render(state);
       return;
     }
 
-    const btnSwap = e.target.closest('.btn-swap');
-    if (btnSwap && rutinaHoy) {
-      await handleSuplentesDropdown(btnSwap, suplentesSwap);
+    const btnArriba = e.target.closest('.btn-mover-arriba');
+    if (btnArriba && rutinaHoy) {
+      await moverEjercicioArriba(rutinaHoy.id, parseInt(btnArriba.dataset.reId));
+      await render(state);
       return;
     }
 
@@ -245,7 +218,7 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
 
 
 // Construcción DOM síncrona — recibe datos ya cargados, no hace queries
-function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = null } = {}) {
+function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
   const details = document.createElement('details');
   details.className = 'ejercicio-bloque';
   if (ej) details.dataset.progreso = Math.min(seriesHoy.length, 4);
@@ -266,10 +239,11 @@ function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = 
 
   summary.appendChild(nombreSpan);
 
-  if (ej && hasSuplentes) {
-    const btnSwap = cel('button', 'btn-swap', '[ ⇄ ]');
-    btnSwap.dataset.reId = ej.id;
-    summary.appendChild(btnSwap);
+  if (ej) {
+    const btnMover = cel('button', idx < 8 ? 'btn-mover-abajo' : 'btn-mover-arriba',
+                                   idx < 8 ? '[ ↓ ]' : '[ ↑ ]');
+    btnMover.dataset.reId = ej.id;
+    summary.appendChild(btnMover);
   }
 
   if (ej) {
@@ -381,39 +355,6 @@ async function handleGuardar(btnGuardar, sesionId) {
   marcarComoGuardada(fila, peso, reps, serie.id);
   filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
   actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
-}
-
-async function handleSuplentesDropdown(btnSwap, suplentes) {
-  const details = btnSwap.closest('details');
-  const existente = details?.querySelector('.suplentes-dropdown');
-  if (existente) { existente.remove(); return; }
-  if (suplentes.length === 0) return;
-
-  if (details) details.open = true;
-
-  const reId = parseInt(btnSwap.dataset.reId);
-  const dropdown = cel('div', 'suplentes-dropdown');
-  dropdown.appendChild(cel('p', 'suplentes-titulo', 'Ejercicios Suplentes:'));
-
-  for (const sup of suplentes) {
-    const fila = cel('div', 'suplente-fila');
-
-    const btn = cel('button', 'suplente-item', sup.nombre);
-    btn.dataset.reId = sup.id;
-    btn.dataset.anteriorReId = reId;
-    fila.appendChild(btn);
-
-    const btnDel = cel('button', 'btn-delete-suplente', '[ ✕ ]');
-    btnDel.dataset.ejId   = sup.ejercicio_id;
-    btnDel.dataset.nombre = sup.nombre;
-    fila.appendChild(btnDel);
-
-    dropdown.appendChild(fila);
-  }
-
-  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
-  if (cuerpo) details.insertBefore(dropdown, cuerpo);
-  else details?.appendChild(dropdown);
 }
 
 async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
@@ -649,25 +590,6 @@ function handleEliminar(btnDelete, state) {
   else details?.appendChild(panel);
 }
 
-function handleEliminarSuplente(btn) {
-  const fila = btn.closest('.suplente-fila');
-  const existente = fila.querySelector('.confirm-delete-panel');
-  if (existente) { existente.remove(); return; }
-
-  const ejId  = parseInt(btn.dataset.ejId);
-  const nombre = btn.dataset.nombre ?? '?';
-
-  const panel = cel('div', 'confirm-delete-panel');
-  panel.appendChild(cel('span', 'confirm-delete-msg', `¿Eliminar "${nombre}"?`));
-
-  const btnSi = cel('button', 'btn-confirmar-eliminar', '[ ELIMINAR ]');
-  btnSi.dataset.ejId = ejId;
-  const btnNo = cel('button', 'btn-cancelar-eliminar', '[ CANCELAR ]');
-  panel.appendChild(btnSi);
-  panel.appendChild(btnNo);
-
-  fila.appendChild(panel);
-}
 
 function mostrarPantallaDescanso(container) {
   const div = cel('div', 'diario-descanso');

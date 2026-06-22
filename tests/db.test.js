@@ -3,6 +3,7 @@ import {
   initDB,
   getEjercicios, saveEjercicio, getOrCreateEjercicio, updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
+  moverEjercicioAlFondo, moverEjercicioArriba, linkEjercicioToRutina,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia,
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
@@ -136,6 +137,37 @@ describe('rutinas', () => {
     const actualEj2 = lista.find(r => r.ejercicio_id === ej2.id);
     expect(actualEj1.orden).toBe(9);
     expect(actualEj2.orden).toBe(1);
+  });
+
+  it('moverEjercicioAlFondo pone el ejercicio al final de la lista', async () => {
+    const rutina = await saveRutina('Pierna', 2);
+    const ej1 = await saveEjercicio('Sentadilla', 'PIERNA');
+    const ej2 = await saveEjercicio('Leg Press',  'PIERNA');
+    const ej3 = await saveEjercicio('Prensa',     'PIERNA');
+    await linkEjercicioToRutina(rutina.id, ej1.id, 1);
+    await linkEjercicioToRutina(rutina.id, ej2.id, 2);
+    const { id: re3 } = await linkEjercicioToRutina(rutina.id, ej3.id, 3);
+
+    await moverEjercicioAlFondo(rutina.id, re3);  // ya está al fondo; muévelo "más abajo"
+    // Ahora mover el primero al fondo
+    const lista0 = await getRutinaEjercicios(rutina.id);
+    await moverEjercicioAlFondo(rutina.id, lista0[0].id);
+    const lista = await getRutinaEjercicios(rutina.id);
+    expect(lista[lista.length - 1].ejercicio_id).toBe(ej1.id);
+  });
+
+  it('moverEjercicioArriba pone el ejercicio al principio de la lista', async () => {
+    const rutina = await saveRutina('Espalda', 3);
+    const ej1 = await saveEjercicio('Dominadas', 'ESPALDA');
+    const ej2 = await saveEjercicio('Remo T',    'ESPALDA');
+    const ej3 = await saveEjercicio('Jalón',     'ESPALDA');
+    await linkEjercicioToRutina(rutina.id, ej1.id, 1);
+    await linkEjercicioToRutina(rutina.id, ej2.id, 2);
+    const { id: re3 } = await linkEjercicioToRutina(rutina.id, ej3.id, 3);
+
+    await moverEjercicioArriba(rutina.id, re3);
+    const lista = await getRutinaEjercicios(rutina.id);
+    expect(lista[0].ejercicio_id).toBe(ej3.id);
   });
 
   it('clearRutinaDia deja el día sin rutina asignada', async () => {
