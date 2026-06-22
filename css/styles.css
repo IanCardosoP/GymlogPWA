@@ -306,71 +306,17 @@ input.is-saved::placeholder {
 
 .btn-delete-serie:hover { opacity: 1; }
 
-.suplentes-dropdown {
-  padding: 8px 12px;
-  background-color: var(--color-fondo-alt);
-  border-bottom: 1px solid var(--color-texto-dim);
-}
-
-.suplentes-titulo {
-  font-size: 11px;
-  color: var(--color-texto-dim);
-  margin-bottom: 6px;
-}
-
-.suplente-fila {
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--color-texto-dim);
-  flex-wrap: wrap;
-}
-
-.suplente-fila:last-child { border-bottom: none; }
-
-.suplente-item {
-  flex: 1;
-  background: none;
-  border: none;
-  color: var(--color-texto);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  text-align: left;
-  padding: 4px 0;
-}
-
-.btn-delete-suplente {
-  background: none;
-  border: none;
-  color: var(--color-texto-dim);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 4px 0 4px 8px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.btn-delete-suplente:hover { color: #ff4444; }
-
-.suplente-fila .confirm-delete-panel {
-  width: 100%;
-  padding: 4px 0;
-}
-
-.btn-swap {
+.btn-mover-abajo,
+.btn-mover-arriba {
   background: none;
   border: none;
   color: var(--color-acento);
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 300;
-  padding: 0 6px;
+  font-size: 12px;
+  padding: 0 4px;
   cursor: pointer;
-  opacity: 0.6;
-  letter-spacing: 0.05em;
   flex-shrink: 0;
 }
-
-.btn-swap:hover { opacity: 1; }
 
 .btn-edit,
 .btn-delete {
