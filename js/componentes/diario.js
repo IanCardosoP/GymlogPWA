@@ -98,6 +98,11 @@ export async function render(state) {
   });
 
   for (let i = 0; i < slots.length; i++) {
+    if (i === 8 && todos.length > 8) {
+      const sep = document.createElement('hr');
+      sep.className = 'diario-separador';
+      lista.appendChild(sep);
+    }
     lista.appendChild(construirBloque(slots[i], i, sesion, datosSlots[i]));
   }
 

@@ -147,6 +147,13 @@ details {
 .ejercicio-bloque {
   border-left-width: 4px;
 }
+
+.diario-separador {
+  border: none;
+  border-top: 1px solid var(--color-acento);
+  opacity: 0.35;
+  margin: 6px 0;
+}
 .ejercicio-bloque[data-progreso="0"] {
   border-left-color: var(--color-texto-dim);
 }
