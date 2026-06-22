@@ -450,9 +450,10 @@ input.is-saved::placeholder {
 }
 
 .ejercicio-nombre-input {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   padding: 4px 8px;
-  width: 100%;
 }
 
 .grupo-muscular-selector {
@@ -1176,6 +1177,38 @@ input.is-saved::placeholder {
 .autocomplete-wrapper {
   position: relative;
   flex: 1;
+}
+
+.autocomplete-fila {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-add-ok,
+.btn-add-cancel {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: 1px solid;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-add-ok {
+  border-color: var(--color-acento);
+  color: var(--color-acento);
+}
+
+.btn-add-cancel {
+  border-color: #ff4444;
+  color: #ff4444;
 }
 
 .autocomplete-lista {
