@@ -319,11 +319,16 @@ input.is-saved::placeholder {
   border: none;
   color: var(--color-acento);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 10px;
+  font-weight: 300;
   padding: 0 4px;
   cursor: pointer;
+  opacity: 0.6;
+  letter-spacing: 0.05em;
   flex-shrink: 0;
 }
+.btn-mover-abajo:hover,
+.btn-mover-arriba:hover { opacity: 1; }
 
 .btn-edit,
 .btn-delete {
