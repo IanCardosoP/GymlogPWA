@@ -93,10 +93,10 @@ export async function getEjercicios() {
   return result.rows;
 }
 
-export async function updateEjercicioNombre(ejId, nuevoNombre) {
+export async function updateEjercicioNombre(ejId, nuevoNombre, nuevoGrupo) {
   const result = await db.query(
-    'UPDATE ejercicios SET nombre = $1 WHERE id = $2 RETURNING *',
-    [nuevoNombre, ejId]
+    'UPDATE ejercicios SET nombre = $1, grupo_muscular = COALESCE($3, grupo_muscular) WHERE id = $2 RETURNING *',
+    [nuevoNombre, ejId, nuevoGrupo ?? null]
   );
   return result.rows[0];
 }

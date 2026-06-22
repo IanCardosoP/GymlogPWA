@@ -274,7 +274,8 @@ function construirBloque(ej, idx, sesion, hasSuplentes, { seriesHoy = [], ref = 
 
   if (ej) {
     const btnEdit = cel('button', 'btn-edit', '[ ✎ ]');
-    btnEdit.dataset.ejId = ej.ejercicio_id;
+    btnEdit.dataset.ejId  = ej.ejercicio_id;
+    btnEdit.dataset.grupo = ej.grupo_muscular ?? 'GENERAL';
     summary.appendChild(btnEdit);
 
     const btnDelete = cel('button', 'btn-delete', '[ ✕ ]');
@@ -494,8 +495,9 @@ function handleRenombrar(btnEdit, state) {
   details?.querySelector('.confirm-delete-panel')?.remove();
   if (existente) { existente.remove(); return; }
 
-  const ejId = parseInt(btnEdit.dataset.ejId);
+  const ejId        = parseInt(btnEdit.dataset.ejId);
   const nombreActual = details?.querySelector('.ejercicio-nombre')?.textContent ?? '';
+  const grupoActual  = btnEdit.dataset.grupo ?? 'GENERAL';
 
   const panel = cel('div', 'rename-panel');
 
@@ -506,15 +508,33 @@ function handleRenombrar(btnEdit, state) {
   input.setAttribute('aria-label', 'Nuevo nombre del ejercicio');
   panel.appendChild(input);
 
-  const btnGuardar = cel('button', 'btn-panel-accion', '[ GUARDAR ]');
+  let grupoSeleccionado = grupoActual;
+  const selectorDiv = cel('div', 'grupo-muscular-selector');
+  selectorDiv.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
+  const filaGrupos = cel('div', 'grupo-muscular-btns');
+  GRUPOS_MUSCULARES.forEach(g => {
+    const btn = cel('button', 'btn-grupo-muscular', g);
+    if (g === grupoActual) btn.classList.add('is-active');
+    btn.addEventListener('click', () => {
+      filaGrupos.querySelectorAll('.btn-grupo-muscular').forEach(b => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      grupoSeleccionado = g;
+    });
+    filaGrupos.appendChild(btn);
+  });
+  selectorDiv.appendChild(filaGrupos);
+  panel.appendChild(selectorDiv);
+
+  const btnGuardar  = cel('button', 'btn-panel-accion',  '[ GUARDAR ]');
   const btnCancelar = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
   panel.appendChild(btnGuardar);
   panel.appendChild(btnCancelar);
 
   const guardar = async () => {
     const nuevoNombre = input.value.trim();
-    if (!nuevoNombre || nuevoNombre === nombreActual) { panel.remove(); return; }
-    await updateEjercicioNombre(ejId, nuevoNombre);
+    if (!nuevoNombre) { panel.remove(); return; }
+    const grupoFinal = grupoSeleccionado !== grupoActual ? grupoSeleccionado : null;
+    await updateEjercicioNombre(ejId, nuevoNombre, grupoFinal);
     await render(state);
   };
 

@@ -34,6 +34,20 @@ describe('ejercicios', () => {
     expect(todos[0].nombre).toBe('Press Banca Inclinado');
   });
 
+  it('updateEjercicioNombre sin tercer argumento no cambia grupo_muscular', async () => {
+    const ej = await saveEjercicio('Curl Bíceps', 'BRAZO');
+    const updated = await updateEjercicioNombre(ej.id, 'Curl Martillo');
+    expect(updated.nombre).toBe('Curl Martillo');
+    expect(updated.grupo_muscular).toBe('BRAZO');
+  });
+
+  it('updateEjercicioNombre con tercer argumento actualiza nombre y grupo_muscular', async () => {
+    const ej = await saveEjercicio('Peso Muerto', 'GENERAL');
+    const updated = await updateEjercicioNombre(ej.id, 'Peso Muerto Rumano', 'ESPALDA');
+    expect(updated.nombre).toBe('Peso Muerto Rumano');
+    expect(updated.grupo_muscular).toBe('ESPALDA');
+  });
+
   it('deleteEjercicio elimina el ejercicio, sus series y su vínculo con rutinas', async () => {
     const rutina = await saveRutina('Pecho', 1);
     const ej     = await saveEjercicio('Fondos', 'Pecho');
