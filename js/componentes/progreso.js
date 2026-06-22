@@ -2,10 +2,11 @@
 import {
   getRutinas, getRutinaEjercicios, getSeriesPorEjercicio,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
-  getPR1RMPorEjercicio, getVolumenPorSesion,
+  getPR1RMPorEjercicio, getVolumenPorSesion, getUltimasSesionesConSeries,
 } from '../db.js';
 import {
   METRICAS_REGISTRY, prepararDatosProgreso, calcularTendencia, calcularRacha,
+  calculateEpley1RM,
 } from '../analitico.js';
 
 function cel(tag, clase, texto) {
@@ -65,10 +66,11 @@ async function renderTabContent(container, state) {
 
 async function renderGlobal(container, state) {
   const fechaHoy = new Date().toLocaleDateString('en-CA');
-  const [stats, actividad, distribucion] = await Promise.all([
+  const [stats, actividad, distribucion, filasSes] = await Promise.all([
     getEstadisticasGlobales(fechaHoy),
     getActividadSemanal(fechaHoy, 8),
     getVolumenPorGrupoMuscular(fechaHoy, 4),
+    getUltimasSesionesConSeries(2),
   ]);
 
   const racha   = calcularRacha(stats.fechas, fechaHoy);
@@ -120,6 +122,97 @@ async function renderGlobal(container, state) {
     }
   }
   container.appendChild(cardMus);
+
+  // ── Últimas 2 sesiones ─────────────────────────────────────────────────────
+  renderSeccionUltimasSesiones(container, filasSes, state);
+}
+
+function renderSeccionUltimasSesiones(container, filas, state) {
+  const unit = state.prefUnit || 'lb';
+
+  const sesionesMap = new Map();
+  for (const fila of filas) {
+    if (!sesionesMap.has(fila.sesion_id)) {
+      sesionesMap.set(fila.sesion_id, {
+        fecha: fila.fecha,
+        hora_inicio: fila.hora_inicio,
+        hora_fin: fila.hora_fin,
+        rutina_nombre: fila.rutina_nombre,
+        ejercicios: new Map(),
+      });
+    }
+    if (fila.ejercicio_id != null) {
+      const ses = sesionesMap.get(fila.sesion_id);
+      if (!ses.ejercicios.has(fila.ejercicio_id)) {
+        ses.ejercicios.set(fila.ejercicio_id, { nombre: fila.ejercicio_nombre, series: [] });
+      }
+      ses.ejercicios.get(fila.ejercicio_id).series.push(fila);
+    }
+  }
+
+  const sesiones = [...sesionesMap.values()];
+  if (sesiones.length === 0) return;
+
+  const card = crearSeccion('ÚLTIMAS 2 SESIONES');
+
+  sesiones.forEach((ses, idx) => {
+    if (idx > 0) {
+      const sep = document.createElement('hr');
+      sep.className = 'sesresumen-sep';
+      card.appendChild(sep);
+    }
+
+    const fechaStr = new Date(ses.fecha + 'T12:00:00Z')
+      .toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
+      .toUpperCase();
+
+    const hdr = cel('div', 'sesresumen-header');
+    hdr.appendChild(cel('span', 'sesresumen-fecha', fechaStr));
+    if (ses.rutina_nombre) {
+      hdr.appendChild(cel('span', 'sesresumen-rutina', ses.rutina_nombre.toUpperCase()));
+    }
+    card.appendChild(hdr);
+
+    const tabla = cel('div', 'sesresumen-tabla');
+    tabla.appendChild(cel('span', 'sesresumen-th', 'EJERCICIO'));
+    tabla.appendChild(cel('span', 'sesresumen-th sesresumen-th-r', 'SETS'));
+    tabla.appendChild(cel('span', 'sesresumen-th sesresumen-th-r', 'PESO'));
+    tabla.appendChild(cel('span', 'sesresumen-th sesresumen-th-r', '1RM EST.'));
+
+    const ejercs = [...ses.ejercicios.values()];
+    let totalSeries = 0;
+
+    for (const { nombre, series } of ejercs) {
+      totalSeries += series.length;
+      const mejorPeso = Math.max(...series.map(s => Number(s.peso)));
+      const isBW = mejorPeso === 0;
+      const max1RM = Math.max(...series.map(s =>
+        calculateEpley1RM(Number(s.peso), Number(s.repeticiones))
+      ));
+      const ormStr  = max1RM === 0 ? '——' : `~${Math.round(max1RM)}${unit}`;
+      const pesoStr = isBW ? 'BW' : `${mejorPeso}${unit}`;
+
+      tabla.appendChild(cel('span', 'sesresumen-td', nombre));
+      tabla.appendChild(cel('span', 'sesresumen-td sesresumen-td-r', `×${series.length}`));
+      tabla.appendChild(cel('span', 'sesresumen-td sesresumen-td-r', pesoStr));
+      tabla.appendChild(cel('span', 'sesresumen-td sesresumen-td-r', ormStr));
+    }
+    card.appendChild(tabla);
+
+    let durStr = '';
+    if (ses.hora_inicio && ses.hora_fin) {
+      const diffMs = new Date(ses.hora_fin) - new Date(ses.hora_inicio);
+      const totalMin = Math.floor(diffMs / 60000);
+      const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+      const mm = String(totalMin % 60).padStart(2, '0');
+      durStr = ` · ${hh}h:${mm}m`;
+    }
+    const footer = cel('div', 'sesresumen-footer');
+    footer.textContent = `${ejercs.length} EJERC · ${totalSeries} SERIES${durStr}`;
+    card.appendChild(footer);
+  });
+
+  container.appendChild(card);
 }
 
 function crearChip(valor, etiqueta) {

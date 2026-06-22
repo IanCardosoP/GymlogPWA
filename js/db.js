@@ -536,6 +536,34 @@ export async function getVolumenPorSesion(ejId) {
   return rows;
 }
 
+export async function getUltimasSesionesConSeries(n = 2) {
+  const { rows } = await db.query(
+    `SELECT
+       se.id            AS sesion_id,
+       se.fecha::text   AS fecha,
+       se.hora_inicio,
+       se.hora_fin,
+       r.nombre         AS rutina_nombre,
+       s.ejercicio_id,
+       e.nombre         AS ejercicio_nombre,
+       s.numero_serie,
+       s.peso,
+       s.repeticiones
+     FROM (
+       SELECT id, fecha, hora_inicio, hora_fin, rutina_id
+       FROM sesiones
+       ORDER BY fecha DESC, id DESC
+       LIMIT $1
+     ) se
+     LEFT JOIN rutinas    r ON r.id = se.rutina_id
+     LEFT JOIN series     s ON s.sesion_id = se.id
+     LEFT JOIN ejercicios e ON e.id = s.ejercicio_id
+     ORDER BY se.fecha DESC, se.id DESC, s.ejercicio_id, s.numero_serie ASC`,
+    [n]
+  );
+  return rows;
+}
+
 export async function getAllDataForExport() {
   const [conf, ejercicios, rutinas, reRows, rdRows, sesiones, series] = await Promise.all([
     db.query('SELECT pref_unit, pref_acento FROM conf WHERE id = 1'),
