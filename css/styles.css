@@ -1181,7 +1181,7 @@ input.is-saved::placeholder {
 
 .autocomplete-fila {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 4px;
 }
 
@@ -1189,7 +1189,6 @@ input.is-saved::placeholder {
 .btn-add-cancel {
   flex-shrink: 0;
   width: 28px;
-  height: 28px;
   background: none;
   border: 1px solid;
   font-family: var(--font-mono);
