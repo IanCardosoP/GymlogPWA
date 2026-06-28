@@ -182,7 +182,7 @@ export async function render(state) {
 
   const donDesc = cel('p', 'reset-advertencia donativo-desc',
     'GymLog es un proyecto personal de código abierto, sin anuncios ni suscripciones. ' +
-    'Si te resulta útil, puedes apoyar el desarrollo con un donativo en Bitcoin.');
+    'Si te resulta útil, puedes apoyar el desarrollo vía Bitcoin o MercadoPago.');
 
   const donRepo = cel('p', 'reset-advertencia donativo-desc');
   donRepo.appendChild(document.createTextNode('¿Tienes una sugerencia? Abre un issue en '));
@@ -194,15 +194,20 @@ export async function render(state) {
   repoLink.className = 'config-footer-link donativo-link';
   donRepo.appendChild(repoLink);
 
-  const donAddrLabel = cel('p', 'donativo-addr-label', '₿ Dirección Bitcoin (Native SegWit — bc1q...):');
+  const donAddrLabel = cel('p', 'donativo-addr-label', '₿ Bitcoin (Native SegWit — bc1q...):');
   const donAddr = cel('p', 'donativo-addr', BTC_ADDRESS);
+
+  const donBtns = cel('div', 'donativo-btns');
   const btnDonar = cel('button', 'btn-donar-btc', '[ ₿ DONAR ]');
+  const btnMercado = cel('button', 'btn-donar-btc', '[ $ MERCADOPAGO ]');
+  donBtns.appendChild(btnDonar);
+  donBtns.appendChild(btnMercado);
 
   secDonativo.appendChild(donDesc);
   secDonativo.appendChild(donRepo);
   secDonativo.appendChild(donAddrLabel);
   secDonativo.appendChild(donAddr);
-  secDonativo.appendChild(btnDonar);
+  secDonativo.appendChild(donBtns);
   container.appendChild(secDonativo);
 
   // Footer — versión derivada dinámicamente del CACHE_NAME activo del SW
@@ -469,6 +474,10 @@ export async function render(state) {
       ? '[ ✓ DIRECCIÓN COPIADA AL PORTAPAPELES ]'
       : '[ ₿ ABRIENDO WALLET... ]';
     setTimeout(() => { btnDonar.textContent = '[ ₿ DONAR ]'; }, 3000);
+  });
+
+  btnMercado.addEventListener('click', () => {
+    window.open('https://link.mercadopago.com.mx/gymlog', '_blank', 'noopener,noreferrer');
   });
 }
 

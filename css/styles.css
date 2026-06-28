@@ -1237,6 +1237,11 @@ input.is-saved::placeholder {
   margin-bottom: 8px;
 }
 
+.donativo-btns {
+  display: flex;
+  gap: 8px;
+}
+
 .donativo-link {
   display: inline;
   color: var(--color-acento);
@@ -1261,8 +1266,7 @@ input.is-saved::placeholder {
 }
 
 .btn-donar-btc {
-  display: block;
-  width: 100%;
+  flex: 1;
   background: none;
   border: 1px solid var(--color-acento);
   color: var(--color-acento);
