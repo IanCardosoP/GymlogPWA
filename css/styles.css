@@ -154,6 +154,24 @@ details {
   opacity: 0.35;
   margin: 15px 0;
 }
+
+.diario-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 0;
+}
+.diario-skeleton-bloque {
+  height: 56px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a1a1a 25%, #252525 50%, #1a1a1a 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s infinite;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 .ejercicio-bloque[data-progreso="0"] {
   border-left-color: var(--color-texto-dim);
 }
@@ -828,6 +846,13 @@ input.is-saved::placeholder {
   color: var(--color-acento);
 }
 
+.records-fila.records-header span {
+  font-size: 9px;
+  color: var(--color-texto-dim);
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
 /* Columna grupo (mejor por grupo) */
 .records-grupo {
   width: 60px;
@@ -1082,11 +1107,19 @@ input.is-saved::placeholder {
 
 .btn-nueva-rutina {
   background: none;
-  border: 1px solid var(--color-texto-dim);
-  color: var(--color-texto);
+  border: 1px solid var(--color-acento);
+  color: var(--color-acento);
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 8px 10px;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.btn-nueva-rutina:hover {
+  background-color: var(--color-acento);
+  color: var(--color-fondo);
 }
 
 .config-radio-label {
@@ -1101,24 +1134,48 @@ input.is-saved::placeholder {
 
 .btn-exportar-csv,
 .btn-importar-csv,
-.btn-actualizar-app {
+.btn-actualizar-app,
+.btn-elegir-archivo {
   display: block;
   width: 100%;
   background: none;
-  border: 1px solid var(--color-texto-dim);
-  color: var(--color-texto);
+  border: 1px solid var(--color-acento);
+  color: var(--color-acento);
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 12px;
   margin-bottom: 10px;
   text-align: left;
   letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
 }
 
+.btn-exportar-csv:hover,
+.btn-importar-csv:hover,
+.btn-actualizar-app:hover,
+.btn-elegir-archivo:hover {
+  background-color: var(--color-acento);
+  color: var(--color-fondo);
+}
+
+/* Input nativo oculto — sustituido por btn-elegir-archivo */
 .input-archivo {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 12px;
+  display: none;
+}
+
+.archivo-nombre-selec {
+  font-size: 11px;
+  font-family: var(--font-mono);
   color: var(--color-texto-dim);
+  margin: -4px 0 10px;
+  padding-left: 2px;
+}
+
+.config-separador {
+  border: none;
+  border-top: 1px solid #2a2a2a;
+  margin: 18px 0;
 }
 
 .resultado-importacion {
@@ -1173,6 +1230,57 @@ input.is-saved::placeholder {
 
 .btn-reset-datos:hover {
   background-color: #ff4444;
+  color: var(--color-fondo);
+}
+
+.donativo-desc {
+  margin-bottom: 8px;
+}
+
+.donativo-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.donativo-link {
+  display: inline;
+  color: var(--color-acento);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.donativo-addr-label {
+  font-size: 11px;
+  color: var(--color-texto-dim);
+  margin: 12px 0 4px;
+  letter-spacing: 0.03em;
+}
+
+.donativo-addr {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-acento);
+  word-break: break-all;
+  margin-bottom: 14px;
+  letter-spacing: 0.04em;
+}
+
+.btn-donar-btc {
+  flex: 1;
+  background: none;
+  border: 1px solid var(--color-acento);
+  color: var(--color-acento);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 12px;
+  text-align: left;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.btn-donar-btc:hover {
+  background-color: var(--color-acento);
   color: var(--color-fondo);
 }
 

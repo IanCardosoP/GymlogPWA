@@ -75,6 +75,11 @@ export async function initDB(uri = 'idb://gym-log-db') {
     SELECT id, dia_sugerido FROM rutinas
     WHERE dia_sugerido IS NOT NULL
     ON CONFLICT DO NOTHING;
+
+    CREATE INDEX IF NOT EXISTS idx_sesiones_fecha      ON sesiones(fecha);
+    CREATE INDEX IF NOT EXISTS idx_series_sesion_id    ON series(sesion_id);
+    CREATE INDEX IF NOT EXISTS idx_series_ejercicio_id ON series(ejercicio_id);
+    CREATE INDEX IF NOT EXISTS idx_re_rutina_orden     ON rutina_ejercicios(rutina_id, orden);
   `);
 
   return db;
@@ -243,6 +248,16 @@ export async function touchSesionTiempo(sesionId) {
      SET hora_inicio = COALESCE(hora_inicio, NOW()),
          hora_fin    = NOW()
      WHERE id = $1`,
+    [sesionId]
+  );
+}
+
+export async function resetSesionTiempoIfVacia(sesionId) {
+  await db.query(
+    `UPDATE sesiones
+     SET hora_inicio = NULL, hora_fin = NULL
+     WHERE id = $1
+       AND NOT EXISTS (SELECT 1 FROM series WHERE sesion_id = $1)`,
     [sesionId]
   );
 }
@@ -459,14 +474,18 @@ export async function clearRutinaDia(dia) {
 export async function getEstadisticasGlobales(fechaHoy) {
   const { rows: [stats] } = await db.query(`
     SELECT
-      (SELECT COUNT(*)::int FROM sesiones) AS total_sesiones,
+      (SELECT COUNT(*)::int FROM sesiones
+       WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS total_sesiones,
       (SELECT COALESCE(SUM(peso * repeticiones)::float, 0) FROM series) AS volumen_total,
       (SELECT COUNT(*)::int FROM sesiones
-       WHERE fecha >= $1::date - INTERVAL '27 days') AS sesiones_4_sem
+       WHERE fecha >= $1::date - INTERVAL '27 days'
+         AND EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS sesiones_4_sem
   `, [fechaHoy]);
 
   const { rows: fechaRows } = await db.query(
-    `SELECT DISTINCT fecha::text FROM sesiones ORDER BY fecha DESC`
+    `SELECT DISTINCT fecha::text FROM sesiones
+     WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)
+     ORDER BY fecha DESC`
   );
 
   return {
@@ -484,6 +503,7 @@ export async function getActividadSemanal(fechaHoy, semanas = 8) {
       COUNT(*)::int AS sesiones
     FROM sesiones
     WHERE fecha >= $1::date - ($2 || ' weeks')::interval
+      AND EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)
     GROUP BY semana_lunes
     ORDER BY semana_lunes ASC
   `, [fechaHoy, semanas]);
@@ -505,19 +525,19 @@ export async function getVolumenPorGrupoMuscular(fechaHoy, semanas = 4) {
   return rows;
 }
 
-export async function getPR1RMPorEjercicio() {
+export async function getPesoMaxPorEjercicio() {
   const { rows } = await db.query(`
     SELECT DISTINCT ON (e.id)
       e.id AS ejercicio_id,
       e.nombre,
       e.grupo_muscular,
-      (s.peso * (1 + s.repeticiones / 30.0))::float AS pr_1rm,
+      s.peso::float AS peso_max,
       se.fecha::text AS fecha_pr
     FROM series s
     JOIN sesiones se ON se.id = s.sesion_id
     JOIN ejercicios e ON e.id = s.ejercicio_id
     WHERE s.peso > 0
-    ORDER BY e.id, pr_1rm DESC
+    ORDER BY e.id, peso_max DESC
   `);
   return rows;
 }
@@ -552,6 +572,7 @@ export async function getUltimasSesionesConSeries(n = 2) {
      FROM (
        SELECT id, fecha, hora_inicio, hora_fin, rutina_id
        FROM sesiones
+       WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)
        ORDER BY fecha DESC, id DESC
        LIMIT $1
      ) se

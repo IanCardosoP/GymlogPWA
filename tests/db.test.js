@@ -5,11 +5,11 @@ import {
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   moverEjercicioAlFondo, moverEjercicioArriba, linkEjercicioToRutina,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
-  saveSesion, getSesionDelDia,
+  saveSesion, getSesionDelDia, touchSesionTiempo, resetSesionTiempoIfVacia,
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit, updatePrefAcento,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
-  getPR1RMPorEjercicio, getVolumenPorSesion,
+  getPesoMaxPorEjercicio, getVolumenPorSesion,
 } from '../js/db.js';
 
 beforeEach(async () => {
@@ -487,10 +487,22 @@ describe('getEstadisticasGlobales', () => {
   });
 
   it('cuenta sesiones totales correctamente', async () => {
-    await saveSesion('2026-06-19', null, null);
-    await saveSesion('2026-06-20', null, null);
+    const ej = await saveEjercicio('Press Banca', 'PECHO');
+    const s1 = await saveSesion('2026-06-19', null, null);
+    await saveSerie(s1.id, ej.id, 1, 80, 10);
+    const s2 = await saveSesion('2026-06-20', null, null);
+    await saveSerie(s2.id, ej.id, 1, 80, 10);
     const stats = await getEstadisticasGlobales('2026-06-21');
     expect(stats.total_sesiones).toBe(2);
+  });
+
+  it('no cuenta sesiones sin series registradas', async () => {
+    await saveSesion('2026-06-19', null, null); // sesión vacía — no debe contar
+    const ej  = await saveEjercicio('Sentadilla', 'PIERNA');
+    const ses = await saveSesion('2026-06-20', null, null);
+    await saveSerie(ses.id, ej.id, 1, 100, 5);
+    const stats = await getEstadisticasGlobales('2026-06-21');
+    expect(stats.total_sesiones).toBe(1);
   });
 
   it('suma el volumen de todas las series', async () => {
@@ -503,17 +515,25 @@ describe('getEstadisticasGlobales', () => {
   });
 
   it('devuelve las fechas de sesiones en orden descendente', async () => {
-    await saveSesion('2026-06-19', null, null);
-    await saveSesion('2026-06-21', null, null);
+    const ej = await saveEjercicio('Dominadas', 'ESPALDA');
+    const s1 = await saveSesion('2026-06-19', null, null);
+    await saveSerie(s1.id, ej.id, 1, 0, 8);
+    const s2 = await saveSesion('2026-06-21', null, null);
+    await saveSerie(s2.id, ej.id, 1, 0, 10);
     const stats = await getEstadisticasGlobales('2026-06-21');
     expect(stats.fechas[0]).toBe('2026-06-21');
     expect(stats.fechas[1]).toBe('2026-06-19');
   });
 
-  it('sesiones_4_sem solo cuenta sesiones en los últimos 28 días', async () => {
-    await saveSesion('2026-05-01', null, null); // fuera del rango
-    await saveSesion('2026-06-10', null, null); // dentro
-    await saveSesion('2026-06-21', null, null); // dentro
+  it('sesiones_4_sem solo cuenta sesiones con series en los últimos 28 días', async () => {
+    const ej   = await saveEjercicio('Curl', 'BRAZO');
+    const old  = await saveSesion('2026-05-01', null, null); // fuera del rango
+    await saveSerie(old.id, ej.id, 1, 15, 12);
+    const s2   = await saveSesion('2026-06-10', null, null); // dentro
+    await saveSerie(s2.id, ej.id, 1, 15, 12);
+    const s3   = await saveSesion('2026-06-21', null, null); // dentro
+    await saveSerie(s3.id, ej.id, 1, 15, 12);
+    await saveSesion('2026-06-15', null, null);              // vacía — no cuenta
     const stats = await getEstadisticasGlobales('2026-06-21');
     expect(stats.sesiones_4_sem).toBe(2);
     expect(stats.total_sesiones).toBe(3);
@@ -529,9 +549,14 @@ describe('getActividadSemanal', () => {
   });
 
   it('agrupa sesiones por semana (lunes)', async () => {
-    await saveSesion('2026-06-16', null, null); // lunes
-    await saveSesion('2026-06-17', null, null); // martes — misma semana
-    await saveSesion('2026-06-23', null, null); // lunes siguiente
+    const ej = await saveEjercicio('Press Militar', 'HOMBRO');
+    const s1 = await saveSesion('2026-06-16', null, null); // lunes
+    await saveSerie(s1.id, ej.id, 1, 60, 8);
+    const s2 = await saveSesion('2026-06-17', null, null); // martes — misma semana
+    await saveSerie(s2.id, ej.id, 1, 60, 8);
+    const s3 = await saveSesion('2026-06-23', null, null); // lunes siguiente
+    await saveSerie(s3.id, ej.id, 1, 60, 8);
+    await saveSesion('2026-06-18', null, null);            // sesión vacía — no debe contar
     const rows = await getActividadSemanal('2026-06-23', 8);
     expect(rows.length).toBe(2);
     expect(rows[0].sesiones).toBe(2);
@@ -571,31 +596,31 @@ describe('getVolumenPorGrupoMuscular', () => {
   });
 });
 
-// ── getPR1RMPorEjercicio ──────────────────────────────────────────────────────
+// ── getPesoMaxPorEjercicio ────────────────────────────────────────────────────
 
-describe('getPR1RMPorEjercicio', () => {
+describe('getPesoMaxPorEjercicio', () => {
   it('retorna array vacío sin series', async () => {
-    const rows = await getPR1RMPorEjercicio();
+    const rows = await getPesoMaxPorEjercicio();
     expect(rows).toEqual([]);
   });
 
-  it('retorna el mejor 1RM por ejercicio', async () => {
+  it('retorna el mayor peso real por ejercicio', async () => {
     const ej  = await saveEjercicio('Press Banca', 'PECHO');
     const s1  = await saveSesion('2026-06-01', null, null);
     const s2  = await saveSesion('2026-06-15', null, null);
-    await saveSerie(s1.id, ej.id, 1, 80, 10);  // 1RM = 80*(1+10/30) ≈ 106.67
-    await saveSerie(s2.id, ej.id, 1, 90, 5);   // 1RM = 90*(1+5/30) ≈ 105
-    const rows = await getPR1RMPorEjercicio();
+    await saveSerie(s1.id, ej.id, 1, 80, 10); // peso 80
+    await saveSerie(s2.id, ej.id, 1, 90, 5);  // peso 90 — es el mayor
+    const rows = await getPesoMaxPorEjercicio();
     expect(rows.length).toBe(1);
-    expect(rows[0].pr_1rm).toBeGreaterThan(105);
-    expect(rows[0].fecha_pr).toBe('2026-06-01'); // fecha donde ocurrió el PR
+    expect(rows[0].peso_max).toBe(90);
+    expect(rows[0].fecha_pr).toBe('2026-06-15'); // fecha donde se levantó el mayor peso
   });
 
   it('ignora series de peso cero (BW)', async () => {
     const ej  = await saveEjercicio('Dominadas', 'ESPALDA');
     const ses = await saveSesion('2026-06-21', null, null);
     await saveSerie(ses.id, ej.id, 1, 0, 10); // BW — debe ignorarse
-    const rows = await getPR1RMPorEjercicio();
+    const rows = await getPesoMaxPorEjercicio();
     expect(rows).toEqual([]);
   });
 });
@@ -631,5 +656,41 @@ describe('getVolumenPorSesion', () => {
     const rows = await getVolumenPorSesion(ej1.id);
     expect(rows.length).toBe(1);
     expect(rows[0].volumen).toBeCloseTo(800);
+  });
+});
+
+// ── resetSesionTiempoIfVacia ──────────────────────────────────────────────────
+
+describe('resetSesionTiempoIfVacia', () => {
+  it('resetea hora_inicio y hora_fin cuando la sesión queda sin series', async () => {
+    const ses = await saveSesion('2026-06-23', null, null);
+    await touchSesionTiempo(ses.id);
+    const ej  = await saveEjercicio('Press', 'PECHO');
+    const s   = await saveSerie(ses.id, ej.id, 1, 80, 10);
+    await deleteSerie(s.id);
+    await resetSesionTiempoIfVacia(ses.id);
+
+    const db = (await import('../js/db.js')).getDB();
+    const { rows: [row] } = await db.query(
+      'SELECT hora_inicio, hora_fin FROM sesiones WHERE id = $1', [ses.id]
+    );
+    expect(row.hora_inicio).toBeNull();
+    expect(row.hora_fin).toBeNull();
+  });
+
+  it('NO resetea si la sesión aún tiene series', async () => {
+    const ses = await saveSesion('2026-06-23', null, null);
+    const ej  = await saveEjercicio('Press', 'PECHO');
+    await saveSerie(ses.id, ej.id, 1, 80, 10);
+    const s2  = await saveSerie(ses.id, ej.id, 2, 80, 8);
+    await touchSesionTiempo(ses.id);
+    await deleteSerie(s2.id); // elimina solo la 2ª, queda la 1ª
+    await resetSesionTiempoIfVacia(ses.id);
+
+    const db = (await import('../js/db.js')).getDB();
+    const { rows: [row] } = await db.query(
+      'SELECT hora_inicio FROM sesiones WHERE id = $1', [ses.id]
+    );
+    expect(row.hora_inicio).not.toBeNull();
   });
 });

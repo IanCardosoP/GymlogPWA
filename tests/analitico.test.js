@@ -195,43 +195,63 @@ describe('calcularTendencia', () => {
   });
 });
 
-describe('calcularRacha (gracia de 2 días)', () => {
+// Referencia de días (2026): Dom=21/28, Lun=22, Mar=23, Mié=24, Jue=25, Vie=26, Sáb=27
+// Semana anterior: Dom=14, Lun=15, Mar=16, Mié=17, Jue=18, Vie=19, Sáb=20
+
+describe('calcularRacha (máx 2 descansos no-consecutivos/semana)', () => {
   it('retorna 0 sin fechas', () => {
-    expect(calcularRacha([], '2026-06-21')).toBe(0);
+    expect(calcularRacha([], '2026-06-23')).toBe(0);
   });
 
   it('racha de 1 cuando solo entrenó hoy', () => {
-    expect(calcularRacha(['2026-06-21'], '2026-06-21')).toBe(1);
+    expect(calcularRacha(['2026-06-23'], '2026-06-23')).toBe(1);
   });
 
-  it('racha de 3 con días consecutivos', () => {
-    expect(calcularRacha(['2026-06-21', '2026-06-20', '2026-06-19'], '2026-06-21')).toBe(3);
+  it('racha de 3 con días de entrenamiento consecutivos', () => {
+    // Lun 22, Mar 23, Mié 24
+    expect(calcularRacha(['2026-06-24', '2026-06-23', '2026-06-22'], '2026-06-24')).toBe(3);
   });
 
-  it('1 día de descanso NO corta la racha', () => {
-    // Hoy + anteayer (1 día de gap)
-    expect(calcularRacha(['2026-06-21', '2026-06-19'], '2026-06-21')).toBe(2);
+  it('1 día de descanso no-consecutivo es gracia y no corta la racha', () => {
+    // Jue 25 entrenó, Mié 24 descanso, Mar 23 entrenó → racha = 2
+    expect(calcularRacha(['2026-06-25', '2026-06-23'], '2026-06-25')).toBe(2);
   });
 
-  it('2 días de descanso consecutivos NO cortan la racha', () => {
-    // Hoy + hace 3 días (2 días de gap)
-    expect(calcularRacha(['2026-06-21', '2026-06-18'], '2026-06-21')).toBe(2);
+  it('2 días de descanso consecutivos cortan la racha inmediatamente', () => {
+    // hoy = Sáb 27, Vie 26 y Sáb 27 sin sesión → racha = 0
+    expect(calcularRacha(['2026-06-25'], '2026-06-27')).toBe(0);
   });
 
-  it('3 días de descanso consecutivos SÍ cortan la racha', () => {
-    // Hoy + hace 4 días (3 días de gap → rompe)
-    expect(calcularRacha(['2026-06-21', '2026-06-17'], '2026-06-21')).toBe(1);
+  it('rutina estándar 5 días/sem con 2 descansos no-consecutivos mantiene la racha', () => {
+    // LunMarJueVieSáb entrenados, MiéDom descanso → 5 sesiones, racha = 5
+    const entrenados = ['2026-06-22', '2026-06-23', '2026-06-25', '2026-06-26', '2026-06-27'];
+    expect(calcularRacha(entrenados, '2026-06-27')).toBe(5);
   });
 
-  it('si no entrenó hoy ni ayer, cuenta desde anteayer con gracia', () => {
-    // 2 días de descanso al final (hoy y ayer), antes entrenó 3 días seguidos
-    const fechas = ['2026-06-19', '2026-06-18', '2026-06-17'];
-    expect(calcularRacha(fechas, '2026-06-21')).toBe(3);
+  it('3 descansos no-consecutivos en ventana de 7 días rompen la racha', () => {
+    // Patrón T-R-T-R-T-R-T en 7 días: entrenados Lun+Mié+Vie+Dom, descanso Mar+Jue+Sáb
+    // hoy=Dom 28, entrenados: Dom 28, Vie 26, Mié 24, Lun 22
+    // descanso: Sáb 27, Jue 25, Mar 23 → 3 descansos en ventana de 7
+    expect(calcularRacha(['2026-06-28', '2026-06-26', '2026-06-24', '2026-06-22'], '2026-06-28')).toBe(4);
   });
 
-  it('3 días sin entrenar al final sí cortan la racha aunque antes haya sesiones', () => {
-    // 3 días de descanso: hoy, ayer, anteayer → corta
-    const fechas = ['2026-06-18', '2026-06-17', '2026-06-16'];
-    expect(calcularRacha(fechas, '2026-06-21')).toBe(0);
+  it('2 semanas completas (5 días/sem) con 2 descansos de gracia cada semana mantiene la racha', () => {
+    // Semana 1: LunMarJueVieSáb (15,16,18,19,20) + descanso MiéDom (17,21)
+    // Semana 2: LunMarJueVieSáb (22,23,25,26,27) + descanso MiéDom (24,28→hoy sin sesión)
+    const semana1 = ['2026-06-15', '2026-06-16', '2026-06-18', '2026-06-19', '2026-06-20'];
+    const semana2 = ['2026-06-22', '2026-06-23', '2026-06-25', '2026-06-26', '2026-06-27'];
+    // hoy = Sáb 27 (último día entrenado)
+    expect(calcularRacha([...semana2, ...semana1], '2026-06-27')).toBe(10);
+  });
+
+  it('2 descansos no-consecutivos en 5 días (sin completar ventana de 7) son válidos', () => {
+    // Hoy=Jue 25: Jue entrenó, Mié 24 descanso, Mar 23 entrenó, Lun 22 descanso, Dom 21 entrenó
+    // 2 descansos no-consecutivos — continúa
+    expect(calcularRacha(['2026-06-25', '2026-06-23', '2026-06-21'], '2026-06-25')).toBe(3);
+  });
+
+  it('hoy y ayer sin sesión (2 consecutivos) dan racha 0', () => {
+    // hoy=Lun 22 sin sesión, Dom 21 sin sesión → 2 consecutivos → 0
+    expect(calcularRacha(['2026-06-20', '2026-06-19'], '2026-06-22')).toBe(0);
   });
 });

@@ -80,7 +80,6 @@ export async function render(state) {
 
   secAdmin.appendChild(listaRutinas);
 
-  // Crear nueva rutina
   const nuevaWrapper = cel('div', 'config-nueva-rutina');
   const inputNueva = document.createElement('input');
   inputNueva.type = 'text';
@@ -112,32 +111,9 @@ export async function render(state) {
   }
   container.appendChild(secUnidad);
 
-  // ── 3. Gestión de datos ──────────────────────────────────────────────────
-  const secCSV = cel('section', 'config-seccion');
-  secCSV.appendChild(cel('h3', 'config-titulo', '[3. GESTIÓN DE DATOS]'));
-
-  const btnExportar = cel('button', 'btn-exportar-csv',
-    '[ Exportar backup completo (.json.gz) ]');
-  secCSV.appendChild(btnExportar);
-
-  const inputArchivo = document.createElement('input');
-  inputArchivo.type = 'file';
-  inputArchivo.className = 'input-archivo';
-  inputArchivo.accept = '.json,.json.gz,.gz';
-  secCSV.appendChild(inputArchivo);
-
-  const btnImportar = cel('button', 'btn-importar-csv',
-    '[ Restaurar desde backup (.json.gz / .json) ]');
-  secCSV.appendChild(btnImportar);
-
-  const resultadoEl = cel('p', 'resultado-importacion');
-  secCSV.appendChild(resultadoEl);
-
-  container.appendChild(secCSV);
-
-  // ── 4. Color de acento ───────────────────────────────────────────────────
+  // ── 3. Color de acento ───────────────────────────────────────────────────
   const secAcento = cel('section', 'config-seccion');
-  secAcento.appendChild(cel('h3', 'config-titulo', '[4. COLOR DE ACENTO]'));
+  secAcento.appendChild(cel('h3', 'config-titulo', '[3. COLOR DE ACENTO]'));
 
   const selectorEl = cel('div', 'acento-selector');
   const acentoActual = conf.pref_acento ?? 'verde';
@@ -151,25 +127,88 @@ export async function render(state) {
   secAcento.appendChild(selectorEl);
   container.appendChild(secAcento);
 
-  // ── 5. Actualizar app ────────────────────────────────────────────────────
+  // ── 4. Actualizar app ────────────────────────────────────────────────────
   const secApp = cel('section', 'config-seccion');
-  secApp.appendChild(cel('h3', 'config-titulo', '[5. ACTUALIZAR APP]'));
+  secApp.appendChild(cel('h3', 'config-titulo', '[4. ACTUALIZAR APP]'));
   secApp.appendChild(cel('p', 'reset-advertencia',
     'Borra el caché del navegador y recarga la versión más reciente de la app.'));
   const btnActualizar = cel('button', 'btn-actualizar-app', '[ ↻ ACTUALIZAR APP ]');
   secApp.appendChild(btnActualizar);
   container.appendChild(secApp);
 
-  // ── 6. Eliminar datos ────────────────────────────────────────────────────
-  const secReset = cel('section', 'config-seccion');
-  secReset.appendChild(cel('h3', 'config-titulo', '[6. ELIMINAR DATOS]'));
-  secReset.appendChild(cel('p', 'reset-advertencia',
+  // ── 5. Gestión de datos ──────────────────────────────────────────────────
+  const secDatos = cel('section', 'config-seccion');
+  secDatos.appendChild(cel('h3', 'config-titulo', '[5. GESTIÓN DE DATOS]'));
+
+  const btnExportar = cel('button', 'btn-exportar-csv',
+    '[ EXPORTAR BACKUP (.json.gz) ]');
+  secDatos.appendChild(btnExportar);
+
+  // Input nativo oculto — activado desde btnElegir para control total del estilo
+  const inputArchivo = document.createElement('input');
+  inputArchivo.type = 'file';
+  inputArchivo.className = 'input-archivo';
+  inputArchivo.accept = '.json,.json.gz,.gz';
+
+  const btnElegir = cel('button', 'btn-elegir-archivo', '[ SELECCIONAR ARCHIVO ]');
+  const archivoNombre = cel('p', 'archivo-nombre-selec', '—');
+  secDatos.appendChild(btnElegir);
+  secDatos.appendChild(archivoNombre);
+  secDatos.appendChild(inputArchivo);
+
+  const btnImportar = cel('button', 'btn-importar-csv',
+    '[ RESTAURAR DESDE BACKUP (.json.gz / .json) ]');
+  secDatos.appendChild(btnImportar);
+
+  const resultadoEl = cel('p', 'resultado-importacion');
+  secDatos.appendChild(resultadoEl);
+
+  secDatos.appendChild(cel('hr', 'config-separador'));
+
+  secDatos.appendChild(cel('p', 'reset-advertencia',
     '⚠ Los datos son tuyos y viven en tu dispositivo. ' +
     'Esta acción elimina toda la base de datos, caché y datos de la app. ' +
     'Recomendamos exportar un backup .json.gz antes de continuar.'));
   const btnReset = cel('button', 'btn-reset-datos', '[ ⚠ ELIMINAR DATOS ]');
-  secReset.appendChild(btnReset);
-  container.appendChild(secReset);
+  secDatos.appendChild(btnReset);
+
+  container.appendChild(secDatos);
+
+  // ── 6. Donativo ──────────────────────────────────────────────────────────
+  const BTC_ADDRESS = 'bc1qg3j6r0uf4lyqw6l3q08mc7d2wvn25mt3e5huyx';
+
+  const secDonativo = cel('section', 'config-seccion');
+  secDonativo.appendChild(cel('h3', 'config-titulo', '[6. DONATIVO]'));
+
+  const donDesc = cel('p', 'reset-advertencia donativo-desc',
+    'GymLog es un proyecto personal de código abierto, sin anuncios ni suscripciones. ' +
+    'Si te resulta útil, puedes apoyar el desarrollo vía Bitcoin o MercadoPago.');
+
+  const donRepo = cel('p', 'reset-advertencia donativo-desc');
+  donRepo.appendChild(document.createTextNode('¿Tienes una sugerencia? Abre un issue en '));
+  const repoLink = document.createElement('a');
+  repoLink.href = 'https://github.com/IanCardosoP/GymlogPWA';
+  repoLink.textContent = 'github.com/IanCardosoP/GymlogPWA';
+  repoLink.target = '_blank';
+  repoLink.rel = 'noopener noreferrer';
+  repoLink.className = 'config-footer-link donativo-link';
+  donRepo.appendChild(repoLink);
+
+  const donAddrLabel = cel('p', 'donativo-addr-label', '₿ Bitcoin (Native SegWit — bc1q...):');
+  const donAddr = cel('p', 'donativo-addr', BTC_ADDRESS);
+
+  const donBtns = cel('div', 'donativo-btns');
+  const btnDonar = cel('button', 'btn-donar-btc', '[ ₿ DONAR ]');
+  const btnMercado = cel('button', 'btn-donar-btc', '[ $ MERCADOPAGO ]');
+  donBtns.appendChild(btnDonar);
+  donBtns.appendChild(btnMercado);
+
+  secDonativo.appendChild(donDesc);
+  secDonativo.appendChild(donRepo);
+  secDonativo.appendChild(donAddrLabel);
+  secDonativo.appendChild(donAddr);
+  secDonativo.appendChild(donBtns);
+  container.appendChild(secDonativo);
 
   // Footer — versión derivada dinámicamente del CACHE_NAME activo del SW
   const footer = document.createElement('footer');
@@ -195,7 +234,6 @@ export async function render(state) {
   // ── Eventos ──────────────────────────────────────────────────────────────
 
   secAdmin.addEventListener('click', async e => {
-    // Badge de días → toggle day picker
     const badge = e.target.closest('.rutina-dia-badge');
     if (badge) {
       const item = badge.closest('.rutina-item');
@@ -204,7 +242,7 @@ export async function render(state) {
       item.querySelector('.confirm-delete-panel')?.remove();
       if (picker) { picker.remove(); return; }
 
-      const rutinaId  = parseInt(badge.dataset.rutinaId);
+      const rutinaId    = parseInt(badge.dataset.rutinaId);
       const diasActivos = JSON.parse(badge.dataset.dias || '[]');
 
       const pickerEl = cel('div', 'dia-picker');
@@ -219,7 +257,6 @@ export async function render(state) {
       return;
     }
 
-    // Chip de día → toggle asignación
     const chip = e.target.closest('.dia-chip');
     if (chip) {
       const rutinaId = parseInt(chip.dataset.rutinaId);
@@ -233,7 +270,6 @@ export async function render(state) {
       return;
     }
 
-    // [ ✎ ] renombrar rutina
     const btnEdit = e.target.closest('.btn-edit');
     if (btnEdit && btnEdit.dataset.rutinaId) {
       const item = btnEdit.closest('.rutina-item');
@@ -277,7 +313,6 @@ export async function render(state) {
       return;
     }
 
-    // [ ✕ ] eliminar rutina
     const btnDel = e.target.closest('.btn-delete');
     if (btnDel && btnDel.dataset.rutinaId) {
       const item = btnDel.closest('.rutina-item');
@@ -303,7 +338,6 @@ export async function render(state) {
       return;
     }
 
-    // Confirmar eliminación
     const btnConf = e.target.closest('.btn-confirmar-eliminar');
     if (btnConf && btnConf.dataset.rutinaId) {
       await deleteRutina(parseInt(btnConf.dataset.rutinaId));
@@ -311,7 +345,6 @@ export async function render(state) {
       return;
     }
 
-    // Cancelar panel
     const btnCancel = e.target.closest('.btn-cancelar-eliminar');
     if (btnCancel) {
       btnCancel.closest('.confirm-delete-panel')?.remove();
@@ -343,6 +376,25 @@ export async function render(state) {
     selectorEl.querySelectorAll('.acento-swatch').forEach(b =>
       b.classList.toggle('is-active', b.dataset.acento === key)
     );
+  });
+
+  btnActualizar.addEventListener('click', async () => {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.update()));
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    location.reload();
+  });
+
+  btnElegir.addEventListener('click', () => inputArchivo.click());
+
+  inputArchivo.addEventListener('change', () => {
+    const archivo = inputArchivo.files?.[0];
+    archivoNombre.textContent = archivo ? archivo.name : '—';
   });
 
   btnExportar.addEventListener('click', async () => {
@@ -389,20 +441,8 @@ export async function render(state) {
     }
   });
 
-  btnActualizar.addEventListener('click', async () => {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.update()));
-    }
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    }
-    location.reload();
-  });
-
   btnReset.addEventListener('click', () => {
-    const existente = secReset.querySelector('.confirm-delete-panel');
+    const existente = secDatos.querySelector('.confirm-delete-panel');
     if (existente) { existente.remove(); return; }
 
     const panel = cel('div', 'confirm-delete-panel');
@@ -416,7 +456,28 @@ export async function render(state) {
     btnConf.addEventListener('click', resetearTodo);
     btnCancel.addEventListener('click', () => panel.remove());
 
-    secReset.appendChild(panel);
+    secDatos.appendChild(panel);
+  });
+
+  btnDonar.addEventListener('click', async () => {
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(BTC_ADDRESS);
+      copied = true;
+    } catch (_) {}
+
+    const link = document.createElement('a');
+    link.href = `bitcoin:${BTC_ADDRESS}`;
+    link.click();
+
+    btnDonar.textContent = copied
+      ? '[ ✓ DIRECCIÓN COPIADA AL PORTAPAPELES ]'
+      : '[ ₿ ABRIENDO WALLET... ]';
+    setTimeout(() => { btnDonar.textContent = '[ ₿ DONAR ]'; }, 3000);
+  });
+
+  btnMercado.addEventListener('click', () => {
+    window.open('https://link.mercadopago.com.mx/gymlog', '_blank', 'noopener,noreferrer');
   });
 }
 
