@@ -459,14 +459,18 @@ export async function clearRutinaDia(dia) {
 export async function getEstadisticasGlobales(fechaHoy) {
   const { rows: [stats] } = await db.query(`
     SELECT
-      (SELECT COUNT(*)::int FROM sesiones) AS total_sesiones,
+      (SELECT COUNT(*)::int FROM sesiones
+       WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS total_sesiones,
       (SELECT COALESCE(SUM(peso * repeticiones)::float, 0) FROM series) AS volumen_total,
       (SELECT COUNT(*)::int FROM sesiones
-       WHERE fecha >= $1::date - INTERVAL '27 days') AS sesiones_4_sem
+       WHERE fecha >= $1::date - INTERVAL '27 days'
+         AND EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS sesiones_4_sem
   `, [fechaHoy]);
 
   const { rows: fechaRows } = await db.query(
-    `SELECT DISTINCT fecha::text FROM sesiones ORDER BY fecha DESC`
+    `SELECT DISTINCT fecha::text FROM sesiones
+     WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)
+     ORDER BY fecha DESC`
   );
 
   return {
@@ -484,6 +488,7 @@ export async function getActividadSemanal(fechaHoy, semanas = 8) {
       COUNT(*)::int AS sesiones
     FROM sesiones
     WHERE fecha >= $1::date - ($2 || ' weeks')::interval
+      AND EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)
     GROUP BY semana_lunes
     ORDER BY semana_lunes ASC
   `, [fechaHoy, semanas]);
@@ -552,6 +557,7 @@ export async function getUltimasSesionesConSeries(n = 2) {
      FROM (
        SELECT id, fecha, hora_inicio, hora_fin, rutina_id
        FROM sesiones
+       WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)
        ORDER BY fecha DESC, id DESC
        LIMIT $1
      ) se

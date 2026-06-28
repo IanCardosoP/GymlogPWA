@@ -487,10 +487,22 @@ describe('getEstadisticasGlobales', () => {
   });
 
   it('cuenta sesiones totales correctamente', async () => {
-    await saveSesion('2026-06-19', null, null);
-    await saveSesion('2026-06-20', null, null);
+    const ej = await saveEjercicio('Press Banca', 'PECHO');
+    const s1 = await saveSesion('2026-06-19', null, null);
+    await saveSerie(s1.id, ej.id, 1, 80, 10);
+    const s2 = await saveSesion('2026-06-20', null, null);
+    await saveSerie(s2.id, ej.id, 1, 80, 10);
     const stats = await getEstadisticasGlobales('2026-06-21');
     expect(stats.total_sesiones).toBe(2);
+  });
+
+  it('no cuenta sesiones sin series registradas', async () => {
+    await saveSesion('2026-06-19', null, null); // sesión vacía — no debe contar
+    const ej  = await saveEjercicio('Sentadilla', 'PIERNA');
+    const ses = await saveSesion('2026-06-20', null, null);
+    await saveSerie(ses.id, ej.id, 1, 100, 5);
+    const stats = await getEstadisticasGlobales('2026-06-21');
+    expect(stats.total_sesiones).toBe(1);
   });
 
   it('suma el volumen de todas las series', async () => {
@@ -503,17 +515,25 @@ describe('getEstadisticasGlobales', () => {
   });
 
   it('devuelve las fechas de sesiones en orden descendente', async () => {
-    await saveSesion('2026-06-19', null, null);
-    await saveSesion('2026-06-21', null, null);
+    const ej = await saveEjercicio('Dominadas', 'ESPALDA');
+    const s1 = await saveSesion('2026-06-19', null, null);
+    await saveSerie(s1.id, ej.id, 1, 0, 8);
+    const s2 = await saveSesion('2026-06-21', null, null);
+    await saveSerie(s2.id, ej.id, 1, 0, 10);
     const stats = await getEstadisticasGlobales('2026-06-21');
     expect(stats.fechas[0]).toBe('2026-06-21');
     expect(stats.fechas[1]).toBe('2026-06-19');
   });
 
-  it('sesiones_4_sem solo cuenta sesiones en los últimos 28 días', async () => {
-    await saveSesion('2026-05-01', null, null); // fuera del rango
-    await saveSesion('2026-06-10', null, null); // dentro
-    await saveSesion('2026-06-21', null, null); // dentro
+  it('sesiones_4_sem solo cuenta sesiones con series en los últimos 28 días', async () => {
+    const ej   = await saveEjercicio('Curl', 'BRAZO');
+    const old  = await saveSesion('2026-05-01', null, null); // fuera del rango
+    await saveSerie(old.id, ej.id, 1, 15, 12);
+    const s2   = await saveSesion('2026-06-10', null, null); // dentro
+    await saveSerie(s2.id, ej.id, 1, 15, 12);
+    const s3   = await saveSesion('2026-06-21', null, null); // dentro
+    await saveSerie(s3.id, ej.id, 1, 15, 12);
+    await saveSesion('2026-06-15', null, null);              // vacía — no cuenta
     const stats = await getEstadisticasGlobales('2026-06-21');
     expect(stats.sesiones_4_sem).toBe(2);
     expect(stats.total_sesiones).toBe(3);
@@ -529,9 +549,14 @@ describe('getActividadSemanal', () => {
   });
 
   it('agrupa sesiones por semana (lunes)', async () => {
-    await saveSesion('2026-06-16', null, null); // lunes
-    await saveSesion('2026-06-17', null, null); // martes — misma semana
-    await saveSesion('2026-06-23', null, null); // lunes siguiente
+    const ej = await saveEjercicio('Press Militar', 'HOMBRO');
+    const s1 = await saveSesion('2026-06-16', null, null); // lunes
+    await saveSerie(s1.id, ej.id, 1, 60, 8);
+    const s2 = await saveSesion('2026-06-17', null, null); // martes — misma semana
+    await saveSerie(s2.id, ej.id, 1, 60, 8);
+    const s3 = await saveSesion('2026-06-23', null, null); // lunes siguiente
+    await saveSerie(s3.id, ej.id, 1, 60, 8);
+    await saveSesion('2026-06-18', null, null);            // sesión vacía — no debe contar
     const rows = await getActividadSemanal('2026-06-23', 8);
     expect(rows.length).toBe(2);
     expect(rows[0].sesiones).toBe(2);
