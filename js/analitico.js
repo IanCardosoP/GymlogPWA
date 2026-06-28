@@ -151,19 +151,27 @@ export function calcularRacha(fechas, hoy) {
   if (!fechas || fechas.length === 0) return 0;
   const set = new Set(fechas);
   let racha = 0;
-  let diasDescanso = 0;
-  const MAX_DESCANSO = 2; // hasta 2 días sin entrenar no cortan la racha
+  let consecutiveRest = 0;
+  const restWindow = []; // últimos 7 días procesados: true=descanso, false=entrenamiento
   const cursor = new Date(hoy + 'T12:00:00Z');
 
   while (true) {
     const key = cursor.toISOString().slice(0, 10);
-    if (set.has(key)) {
+    const isRest = !set.has(key);
+
+    if (!isRest) {
       racha++;
-      diasDescanso = 0;
+      consecutiveRest = 0;
     } else {
-      diasDescanso++;
-      if (diasDescanso > MAX_DESCANSO) break;
+      consecutiveRest++;
+      if (consecutiveRest >= 2) break; // 2 descansos consecutivos rompen la racha
     }
+
+    restWindow.unshift(isRest);
+    if (restWindow.length > 7) restWindow.pop();
+    // Regla semanal: máx 2 días de descanso en cualquier ventana de 7 días
+    if (restWindow.length === 7 && restWindow.filter(Boolean).length > 2) break;
+
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return racha;
