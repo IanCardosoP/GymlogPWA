@@ -2,7 +2,7 @@
 import {
   getRutinas, getRutinaEjercicios, getSeriesPorEjercicio,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
-  getPR1RMPorEjercicio, getVolumenPorSesion, getUltimasSesionesConSeries,
+  getPesoMaxPorEjercicio, getVolumenPorSesion, getUltimasSesionesConSeries,
 } from '../db.js';
 import {
   METRICAS_REGISTRY, prepararDatosProgreso, calcularTendencia, calcularRacha,
@@ -463,7 +463,7 @@ const GRUPOS_ORDEN = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', '
 
 async function renderRecords(container, state) {
   const unit = state.prefUnit || 'lb';
-  const prs  = await getPR1RMPorEjercicio();
+  const prs  = await getPesoMaxPorEjercicio();
 
   if (prs.length === 0) {
     container.appendChild(cel('p', 'global-vacio', 'Aún no hay series registradas.'));
@@ -479,18 +479,23 @@ async function renderRecords(container, state) {
   for (const pr of prs) {
     const g = (pr.grupo_muscular ?? 'GENERAL').toUpperCase();
     const actual = mejorPorGrupo.get(g);
-    if (!actual || pr.pr_1rm > actual.pr_1rm) mejorPorGrupo.set(g, pr);
+    if (!actual || pr.peso_max > actual.peso_max) mejorPorGrupo.set(g, pr);
   }
 
   const cardGrupo = crearSeccion('MEJOR POR GRUPO MUSCULAR');
   const listaGrupo = cel('div', 'records-lista');
+  const hdrGrupo = cel('div', 'records-fila records-header');
+  hdrGrupo.appendChild(cel('span', 'records-grupo', 'GRUPO'));
+  hdrGrupo.appendChild(cel('span', 'records-nombre-dim', 'EJERCICIO'));
+  hdrGrupo.appendChild(cel('span', 'records-valor', 'PESO MÁX.'));
+  listaGrupo.appendChild(hdrGrupo);
   for (const grupo of GRUPOS_ORDEN) {
     const fila = cel('div', 'records-fila');
     const best = mejorPorGrupo.get(grupo);
     fila.appendChild(cel('span', 'records-grupo', grupo));
     if (best) {
       fila.appendChild(cel('span', 'records-nombre-dim', best.nombre));
-      fila.appendChild(cel('span', 'records-valor', `~${Math.round(best.pr_1rm)} ${unit}`));
+      fila.appendChild(cel('span', 'records-valor', `${Math.round(best.peso_max)} ${unit}`));
     } else {
       fila.appendChild(cel('span', 'records-vacio', '—'));
     }
@@ -500,14 +505,20 @@ async function renderRecords(container, state) {
   container.appendChild(cardGrupo);
 
   // ── Sección 2: TOP 5 LIFTS ─────────────────────────────────────────────────
-  const top5 = [...prs].sort((a, b) => b.pr_1rm - a.pr_1rm).slice(0, 5);
+  const top5 = [...prs].sort((a, b) => b.peso_max - a.peso_max).slice(0, 5);
   const cardTop = crearSeccion('TOP 5 LIFTS');
   const listaTop = cel('div', 'records-lista');
+  const hdrTop = cel('div', 'records-fila records-header');
+  hdrTop.appendChild(cel('span', 'records-rank', '#'));
+  hdrTop.appendChild(cel('span', 'records-nombre', 'EJERCICIO'));
+  hdrTop.appendChild(cel('span', 'records-valor', 'PESO MÁX.'));
+  hdrTop.appendChild(cel('span', 'records-fecha', 'FECHA'));
+  listaTop.appendChild(hdrTop);
   top5.forEach((pr, i) => {
     const fila = cel('div', 'records-fila');
     fila.appendChild(cel('span', 'records-rank', String(i + 1)));
     fila.appendChild(cel('span', 'records-nombre', pr.nombre));
-    fila.appendChild(cel('span', 'records-valor', `~${Math.round(pr.pr_1rm)} ${unit}`));
+    fila.appendChild(cel('span', 'records-valor', `${Math.round(pr.peso_max)} ${unit}`));
     fila.appendChild(cel('span', 'records-fecha', formatFechaPR(pr.fecha_pr)));
     listaTop.appendChild(fila);
   });
@@ -523,10 +534,15 @@ async function renderRecords(container, state) {
   if (recientes.length > 0) {
     const cardRec = crearSeccion('↑ NUEVOS PRs — ÚLTIMAS 4 SEMANAS');
     const listaRec = cel('div', 'records-lista');
+    const hdrRec = cel('div', 'records-fila records-header');
+    hdrRec.appendChild(cel('span', 'records-nombre', 'EJERCICIO'));
+    hdrRec.appendChild(cel('span', 'records-valor', 'PESO MÁX.'));
+    hdrRec.appendChild(cel('span', 'records-fecha', 'FECHA'));
+    listaRec.appendChild(hdrRec);
     for (const pr of recientes) {
       const fila = cel('div', 'records-fila is-destacado');
       fila.appendChild(cel('span', 'records-nombre', pr.nombre));
-      fila.appendChild(cel('span', 'records-valor', `~${Math.round(pr.pr_1rm)} ${unit}`));
+      fila.appendChild(cel('span', 'records-valor', `${Math.round(pr.peso_max)} ${unit}`));
       fila.appendChild(cel('span', 'records-fecha', formatFechaPR(pr.fecha_pr)));
       listaRec.appendChild(fila);
     }

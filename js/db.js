@@ -520,19 +520,19 @@ export async function getVolumenPorGrupoMuscular(fechaHoy, semanas = 4) {
   return rows;
 }
 
-export async function getPR1RMPorEjercicio() {
+export async function getPesoMaxPorEjercicio() {
   const { rows } = await db.query(`
     SELECT DISTINCT ON (e.id)
       e.id AS ejercicio_id,
       e.nombre,
       e.grupo_muscular,
-      (s.peso * (1 + s.repeticiones / 30.0))::float AS pr_1rm,
+      s.peso::float AS peso_max,
       se.fecha::text AS fecha_pr
     FROM series s
     JOIN sesiones se ON se.id = s.sesion_id
     JOIN ejercicios e ON e.id = s.ejercicio_id
     WHERE s.peso > 0
-    ORDER BY e.id, pr_1rm DESC
+    ORDER BY e.id, peso_max DESC
   `);
   return rows;
 }

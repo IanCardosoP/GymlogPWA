@@ -9,7 +9,7 @@ import {
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit, updatePrefAcento,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
-  getPR1RMPorEjercicio, getVolumenPorSesion,
+  getPesoMaxPorEjercicio, getVolumenPorSesion,
 } from '../js/db.js';
 
 beforeEach(async () => {
@@ -596,31 +596,31 @@ describe('getVolumenPorGrupoMuscular', () => {
   });
 });
 
-// ── getPR1RMPorEjercicio ──────────────────────────────────────────────────────
+// ── getPesoMaxPorEjercicio ────────────────────────────────────────────────────
 
-describe('getPR1RMPorEjercicio', () => {
+describe('getPesoMaxPorEjercicio', () => {
   it('retorna array vacío sin series', async () => {
-    const rows = await getPR1RMPorEjercicio();
+    const rows = await getPesoMaxPorEjercicio();
     expect(rows).toEqual([]);
   });
 
-  it('retorna el mejor 1RM por ejercicio', async () => {
+  it('retorna el mayor peso real por ejercicio', async () => {
     const ej  = await saveEjercicio('Press Banca', 'PECHO');
     const s1  = await saveSesion('2026-06-01', null, null);
     const s2  = await saveSesion('2026-06-15', null, null);
-    await saveSerie(s1.id, ej.id, 1, 80, 10);  // 1RM = 80*(1+10/30) ≈ 106.67
-    await saveSerie(s2.id, ej.id, 1, 90, 5);   // 1RM = 90*(1+5/30) ≈ 105
-    const rows = await getPR1RMPorEjercicio();
+    await saveSerie(s1.id, ej.id, 1, 80, 10); // peso 80
+    await saveSerie(s2.id, ej.id, 1, 90, 5);  // peso 90 — es el mayor
+    const rows = await getPesoMaxPorEjercicio();
     expect(rows.length).toBe(1);
-    expect(rows[0].pr_1rm).toBeGreaterThan(105);
-    expect(rows[0].fecha_pr).toBe('2026-06-01'); // fecha donde ocurrió el PR
+    expect(rows[0].peso_max).toBe(90);
+    expect(rows[0].fecha_pr).toBe('2026-06-15'); // fecha donde se levantó el mayor peso
   });
 
   it('ignora series de peso cero (BW)', async () => {
     const ej  = await saveEjercicio('Dominadas', 'ESPALDA');
     const ses = await saveSesion('2026-06-21', null, null);
     await saveSerie(ses.id, ej.id, 1, 0, 10); // BW — debe ignorarse
-    const rows = await getPR1RMPorEjercicio();
+    const rows = await getPesoMaxPorEjercicio();
     expect(rows).toEqual([]);
   });
 });

@@ -828,6 +828,13 @@ input.is-saved::placeholder {
   color: var(--color-acento);
 }
 
+.records-fila.records-header span {
+  font-size: 9px;
+  color: var(--color-texto-dim);
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
 /* Columna grupo (mejor por grupo) */
 .records-grupo {
   width: 60px;
