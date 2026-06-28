@@ -468,7 +468,7 @@ export async function render(state) {
     btnDonar.textContent = copied
       ? '[ ✓ DIRECCIÓN COPIADA AL PORTAPAPELES ]'
       : '[ ₿ ABRIENDO WALLET... ]';
-    setTimeout(() => { btnDonar.textContent = '[ ₿ DONAR (bc1qg...5huyx) ]'; }, 3000);
+    setTimeout(() => { btnDonar.textContent = '[ ₿ DONAR ]'; }, 3000);
   });
 }
 
