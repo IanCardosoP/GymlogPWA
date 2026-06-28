@@ -141,7 +141,7 @@ export async function render(state) {
   secDatos.appendChild(cel('h3', 'config-titulo', '[5. GESTIÓN DE DATOS]'));
 
   const btnExportar = cel('button', 'btn-exportar-csv',
-    '[ Exportar backup completo (.json.gz) ]');
+    '[ EXPORTAR BACKUP (.json.gz) ]');
   secDatos.appendChild(btnExportar);
 
   // Input nativo oculto — activado desde btnElegir para control total del estilo
@@ -157,7 +157,7 @@ export async function render(state) {
   secDatos.appendChild(inputArchivo);
 
   const btnImportar = cel('button', 'btn-importar-csv',
-    '[ Restaurar desde backup (.json.gz / .json) ]');
+    '[ RESTAURAR DESDE BACKUP (.json.gz / .json) ]');
   secDatos.appendChild(btnImportar);
 
   const resultadoEl = cel('p', 'resultado-importacion');
@@ -193,11 +193,10 @@ export async function render(state) {
   repoLink.rel = 'noopener noreferrer';
   repoLink.className = 'config-footer-link donativo-link';
   donRepo.appendChild(repoLink);
-  donRepo.appendChild(document.createTextNode('.'));
 
   const donAddrLabel = cel('p', 'donativo-addr-label', '₿ Dirección Bitcoin (Native SegWit — bc1q...):');
   const donAddr = cel('p', 'donativo-addr', BTC_ADDRESS);
-  const btnDonar = cel('button', 'btn-donar-btc', '[ ₿ DONAR (bc1qg...5huyx) ]');
+  const btnDonar = cel('button', 'btn-donar-btc', '[ ₿ DONAR ]');
 
   secDonativo.appendChild(donDesc);
   secDonativo.appendChild(donRepo);
