@@ -154,6 +154,24 @@ details {
   opacity: 0.35;
   margin: 15px 0;
 }
+
+.diario-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 0;
+}
+.diario-skeleton-bloque {
+  height: 56px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1a1a1a 25%, #252525 50%, #1a1a1a 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s infinite;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 .ejercicio-bloque[data-progreso="0"] {
   border-left-color: var(--color-texto-dim);
 }

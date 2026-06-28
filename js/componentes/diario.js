@@ -29,23 +29,45 @@ function cel(tag, clase, texto) {
   return e;
 }
 
+function renderSkeleton() {
+  const wrap = cel('div', 'diario-skeleton');
+  for (let i = 0; i < 9; i++) wrap.appendChild(cel('div', 'diario-skeleton-bloque'));
+  return wrap;
+}
+
 export async function render(state) {
   const container = document.getElementById('diario-container');
   if (!container) return;
-  container.textContent = ''; // idempotente
+
+  // OPT-5: Skeleton inmediato — feedback visual antes de cualquier query
+  container.textContent = '';
+  container.appendChild(renderSkeleton());
 
   const fechaLocal = new Date().toLocaleDateString('en-CA');
   const fechaDisplay = new Date()
     .toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     .toUpperCase();
 
-  // Rutina del día (por día de semana: 0=Dom … 6=Sáb) via tabla rutina_dias
+  // OPT-2: getSesionDelDia corre en paralelo con getRutinas+getRutinasDias
+  // (la fecha es conocida antes de las queries, no hay dependencia)
   const diaSemana = new Date().getDay();
-  const [rutinas, rutinaDias] = await Promise.all([getRutinas(), getRutinasDias()]);
+  const [[rutinas, rutinaDias], sesionExistente] = await Promise.all([
+    Promise.all([getRutinas(), getRutinasDias()]),
+    getSesionDelDia(fechaLocal),
+  ]);
   const asignacion  = rutinaDias.find(rd => rd.dia === diaSemana);
   const rutinaHoy   = asignacion
     ? rutinas.find(r => r.id === asignacion.rutina_id) ?? null
     : null;
+
+  // Sesión del día (sesionExistente ya disponible — saveSesion solo si falta)
+  let sesion = sesionExistente;
+  if (!sesion && rutinaHoy) sesion = await saveSesion(fechaLocal, rutinaHoy.id, null);
+  if (sesion)    store.currentSesionId = sesion.id;
+  if (rutinaHoy) store.activeRoutineId  = rutinaHoy.id;
+
+  // Reemplazar skeleton con contenido real
+  container.textContent = '';
 
   // Cabecera
   const header = cel('header', 'diario-header');
@@ -56,30 +78,25 @@ export async function render(state) {
   header.appendChild(cel('p', 'diario-rutina-titulo', rutinaLabel));
   container.appendChild(header);
 
-  // Sesión del día
-  let sesion = await getSesionDelDia(fechaLocal);
-  if (!sesion && rutinaHoy) sesion = await saveSesion(fechaLocal, rutinaHoy.id, null);
-  if (sesion)    store.currentSesionId = sesion.id;
-  if (rutinaHoy) store.activeRoutineId  = rutinaHoy.id;
-
   // Sin rutina asignada → pantalla de descanso
   if (!rutinaHoy) {
     mostrarPantallaDescanso(container);
     return;
   }
 
-  // Todos los ejercicios de la rutina, sin límite de slots
-  const todos = await getRutinaEjercicios(rutinaHoy.id);
+  // OPT-3: getRutinaEjercicios y getTodasSeriesDeHoy en paralelo
+  // (sesion?.id ya disponible desde OPT-2; getTodasSeriesDeHoy tiene guard para null)
+  const [todos, todasSeriesHoy] = await Promise.all([
+    getRutinaEjercicios(rutinaHoy.id),
+    getTodasSeriesDeHoy(sesion?.id ?? null),
+  ]);
 
   const lista = cel('div', 'diario-lista');
   container.appendChild(lista);
 
-  // Batch fetch — 2 queries para todos los ejercicios
+  // getUltimasSeriesPorEjercicio necesita ejIds de todos (dependencia secuencial mínima)
   const ejIds = todos.map(e => e.ejercicio_id);
-  const [todasSeriesHoy, ultimasPorEj] = await Promise.all([
-    getTodasSeriesDeHoy(sesion?.id ?? null),
-    getUltimasSeriesPorEjercicio(ejIds),
-  ]);
+  const ultimasPorEj = await getUltimasSeriesPorEjercicio(ejIds);
   const seriesHoyMap = new Map();
   for (const s of todasSeriesHoy) {
     if (!seriesHoyMap.has(s.ejercicio_id)) seriesHoyMap.set(s.ejercicio_id, []);
@@ -97,14 +114,17 @@ export async function render(state) {
     return { seriesHoy, ref };
   });
 
+  // OPT-4: DocumentFragment — inserta todos los bloques en un solo reflow
+  const frag = document.createDocumentFragment();
   for (let i = 0; i < slots.length; i++) {
     if (i === 8 && todos.length > 8) {
       const sep = document.createElement('hr');
       sep.className = 'diario-separador';
-      lista.appendChild(sep);
+      frag.appendChild(sep);
     }
-    lista.appendChild(construirBloque(slots[i], i, sesion, datosSlots[i]));
+    frag.appendChild(construirBloque(slots[i], i, sesion, datosSlots[i]));
   }
+  lista.appendChild(frag);
 
   // Botón fin
   const finBtn = cel('button', 'btn-fin-entrenamiento', '[ RESUMEN DE LA SESIÓN ]');

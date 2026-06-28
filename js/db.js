@@ -75,6 +75,11 @@ export async function initDB(uri = 'idb://gym-log-db') {
     SELECT id, dia_sugerido FROM rutinas
     WHERE dia_sugerido IS NOT NULL
     ON CONFLICT DO NOTHING;
+
+    CREATE INDEX IF NOT EXISTS idx_sesiones_fecha      ON sesiones(fecha);
+    CREATE INDEX IF NOT EXISTS idx_series_sesion_id    ON series(sesion_id);
+    CREATE INDEX IF NOT EXISTS idx_series_ejercicio_id ON series(ejercicio_id);
+    CREATE INDEX IF NOT EXISTS idx_re_rutina_orden     ON rutina_ejercicios(rutina_id, orden);
   `);
 
   return db;
