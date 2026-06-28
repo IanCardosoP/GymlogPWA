@@ -5,7 +5,7 @@ import {
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
   moverEjercicioAlFondo, moverEjercicioArriba, linkEjercicioToRutina,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
-  saveSesion, getSesionDelDia,
+  saveSesion, getSesionDelDia, touchSesionTiempo, resetSesionTiempoIfVacia,
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
   getConf, updatePrefUnit, updatePrefAcento,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
@@ -656,5 +656,41 @@ describe('getVolumenPorSesion', () => {
     const rows = await getVolumenPorSesion(ej1.id);
     expect(rows.length).toBe(1);
     expect(rows[0].volumen).toBeCloseTo(800);
+  });
+});
+
+// ── resetSesionTiempoIfVacia ──────────────────────────────────────────────────
+
+describe('resetSesionTiempoIfVacia', () => {
+  it('resetea hora_inicio y hora_fin cuando la sesión queda sin series', async () => {
+    const ses = await saveSesion('2026-06-23', null, null);
+    await touchSesionTiempo(ses.id);
+    const ej  = await saveEjercicio('Press', 'PECHO');
+    const s   = await saveSerie(ses.id, ej.id, 1, 80, 10);
+    await deleteSerie(s.id);
+    await resetSesionTiempoIfVacia(ses.id);
+
+    const db = (await import('../js/db.js')).getDB();
+    const { rows: [row] } = await db.query(
+      'SELECT hora_inicio, hora_fin FROM sesiones WHERE id = $1', [ses.id]
+    );
+    expect(row.hora_inicio).toBeNull();
+    expect(row.hora_fin).toBeNull();
+  });
+
+  it('NO resetea si la sesión aún tiene series', async () => {
+    const ses = await saveSesion('2026-06-23', null, null);
+    const ej  = await saveEjercicio('Press', 'PECHO');
+    await saveSerie(ses.id, ej.id, 1, 80, 10);
+    const s2  = await saveSerie(ses.id, ej.id, 2, 80, 8);
+    await touchSesionTiempo(ses.id);
+    await deleteSerie(s2.id); // elimina solo la 2ª, queda la 1ª
+    await resetSesionTiempoIfVacia(ses.id);
+
+    const db = (await import('../js/db.js')).getDB();
+    const { rows: [row] } = await db.query(
+      'SELECT hora_inicio FROM sesiones WHERE id = $1', [ses.id]
+    );
+    expect(row.hora_inicio).not.toBeNull();
   });
 });

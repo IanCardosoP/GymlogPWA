@@ -7,7 +7,7 @@ import motivArt     from '/icons/motiv.txt?raw';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
-  saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo,
+  saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo, resetSesionTiempoIfVacia,
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
   saveEjercicio, getOrCreateEjercicio, getEjercicios,
@@ -128,6 +128,7 @@ export async function render(state) {
 
       await deleteSerie(serieId);
       await renumerarSeries(sesion.id, ejId);
+      await resetSesionTiempoIfVacia(sesion.id);
 
       filaToRemove.remove();
       filaWrapper.querySelectorAll('.serie-fila').forEach((fila, i) => {

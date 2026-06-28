@@ -247,6 +247,16 @@ export async function touchSesionTiempo(sesionId) {
   );
 }
 
+export async function resetSesionTiempoIfVacia(sesionId) {
+  await db.query(
+    `UPDATE sesiones
+     SET hora_inicio = NULL, hora_fin = NULL
+     WHERE id = $1
+       AND NOT EXISTS (SELECT 1 FROM series WHERE sesion_id = $1)`,
+    [sesionId]
+  );
+}
+
 // ── Series ────────────────────────────────────────────────────────────────────
 
 export async function deleteSerie(serieId) {
