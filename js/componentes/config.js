@@ -171,6 +171,56 @@ export async function render(state) {
   secReset.appendChild(btnReset);
   container.appendChild(secReset);
 
+  // ── 7. Donativo ──────────────────────────────────────────────────────────
+  const BTC_ADDRESS = 'bc1qg3j6r0uf4lyqw6l3q08mc7d2wvn25mt3e5huyx';
+
+  const secDonativo = cel('section', 'config-seccion');
+  secDonativo.appendChild(cel('h3', 'config-titulo', '[7. DONATIVO]'));
+
+  const donDesc = cel('p', 'reset-advertencia donativo-desc',
+    'GymLog es un proyecto personal de código abierto, sin anuncios ni suscripciones. ' +
+    'Si te resulta útil, puedes apoyar el desarrollo con un donativo en Bitcoin.');
+
+  const donRepo = cel('p', 'reset-advertencia donativo-desc');
+  donRepo.appendChild(document.createTextNode('¿Tienes una sugerencia? Abre un issue en '));
+  const repoLink = document.createElement('a');
+  repoLink.href = 'https://github.com/IanCardosoP/GymlogPWA';
+  repoLink.textContent = 'github.com/IanCardosoP/GymlogPWA';
+  repoLink.target = '_blank';
+  repoLink.rel = 'noopener noreferrer';
+  repoLink.className = 'config-footer-link donativo-link';
+  donRepo.appendChild(repoLink);
+  donRepo.appendChild(document.createTextNode('.'));
+
+  const donAddrLabel = cel('p', 'donativo-addr-label', '₿ Dirección Bitcoin (Native SegWit — bc1q...):');
+  const donAddr = cel('p', 'donativo-addr', BTC_ADDRESS);
+
+  const btnDonar = cel('button', 'btn-donar-btc', '[ ₿ DONAR (bc1qg...5huyx) ]');
+
+  secDonativo.appendChild(donDesc);
+  secDonativo.appendChild(donRepo);
+  secDonativo.appendChild(donAddrLabel);
+  secDonativo.appendChild(donAddr);
+  secDonativo.appendChild(btnDonar);
+  container.appendChild(secDonativo);
+
+  btnDonar.addEventListener('click', async () => {
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(BTC_ADDRESS);
+      copied = true;
+    } catch (_) {}
+
+    const link = document.createElement('a');
+    link.href = `bitcoin:${BTC_ADDRESS}`;
+    link.click();
+
+    btnDonar.textContent = copied
+      ? '[ ✓ DIRECCIÓN COPIADA AL PORTAPAPELES ]'
+      : '[ ₿ ABRIENDO WALLET... ]';
+    setTimeout(() => { btnDonar.textContent = '[ ₿ DONAR (bc1qg...5huyx) ]'; }, 3000);
+  });
+
   // Footer — versión derivada dinámicamente del CACHE_NAME activo del SW
   const footer = document.createElement('footer');
   footer.className = 'config-footer';
