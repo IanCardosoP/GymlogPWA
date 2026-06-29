@@ -198,7 +198,7 @@ export async function render(state) {
   const donAddr = cel('p', 'donativo-addr', BTC_ADDRESS);
 
   const donBtns = cel('div', 'donativo-btns');
-  const btnDonar = cel('button', 'btn-donar-btc', '[ ₿ DONAR ]');
+  const btnDonar = cel('button', 'btn-donar-btc', '[ ₿ BITCOIN ]');
   const btnMercado = cel('button', 'btn-donar-btc', '[ $ MERCADOPAGO ]');
   donBtns.appendChild(btnDonar);
   donBtns.appendChild(btnMercado);
@@ -473,7 +473,7 @@ export async function render(state) {
     btnDonar.textContent = copied
       ? '[ ✓ DIRECCIÓN COPIADA AL PORTAPAPELES ]'
       : '[ ₿ ABRIENDO WALLET... ]';
-    setTimeout(() => { btnDonar.textContent = '[ ₿ DONAR ]'; }, 3000);
+    setTimeout(() => { btnDonar.textContent = '[ ₿ BITCOIN ]'; }, 3000);
   });
 
   btnMercado.addEventListener('click', () => {
