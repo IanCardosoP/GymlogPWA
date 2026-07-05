@@ -1,12 +1,72 @@
 /* Estilos globales: variables de terminal oscura, layout 450px, navegación sticky */
 
 :root {
+  /* ── Color base (existentes) ── */
   --color-fondo: #000000;
   --color-fondo-alt: #121212;
-  --color-acento: #00ff88;
+  --color-acento: #00ff88; /* dinámico — lo sobreescribe aplicarAcento() en runtime */
   --color-texto: #e0e0e0;
   --color-texto-dim: #c0c0c0;
-  --font-mono: 'Courier New', Courier, monospace;
+
+  /* ── Color: superficies y bordes (Fase 1) ── */
+  --color-texto-faint: #767676;  /* vacíos/placeholders — AA 4.5:1 sobre #000 */
+  --color-borde: #2a2a2a;        /* bordes de cards y separadores pasivos */
+  --color-linea: #1e1e1e;        /* hairlines de filas */
+  --skeleton-a: #1a1a1a;
+  --skeleton-b: #252525;
+
+  /* ── Color: semánticos (Fase 1) ── */
+  --color-peligro: #ff4444;
+  --color-exito: #00ff88;        /* fijo — no sigue al acento */
+  --color-alerta: #ffb020;       /* reservado */
+  --color-info: #00d4ff;         /* reservado */
+
+  /* ── Acentos disponibles (fuente única; espejo de ACENTOS en js/app.js) ── */
+  --acento-verde: #00ff88;
+  --acento-morado: #bf00ff;
+  --acento-rosa: #ff0080;
+  --acento-cian: #00d4ff;
+
+  /* ── Derivados del acento (siempre color-mix, jamás rgba(var())) ── */
+  --velo-acento: color-mix(in srgb, var(--color-acento) 12%, transparent);
+  --glow-focus: 0 0 10px color-mix(in srgb, var(--color-acento) 30%, transparent);
+
+  /* ── Tipografía ── */
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Roboto Mono', 'Courier New', monospace;
+  --fs-micro: 10px;    /* antes 9px hardcode — bump de legibilidad */
+  --fs-caption: 10px;
+  --fs-detail: 11px;
+  --fs-body-sm: 12px;
+  --fs-body: 13px;
+  --fs-body-lg: 14px;
+  --fs-base: 15px;
+  --fs-input: 16px;    /* fijo — evita auto-zoom de iOS en inputs */
+  --fs-title: 20px;
+  --fs-stat: 22px;
+
+  /* ── Spacing (escala 4pt) ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* ── Radius (estética terminal: sharp por defecto) ── */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+
+  /* ── Sombra / glow ── */
+  --sombra-frame: 0 0 24px rgba(0, 0, 0, 0.6);
+
+  /* ── Motion ── */
+  --dur-fast: 100ms;
+  --dur-base: 150ms;
+  --dur-slow: 250ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+
   --max-width: 450px;
   color-scheme: dark;
 }
