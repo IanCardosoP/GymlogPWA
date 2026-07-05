@@ -270,7 +270,7 @@ details {
 }
 
 summary {
-  padding: 12px;
+  padding: var(--sp-2) var(--sp-3);
   cursor: pointer;
   list-style: none;
   font-size: var(--fs-body);
@@ -279,6 +279,7 @@ summary {
   user-select: none;
   display: flex;
   align-items: center;
+  gap: var(--sp-2);
 }
 
 summary::-webkit-details-marker {
@@ -345,7 +346,7 @@ details > div {
 .serie-fila {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 .serie-label {
@@ -374,77 +375,90 @@ input.is-saved::placeholder {
   color: var(--color-texto-dim);
 }
 
-.btn-guardar {
-  background: none;
-  border: none;
-  color: var(--color-acento);
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  font-weight: 300;
-  padding: 6px;
-  cursor: pointer;
-  opacity: 0.6;
-  letter-spacing: 0.05em;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.btn-guardar:hover { opacity: 1; }
-
-.btn-guardar:disabled {
-  opacity: 1;
-  cursor: default;
-}
-
-.btn-delete-serie {
-  background: none;
-  border: none;
-  color: var(--color-acento);
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  font-weight: 300;
-  padding: 6px;
-  cursor: pointer;
-  opacity: 0.6;
-  letter-spacing: 0.05em;
-  flex-shrink: 0;
-}
-
-.btn-delete-serie:hover { opacity: 1; }
-
+/* ── Keycaps terminal (patrón Terminal CLI de la skill ui-ux-pro-max):
+      caja visible 36×36, zona táctil 44×44 vía ::after (hitSlop web),
+      inversión instantánea de color al press. Las clases son hooks de
+      closest() — NO renombrar. ── */
+.btn-guardar,
+.btn-delete-serie,
 .btn-mover-abajo,
-.btn-mover-arriba {
-  background: none;
-  border: none;
-  color: var(--color-acento);
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  font-weight: 300;
-  padding: 6px;
-  cursor: pointer;
-  opacity: 0.6;
-  letter-spacing: 0.05em;
-  flex-shrink: 0;
-}
-.btn-mover-abajo:hover,
-.btn-mover-arriba:hover { opacity: 1; }
-
+.btn-mover-arriba,
 .btn-edit,
 .btn-delete {
+  position: relative;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   background: none;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--color-acento) 55%, transparent);
   color: var(--color-acento);
   font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  font-weight: 300;
-  padding: 6px;
+  font-size: var(--fs-body-lg);
   cursor: pointer;
-  opacity: 0.6;
-  letter-spacing: 0.05em;
   flex-shrink: 0;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
 }
-.btn-edit:hover,
-.btn-delete:hover { opacity: 1; }
+
+.btn-guardar { margin-left: auto; }
+
+/* hitSlop: expande la zona táctil a 44×44 sin mover el layout.
+   Con gap de 8px entre keycaps los hitboxes quedan tangentes. */
+.btn-guardar::after,
+.btn-delete-serie::after,
+.btn-mover-abajo::after,
+.btn-mover-arriba::after,
+.btn-edit::after,
+.btn-delete::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+.btn-guardar:hover,
+.btn-mover-abajo:hover,
+.btn-mover-arriba:hover,
+.btn-edit:hover {
+  border-color: var(--color-acento);
+}
+
+/* Press: inversión instantánea fondo acento + glifo negro */
+.btn-guardar:active,
+.btn-mover-abajo:active,
+.btn-mover-arriba:active,
+.btn-edit:active {
+  background-color: var(--color-acento);
+  color: var(--color-fondo);
+}
+
+/* Variante destructiva */
+.btn-delete-serie,
+.btn-delete {
+  border-color: color-mix(in srgb, var(--color-peligro) 55%, transparent);
+  color: var(--color-peligro);
+}
+.btn-delete-serie:hover,
+.btn-delete:hover { border-color: var(--color-peligro); }
+.btn-delete-serie:active,
+.btn-delete:active {
+  background-color: var(--color-peligro);
+  color: var(--color-fondo);
+}
+
+/* Serie guardada: estado quieto, sin interacción */
+.btn-guardar:disabled {
+  border-color: color-mix(in srgb, var(--color-acento) 30%, transparent);
+  opacity: 0.75;
+  cursor: default;
+}
+.btn-guardar:disabled:active {
+  background: none;
+  color: var(--color-acento);
+}
 
 .rename-panel,
 .confirm-delete-panel {
@@ -531,7 +545,7 @@ input.is-saved::placeholder {
 .grupo-muscular-btns {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 .btn-grupo-muscular {
@@ -1157,7 +1171,7 @@ input.is-saved::placeholder {
 .dia-picker {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   padding: var(--sp-2) 0;
   border-bottom: 1px solid var(--color-borde);
 }
@@ -1392,7 +1406,7 @@ input.is-saved::placeholder {
 .btn-add-ok,
 .btn-add-cancel {
   flex-shrink: 0;
-  width: 28px;
+  width: 36px;
   background: none;
   border: 1px solid;
   font-family: var(--font-mono);
@@ -1471,8 +1485,8 @@ details:not(.metrica-info) > summary:hover {
   transition: background-color var(--dur-base) var(--ease-out);
 }
 
-/* Press feedback en botones outline — el :hover no existe en táctil
-   (skill: press feedback 80-150ms) */
+/* Press feedback en botones outline — inversión completa de keycap
+   (patrón Terminal CLI; el :hover no existe en táctil) */
 .btn-ir-config:active,
 .btn-nueva-rutina:active,
 .btn-exportar-csv:active,
@@ -1488,13 +1502,67 @@ details:not(.metrica-info) > summary:hover {
 .dia-chip:active,
 .rutina-dia-badge:active,
 .btn-add-ok:active {
-  background-color: var(--velo-acento);
+  background-color: var(--color-acento);
+  border-color: var(--color-acento);
+  color: var(--color-fondo);
 }
 
 .btn-reset-datos:active,
 .btn-confirmar-eliminar:active,
 .btn-add-cancel:active {
-  background-color: color-mix(in srgb, var(--color-peligro) 15%, transparent);
+  background-color: var(--color-peligro);
+  border-color: var(--color-peligro);
+  color: var(--color-fondo);
+}
+
+.btn-panel-cancel:active,
+.btn-cancelar-eliminar:active {
+  background-color: var(--color-texto-dim);
+  border-color: var(--color-texto-dim);
+  color: var(--color-fondo);
+}
+
+/* ── Touch targets 44×44 (skill CRITICAL #2) ──────────────────────────────
+   Chips y botones de panel: mínimo visible 36px + hitSlop ::after a 44px. */
+.btn-panel-accion,
+.btn-panel-cancel,
+.btn-confirmar-eliminar,
+.btn-cancelar-eliminar,
+.btn-grupo-muscular,
+.dia-chip,
+.rutina-dia-badge {
+  position: relative;
+  min-height: 36px;
+  padding: var(--sp-2) var(--sp-3);
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-panel-accion::after,
+.btn-panel-cancel::after,
+.btn-confirmar-eliminar::after,
+.btn-cancelar-eliminar::after,
+.btn-grupo-muscular::after,
+.dia-chip::after,
+.rutina-dia-badge::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+/* CTAs anchos: altura táctil completa */
+.btn-ir-config,
+.btn-nueva-rutina,
+.btn-exportar-csv,
+.btn-importar-csv,
+.btn-actualizar-app,
+.btn-elegir-archivo,
+.btn-donar-btc,
+.btn-fin-volver,
+.btn-fin-compartir,
+.btn-fin-entrenamiento,
+.btn-reset-datos {
+  min-height: 44px;
 }
 
 /* Glow mínimo del estilo OLED en la tab activa — sparingly */

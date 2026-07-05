@@ -222,7 +222,7 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   const btn       = fila.querySelector('.btn-guardar');
   const btnX      = fila.querySelector('.btn-delete-serie');
 
-  btn.textContent  = '[ ✓ ]';
+  btn.textContent  = '✓';
   btn.disabled     = true;
   inputPeso.disabled = true;
   inputReps.disabled = true;
@@ -267,20 +267,23 @@ function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
 
   if (ej) {
     const btnMover = cel('button', idx < 8 ? 'btn-mover-abajo' : 'btn-mover-arriba',
-                                   idx < 8 ? '[ ↓ ]' : '[ ↑ ]');
+                                   idx < 8 ? '↓' : '↑');
     btnMover.dataset.reId = ej.id;
+    btnMover.setAttribute('aria-label', idx < 8 ? 'Mover ejercicio abajo' : 'Mover ejercicio arriba');
     summary.appendChild(btnMover);
   }
 
   if (ej) {
-    const btnEdit = cel('button', 'btn-edit', '[ ✎ ]');
+    const btnEdit = cel('button', 'btn-edit', '✎');
     btnEdit.dataset.ejId  = ej.ejercicio_id;
     btnEdit.dataset.grupo = ej.grupo_muscular ?? 'GENERAL';
+    btnEdit.setAttribute('aria-label', 'Renombrar ejercicio');
     summary.appendChild(btnEdit);
 
-    const btnDelete = cel('button', 'btn-delete', '[ ✕ ]');
+    const btnDelete = cel('button', 'btn-delete', '✕');
     btnDelete.dataset.ejId   = ej.ejercicio_id;
     btnDelete.dataset.nombre = ej.nombre;
+    btnDelete.setAttribute('aria-label', 'Eliminar ejercicio');
     summary.appendChild(btnDelete);
   }
 
@@ -342,12 +345,14 @@ function construirFilaSerie(num, phPeso, phReps) {
 
   fila.appendChild(cel('span', 'serie-unit', ' reps'));
 
-  const btn = cel('button', 'btn-guardar', '[ ✓ ]');
+  const btn = cel('button', 'btn-guardar', '✓');
   btn.dataset.numSerie = num;
+  btn.setAttribute('aria-label', 'Guardar serie');
   fila.appendChild(btn);
 
-  const btnX = cel('button', 'btn-delete-serie', '[ ✕ ]');
+  const btnX = cel('button', 'btn-delete-serie', '✕');
   btnX.hidden = true;
+  btnX.setAttribute('aria-label', 'Eliminar serie');
   fila.appendChild(btnX);
 
   return fila;
