@@ -659,11 +659,18 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
       wrapper.classList.add('fin-capture-wrapper');
       finDiv.parentNode.insertBefore(wrapper, finDiv);
       wrapper.appendChild(finDiv);
+      // Resolución dinámica igual al dispositivo: la densidad de píxeles real
+      // (devicePixelRatio) y las dimensiones on-screen del wrapper garantizan
+      // que la imagen compartida se vea idéntica a lo que ve el usuario (issue #18).
       const canvas = await html2canvas(wrapper, {
-        scale: 2,
+        scale: window.devicePixelRatio || 1,
         backgroundColor: '#000000',
         useCORS: false,
         logging: false,
+        width: wrapper.offsetWidth,
+        height: wrapper.offsetHeight,
+        windowWidth: document.documentElement.clientWidth,
+        windowHeight: document.documentElement.clientHeight,
       });
       wrapper.parentNode.insertBefore(finDiv, wrapper);
       wrapper.parentNode.removeChild(wrapper);
@@ -687,7 +694,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
   const finDiv = cel('div', 'diario-fin');
   finDiv.id = 'diario-fin';
 
-  finDiv.appendChild(cel('h2', 'fin-titulo', '¡ Entrenamiento Finalizado !'));
+  finDiv.appendChild(cel('h2', 'fin-titulo', '¡Entrenamiento Finalizado!'));
 
   const arte = cel('pre', 'fin-arte');
   arte.textContent = asciiFinArt;
