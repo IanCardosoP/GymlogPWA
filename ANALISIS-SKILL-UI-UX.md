@@ -525,7 +525,6 @@ Especificar qué archivo(s) se tocan en cada fase, con estimación de esfuerzo e
 
 ### ✅ Recomendaciones
 
-1. **No instalar la skill ahora** — estamos en fase de análisis. La rama `gh/ui-ux-skill-analysis` es un checkpoint de decisiones.
 2. **Usar el prompt maestro** (sección 6) como especificación de diseño cuando se inicie Fase 1 de implementación (futura sprint).
 3. **Priorizar Fase 1 y 2** (solo CSS, bajo riesgo) — son los que aportan más valor visual con menor riesgo de regresiones.
 4. **Postergar Fase 3** a cuando el equipo tenga confianza en el patrón de refactorización — es donde está la mayoría del riesgo.
@@ -538,7 +537,7 @@ Especificar qué archivo(s) se tocan en cada fase, con estimación de esfuerzo e
 3. **Ejecutar Fases 1 y 2**: expandir CSS, refinar componentes existentes.
 4. **Testing**: `pnpm test` + `pnpm run dev`, navegación manual en las 3 pestañas.
 5. **Code review**: verificar que no se rompan listeners delegados, que todos los `closest()` sigan siendo válidos.
-6. **Merge a dev**, luego a main con PR.
+
 
 ---
 
