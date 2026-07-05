@@ -217,9 +217,9 @@ describe('calcularRacha (máx 2 descansos no-consecutivos/semana)', () => {
     expect(calcularRacha(['2026-06-25', '2026-06-23'], '2026-06-25')).toBe(2);
   });
 
-  it('2 días de descanso consecutivos cortan la racha inmediatamente', () => {
-    // hoy = Sáb 27, Vie 26 y Sáb 27 sin sesión → racha = 0
-    expect(calcularRacha(['2026-06-25'], '2026-06-27')).toBe(0);
+  it('2 días concluidos de descanso consecutivos cortan la racha', () => {
+    // Jue 25 entrenó; Vie 26 y Sáb 27 descanso (ya concluidos); hoy = Dom 28 pendiente → racha = 0
+    expect(calcularRacha(['2026-06-25'], '2026-06-28')).toBe(0);
   });
 
   it('rutina estándar 5 días/sem con 2 descansos no-consecutivos mantiene la racha', () => {
@@ -250,8 +250,9 @@ describe('calcularRacha (máx 2 descansos no-consecutivos/semana)', () => {
     expect(calcularRacha(['2026-06-25', '2026-06-23', '2026-06-21'], '2026-06-25')).toBe(3);
   });
 
-  it('hoy y ayer sin sesión (2 consecutivos) dan racha 0', () => {
-    // hoy=Lun 22 sin sesión, Dom 21 sin sesión → 2 consecutivos → 0
-    expect(calcularRacha(['2026-06-20', '2026-06-19'], '2026-06-22')).toBe(0);
+  it('el día corriente sin sesión no rompe la racha hasta las 23:59 (issue #17)', () => {
+    // Entrenó Vie 19 + Sáb 20, descanso Dom 21, usuario abre la app el Lun 22 por la mañana.
+    // El Lun 22 aún es un día pendiente → la racha activa se mantiene = 2.
+    expect(calcularRacha(['2026-06-20', '2026-06-19'], '2026-06-22')).toBe(2);
   });
 });
