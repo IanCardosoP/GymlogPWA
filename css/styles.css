@@ -1,5 +1,25 @@
 /* Estilos globales: variables de terminal oscura, layout 450px, navegación sticky */
 
+/* ── JetBrains Mono auto-hospedada (SIL OFL 1.1 — ver css/fonts/OFL.txt) ──────
+   Local-first: se sirve same-origin y el SW la cachea al vuelo en la primera
+   carga (sw.js es cache-on-fetch). font-display: swap muestra el fallback del
+   sistema al instante y evita FOIT si la fuente aún no está en caché. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/JetBrainsMono-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* ── Color base (existentes) ── */
   --color-fondo: #000000;
@@ -32,7 +52,7 @@
   --glow-focus: 0 0 10px color-mix(in srgb, var(--color-acento) 30%, transparent);
 
   /* ── Tipografía ── */
-  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Roboto Mono', 'Courier New', monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Roboto Mono', 'Courier New', monospace;
   --fs-micro: 10px;    /* antes 9px hardcode — bump de legibilidad */
   --fs-caption: 10px;
   --fs-detail: 11px;

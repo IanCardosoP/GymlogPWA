@@ -13,7 +13,7 @@ La skill clasificó el proyecto y recomendó; se aceptó/rechazó así:
 |---|---|---|
 | Estilo **Dark Mode (OLED)**: `#000000`/`#121212`, acentos neón, glow mínimo, contraste 7:1+, WCAG AAA | ✅ Adoptado | Es la estética actual de GymLog — se refina, no se reemplaza |
 | Estilo Terminal CLI (mono, ascii, OLED black) | ✅ Adoptado | Coincide con la identidad existente |
-| JetBrains Mono vía **Google Fonts CDN** | ❌ Rechazado | Viola offline-first Cache-First. Sustituto: stack de monos del **sistema** (`ui-monospace` → SF Mono/Cascadia/Menlo/Consolas), cero red |
+| JetBrains Mono vía **Google Fonts CDN** | 🟡 Adaptada | El CDN viola offline-first → se **auto-hospeda** en `css/fonts/` (woff2 Light 300 + Regular 400, SIL OFL 1.1). Same-origin ⇒ el SW la cachea al vuelo (cache-on-fetch, validado en `sw.js`, bump a `gymlog-v12`). `font-display: swap` + fallback al stack de monos del sistema (`ui-monospace` → SF Mono/Cascadia/Menlo/Consolas) si aún no cargó |
 | Paleta fija naranja `#F97316` primary | ❌ Rechazado | Chocaría con el **acento dinámico** de 4 colores (restricción §6.4 del análisis) |
 | Destructive `#EF4444` | 🟡 Parcial | Se conserva el `#ff4444` actual pero **tokenizado** (`--color-peligro`) — una sola fuente de verdad |
 | Focus rings visibles, touch targets 44px, `prefers-reduced-motion`, press feedback 80-150ms, transiciones 150-300ms | ✅ Adoptado | Reglas CRITICAL/HIGH de la skill, compatibles CSS-only |
@@ -45,7 +45,7 @@ La skill clasificó el proyecto y recomendó; se aceptó/rechazó así:
 
 ### Tipografía
 
-- `--font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Roboto Mono', 'Courier New', monospace` — moderniza sin CDN ni `@font-face`.
+- `--font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Roboto Mono', 'Courier New', monospace` — JetBrains Mono auto-hospedada (local-first) con fallback en cascada a monos del sistema.
 - Escala tokenizada 1:1 con los tamaños existentes (cero salto visual, consolidación futura = editar 1 línea):
   `--fs-micro:10px` (antes 9px — único bump, legibilidad) · `--fs-caption:10px` · `--fs-detail:11px` · `--fs-body-sm:12px` · `--fs-body:13px` · `--fs-body-lg:14px` · `--fs-base:15px` · `--fs-input:16px` (fijo — evita auto-zoom iOS) · `--fs-title:20px` · `--fs-stat:22px`.
 - Tamaños de arte ASCII (`3px`, `0.7px`) quedan hardcodeados a propósito — son dibujo, no tipografía.
