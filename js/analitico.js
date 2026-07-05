@@ -158,19 +158,25 @@ export function calcularRacha(fechas, hoy) {
   while (true) {
     const key = cursor.toISOString().slice(0, 10);
     const isRest = !set.has(key);
+    // El día corriente sin sesión aún no ha terminado (cuenta hasta las 23:59):
+    // es un día pendiente, no un descanso que rompa la racha (issue #17).
+    const esHoyPendiente = isRest && key === hoy;
 
     if (!isRest) {
       racha++;
       consecutiveRest = 0;
-    } else {
+    } else if (!esHoyPendiente) {
       consecutiveRest++;
       if (consecutiveRest >= 2) break; // 2 descansos consecutivos rompen la racha
     }
 
-    restWindow.unshift(isRest);
-    if (restWindow.length > 7) restWindow.pop();
-    // Regla semanal: máx 2 días de descanso en cualquier ventana de 7 días
-    if (restWindow.length === 7 && restWindow.filter(Boolean).length > 2) break;
+    // El día pendiente de hoy no computa en la ventana semanal de descansos.
+    if (!esHoyPendiente) {
+      restWindow.unshift(isRest);
+      if (restWindow.length > 7) restWindow.pop();
+      // Regla semanal: máx 2 días de descanso en cualquier ventana de 7 días
+      if (restWindow.length === 7 && restWindow.filter(Boolean).length > 2) break;
+    }
 
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
