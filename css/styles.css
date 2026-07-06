@@ -227,6 +227,26 @@ details {
 /* Borde izquierdo de progreso — intensidad según series completadas */
 .ejercicio-bloque {
   border-left-width: 4px;
+  /* Base FLIP: los vecinos desplazados por el drag se asientan animados */
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+/* Bloque levantado por long-press: sigue al dedo 1:1 (sin transición) */
+.ejercicio-bloque.is-dragging {
+  transition: none;
+  position: relative;
+  z-index: 10;
+  opacity: 0.9;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7);
+  border-left-color: var(--color-acento);
+  cursor: grabbing;
+  pointer-events: none;
+}
+
+/* Lista en modo arrastre: sin selección de texto durante el gesto */
+.diario-lista.is-drag-active {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .diario-separador {
@@ -234,6 +254,7 @@ details {
   border-top: 1px solid var(--color-acento);
   opacity: 0.35;
   margin: 15px 0;
+  transition: transform var(--dur-base) var(--ease-out);
 }
 
 .diario-skeleton {
@@ -277,6 +298,8 @@ summary {
   letter-spacing: 0.05em;
   background-color: var(--color-fondo-alt);
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none; /* iOS: sin menú de callout en el long-press del drag */
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -381,8 +404,6 @@ input.is-saved::placeholder {
       closest() — NO renombrar. ── */
 .btn-guardar,
 .btn-delete-serie,
-.btn-mover-abajo,
-.btn-mover-arriba,
 .btn-edit,
 .btn-delete {
   position: relative;
@@ -410,8 +431,6 @@ input.is-saved::placeholder {
    Con gap de 8px entre keycaps los hitboxes quedan tangentes. */
 .btn-guardar::after,
 .btn-delete-serie::after,
-.btn-mover-abajo::after,
-.btn-mover-arriba::after,
 .btn-edit::after,
 .btn-delete::after {
   content: '';
@@ -420,16 +439,12 @@ input.is-saved::placeholder {
 }
 
 .btn-guardar:hover,
-.btn-mover-abajo:hover,
-.btn-mover-arriba:hover,
 .btn-edit:hover {
   border-color: var(--color-acento);
 }
 
 /* Press: inversión instantánea fondo acento + glifo negro */
 .btn-guardar:active,
-.btn-mover-abajo:active,
-.btn-mover-arriba:active,
 .btn-edit:active {
   background-color: var(--color-acento);
   color: var(--color-fondo);
