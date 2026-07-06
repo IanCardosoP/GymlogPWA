@@ -94,6 +94,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
       navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js');
     }
+    // Feedback háptico de keycap en todo botón (patrón Terminal CLI de la skill).
+    // navigator.vibrate no existe en iOS/desktop → optional chaining degrada en silencio.
+    document.addEventListener('click', e => {
+      if (e.target.closest('button')) navigator.vibrate?.(10);
+    });
     initApp();
   }
 });

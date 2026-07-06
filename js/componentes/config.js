@@ -64,14 +64,16 @@ export async function render(state) {
     badge.dataset.dias = JSON.stringify(diasRutina);
     fila.appendChild(badge);
 
-    const btnEdit = cel('button', 'btn-edit', '[ ✎ ]');
+    const btnEdit = cel('button', 'btn-edit', '✎');
     btnEdit.dataset.rutinaId = rutina.id;
     btnEdit.dataset.nombre   = rutina.nombre;
+    btnEdit.setAttribute('aria-label', 'Renombrar rutina');
     fila.appendChild(btnEdit);
 
-    const btnDel = cel('button', 'btn-delete', '[ ✕ ]');
+    const btnDel = cel('button', 'btn-delete', '✕');
     btnDel.dataset.rutinaId = rutina.id;
     btnDel.dataset.nombre   = rutina.nombre;
+    btnDel.setAttribute('aria-label', 'Eliminar rutina');
     fila.appendChild(btnDel);
 
     item.appendChild(fila);
