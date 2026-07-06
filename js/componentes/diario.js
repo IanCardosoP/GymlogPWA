@@ -211,8 +211,7 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   const btn       = fila.querySelector('.btn-guardar');
   const btnX      = fila.querySelector('.btn-delete-serie');
 
-  btn.textContent  = '✓';
-  btn.disabled     = true;
+  btn.hidden       = true; // serie guardada: solo queda el botón de eliminar
   inputPeso.disabled = true;
   inputReps.disabled = true;
   inputPeso.classList.add('is-saved');
