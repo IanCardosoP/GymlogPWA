@@ -12,7 +12,7 @@ import {
   getSeriesConEjerciciosBySesion,
   saveEjercicio, getOrCreateEjercicio, getEjercicios,
   updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
-  linkEjercicioToRutina, moverEjercicioAlFondo, moverEjercicioArriba,
+  linkEjercicioToRutina, reordenarEjercicios,
 } from '../db.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
@@ -20,6 +20,7 @@ export const MAX_ROUTINE_SLOTS = 8;
 const GRUPOS_MUSCULARES = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', 'GENERAL'];
 
 let clickAbort = null;
+let dragAbort  = null;
 
 
 function cel(tag, clase, texto) {
@@ -126,6 +127,8 @@ export async function render(state) {
   }
   lista.appendChild(frag);
 
+  initDragAndDrop(lista, rutinaHoy, state);
+
   // Botón fin
   const finBtn = cel('button', 'btn-fin-entrenamiento', '[ RESUMEN DE LA SESIÓN ]');
   finBtn.dataset.action = 'fin';
@@ -165,20 +168,6 @@ export async function render(state) {
 
     if (e.target.closest('[data-action="fin"]')) { await mostrarPantallaFin(container, sesion, rutinaHoy, todos); return; }
     if (e.target.closest('[data-action="volver-diario"]')) { navigateTo('diario'); return; }
-
-    const btnAbajo = e.target.closest('.btn-mover-abajo');
-    if (btnAbajo && rutinaHoy) {
-      await moverEjercicioAlFondo(rutinaHoy.id, parseInt(btnAbajo.dataset.reId));
-      await render(state);
-      return;
-    }
-
-    const btnArriba = e.target.closest('.btn-mover-arriba');
-    if (btnArriba && rutinaHoy) {
-      await moverEjercicioArriba(rutinaHoy.id, parseInt(btnArriba.dataset.reId));
-      await render(state);
-      return;
-    }
 
     const btnConfirmar = e.target.closest('.btn-confirmar-eliminar');
     if (btnConfirmar) {
@@ -254,6 +243,7 @@ function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
 
   const nombreSpan = cel('span', 'ejercicio-nombre', ej ? ej.nombre : '[ + Añadir Ejercicio ]');
   if (ej) {
+    details.dataset.reId      = ej.id;
     nombreSpan.dataset.reId   = ej.id;
     nombreSpan.dataset.ejId   = ej.ejercicio_id;
     nombreSpan.dataset.nombre = ej.nombre;
@@ -264,14 +254,6 @@ function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
   }
 
   summary.appendChild(nombreSpan);
-
-  if (ej) {
-    const btnMover = cel('button', idx < 8 ? 'btn-mover-abajo' : 'btn-mover-arriba',
-                                   idx < 8 ? '↓' : '↑');
-    btnMover.dataset.reId = ej.id;
-    btnMover.setAttribute('aria-label', idx < 8 ? 'Mover ejercicio abajo' : 'Mover ejercicio arriba');
-    summary.appendChild(btnMover);
-  }
 
   if (ej) {
     const btnEdit = cel('button', 'btn-edit', '✎');
@@ -362,6 +344,218 @@ function actualizarProgreso(bloqueEl) {
   if (!bloqueEl) return;
   const guardadas = bloqueEl.querySelectorAll('.btn-delete-serie:not([hidden])').length;
   bloqueEl.dataset.progreso = Math.min(guardadas, 4);
+}
+
+// ── Drag & Drop de ejercicios (long-press + Pointer Events) ───────────────────
+
+const LONG_PRESS_MS   = 350; // espera para "levantar" el bloque
+const DRAG_TOLERANCE  = 8;   // px de movimiento que cancelan el long-press (scroll/tap)
+const SCROLL_ZONE     = 60;  // px desde el borde del viewport que activan auto-scroll
+const SCROLL_MAX_STEP = 12;  // px máximos de auto-scroll por frame
+
+function renumerarBloques(lista) {
+  lista.querySelectorAll('.ejercicio-bloque[data-re-id]').forEach((b, i) => {
+    const num = b.querySelector('.ejercicio-num');
+    if (num) num.textContent = `${i + 1}. `;
+  });
+}
+
+function reposicionarSeparador(lista) {
+  lista.querySelector('.diario-separador')?.remove();
+  const bloques = lista.querySelectorAll('.ejercicio-bloque[data-re-id]');
+  if (bloques.length > 8) {
+    const sep = document.createElement('hr');
+    sep.className = 'diario-separador';
+    lista.insertBefore(sep, bloques[8]);
+  }
+}
+
+function initDragAndDrop(lista, rutinaHoy, state) {
+  dragAbort?.abort();
+  dragAbort = new AbortController();
+  const { signal } = dragAbort;
+
+  let pressTimer    = null;  // timeout del long-press pendiente
+  let candidato     = null;  // bloque bajo el dedo antes de levantar
+  let dragging      = null;  // <details> levantado
+  let pointerId     = null;
+  let startX        = 0;
+  let startY        = 0;
+  let grabDY        = 0;     // distancia dedo → top del bloque al levantar
+  let translateY    = 0;     // translate actual aplicado al bloque
+  let lastClientY   = 0;
+  let rafId         = null;
+  let suprimirClick = false; // consume el click sintético posterior al drop
+
+  const bloquearTouchScroll = e => e.preventDefault();
+
+  const cancelarTimer = () => {
+    if (pressTimer !== null) { clearTimeout(pressTimer); pressTimer = null; }
+    candidato = null;
+  };
+
+  // Mantiene el bloque bajo el dedo: translate = destino visual − posición natural
+  const aplicarTransform = () => {
+    const rect = dragging.getBoundingClientRect();
+    const naturalTop = rect.top - translateY;
+    translateY = (lastClientY - grabDY) - naturalTop;
+    dragging.style.transform = `translateY(${translateY}px)`;
+  };
+
+  // Reinserta el bloque cuando su centro cruza el punto medio de un vecino (FLIP)
+  const recolocar = () => {
+    const otros = [...lista.querySelectorAll('.ejercicio-bloque[data-re-id]')]
+      .filter(b => b !== dragging);
+    if (otros.length === 0) return;
+
+    const rect   = dragging.getBoundingClientRect();
+    const centro = rect.top + rect.height / 2;
+
+    let destino = null; // insertar antes de este bloque; null = después del último
+    for (const b of otros) {
+      const r = b.getBoundingClientRect();
+      if (centro < r.top + r.height / 2) { destino = b; break; }
+    }
+    const ref = destino ?? otros[otros.length - 1].nextElementSibling;
+    if (ref === dragging || dragging.nextElementSibling === ref) return;
+
+    // FLIP: medir posición visual → mover en el DOM → animar la diferencia
+    const animables = [...lista.children].filter(el => el !== dragging);
+    const antes = new Map(animables.map(el => [el, el.getBoundingClientRect().top]));
+
+    lista.insertBefore(dragging, ref);
+    aplicarTransform(); // la reinserción movió su posición natural: recalcular
+
+    for (const el of animables) {           // limpiar transforms en vuelo
+      el.style.transition = 'none';
+      el.style.transform  = '';
+    }
+    void lista.offsetHeight;                // reflow: posiciones naturales nuevas
+    for (const el of animables) {           // invertir al punto visual de partida
+      const delta = antes.get(el) - el.getBoundingClientRect().top;
+      if (delta) el.style.transform = `translateY(${delta}px)`;
+    }
+    void lista.offsetHeight;                // reflow: fija el estado inicial
+    for (const el of animables) {           // play: transición base los asienta
+      el.style.transition = '';
+      el.style.transform  = '';
+    }
+  };
+
+  // Auto-scroll cuando el dedo se acerca al borde del viewport
+  const autoScroll = () => {
+    if (!dragging) return;
+    const vh = window.innerHeight;
+    let paso = 0;
+    if (lastClientY < SCROLL_ZONE) {
+      paso = -Math.ceil(((SCROLL_ZONE - lastClientY) / SCROLL_ZONE) * SCROLL_MAX_STEP);
+    } else if (lastClientY > vh - SCROLL_ZONE) {
+      paso = Math.ceil(((lastClientY - (vh - SCROLL_ZONE)) / SCROLL_ZONE) * SCROLL_MAX_STEP);
+    }
+    if (paso !== 0) {
+      window.scrollBy(0, paso);
+      aplicarTransform(); // el scroll movió el layout bajo el dedo
+      recolocar();
+    }
+    rafId = requestAnimationFrame(autoScroll);
+  };
+
+  const levantar = () => {
+    pressTimer = null;
+    dragging   = candidato;
+    candidato  = null;
+    navigator.vibrate?.(15);
+
+    grabDY     = lastClientY - dragging.getBoundingClientRect().top;
+    translateY = 0;
+
+    dragging.classList.add('is-dragging');
+    lista.classList.add('is-drag-active');
+    try { lista.setPointerCapture(pointerId); } catch { /* puntero ya inactivo */ }
+    // No pasivo: bloquea el scroll de página mientras dura el arrastre
+    document.addEventListener('touchmove', bloquearTouchScroll, { passive: false, signal });
+    rafId = requestAnimationFrame(autoScroll);
+  };
+
+  const soltar = async () => {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+    document.removeEventListener('touchmove', bloquearTouchScroll);
+    if (lista.hasPointerCapture?.(pointerId)) lista.releasePointerCapture(pointerId);
+
+    const bloque  = dragging;
+    dragging      = null;
+    pointerId     = null;
+    suprimirClick = true;
+
+    bloque.classList.remove('is-dragging');
+    bloque.style.transform = '';          // la transición base lo asienta en su slot
+    lista.classList.remove('is-drag-active');
+
+    const ordenados = [...lista.querySelectorAll('.ejercicio-bloque[data-re-id]')]
+      .map(b => parseInt(b.dataset.reId));
+    try {
+      await reordenarEjercicios(rutinaHoy.id, ordenados);
+      renumerarBloques(lista);            // fixup in-place: sin re-render,
+      reposicionarSeparador(lista);       // preserva acordeones e inputs
+    } catch {
+      await render(state);                // fallo de BD: re-render restaura la verdad
+    }
+  };
+
+  lista.addEventListener('pointerdown', e => {
+    suprimirClick = false;
+    if (!e.isPrimary || dragging) return;
+    const summary = e.target.closest('.ejercicio-summary');
+    if (!summary) return;
+    if (e.target.closest('button, input, .rename-panel, .confirm-delete-panel, .autocomplete-wrapper')) return;
+    const bloque = summary.closest('.ejercicio-bloque');
+    if (!bloque?.dataset.reId) return;
+
+    candidato   = bloque;
+    pointerId   = e.pointerId;
+    startX      = e.clientX;
+    startY      = e.clientY;
+    lastClientY = e.clientY;
+    pressTimer  = setTimeout(levantar, LONG_PRESS_MS);
+  }, { signal });
+
+  lista.addEventListener('pointermove', e => {
+    if (pointerId === null || e.pointerId !== pointerId) return;
+    lastClientY = e.clientY;
+    if (dragging) {
+      aplicarTransform();
+      recolocar();
+      return;
+    }
+    // Antes del long-press: movimiento = scroll o tap normal, no arrastre
+    if (pressTimer !== null &&
+        Math.hypot(e.clientX - startX, e.clientY - startY) > DRAG_TOLERANCE) {
+      cancelarTimer();
+    }
+  }, { signal });
+
+  const finalizar = e => {
+    if (pointerId === null || e.pointerId !== pointerId) return;
+    if (dragging) { soltar(); return; }
+    cancelarTimer();
+    pointerId = null;
+  };
+  lista.addEventListener('pointerup', finalizar, { signal });
+  lista.addEventListener('pointercancel', finalizar, { signal });
+
+  // El long-press móvil puede disparar el menú contextual — suprimir durante el gesto
+  lista.addEventListener('contextmenu', e => {
+    if (dragging || pressTimer !== null) e.preventDefault();
+  }, { signal });
+
+  // Consume el click sintético tras el drop (evita alternar el <details>)
+  lista.addEventListener('click', e => {
+    if (!suprimirClick) return;
+    suprimirClick = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, { capture: true, signal });
 }
 
 async function handleGuardar(btnGuardar, sesionId) {

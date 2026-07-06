@@ -450,16 +450,22 @@ export async function swapOrden(reId1, reId2) {
   ]);
 }
 
-export async function moverEjercicioAlFondo(rutinaId, reId) {
-  const rows = await getRutinaEjercicios(rutinaId);
-  const maxOrden = Math.max(...rows.map(r => Number(r.orden)));
-  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [maxOrden + 1, reId]);
-}
-
-export async function moverEjercicioArriba(rutinaId, reId) {
-  const rows = await getRutinaEjercicios(rutinaId);
-  const minOrden = Math.min(...rows.map(r => Number(r.orden)));
-  await db.query('UPDATE rutina_ejercicios SET orden = $1 WHERE id = $2', [minOrden - 1, reId]);
+// Persiste el orden completo tras un drag & drop: orden secuencial 1..N y
+// activo_hoy = TRUE para los primeros 8 (activos), FALSE para los suplentes.
+export async function reordenarEjercicios(rutinaId, orderedReIds) {
+  await db.query('BEGIN');
+  try {
+    for (let i = 0; i < orderedReIds.length; i++) {
+      await db.query(
+        'UPDATE rutina_ejercicios SET orden = $1, activo_hoy = $2 WHERE id = $3 AND rutina_id = $4',
+        [i + 1, i < 8, orderedReIds[i], rutinaId]
+      );
+    }
+    await db.query('COMMIT');
+  } catch (err) {
+    await db.query('ROLLBACK');
+    throw err;
+  }
 }
 
 export async function clearRutinaDia(dia) {
