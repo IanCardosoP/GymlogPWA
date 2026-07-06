@@ -3,7 +3,7 @@ import {
   initDB,
   getEjercicios, saveEjercicio, getOrCreateEjercicio, updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   getRutinas, saveRutina, getRutinaEjercicios, updateActivoHoy, updateRutinaDia, clearRutinaDia, swapOrden,
-  moverEjercicioAlFondo, moverEjercicioArriba, linkEjercicioToRutina,
+  reordenarEjercicios, linkEjercicioToRutina,
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia, touchSesionTiempo, resetSesionTiempoIfVacia,
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
@@ -139,35 +139,57 @@ describe('rutinas', () => {
     expect(actualEj2.orden).toBe(1);
   });
 
-  it('moverEjercicioAlFondo pone el ejercicio al final de la lista', async () => {
+  it('reordenarEjercicios persiste el nuevo orden secuencial 1..N', async () => {
     const rutina = await saveRutina('Pierna', 2);
     const ej1 = await saveEjercicio('Sentadilla', 'PIERNA');
     const ej2 = await saveEjercicio('Leg Press',  'PIERNA');
     const ej3 = await saveEjercicio('Prensa',     'PIERNA');
-    await linkEjercicioToRutina(rutina.id, ej1.id, 1);
-    await linkEjercicioToRutina(rutina.id, ej2.id, 2);
+    const { id: re1 } = await linkEjercicioToRutina(rutina.id, ej1.id, 1);
+    const { id: re2 } = await linkEjercicioToRutina(rutina.id, ej2.id, 2);
     const { id: re3 } = await linkEjercicioToRutina(rutina.id, ej3.id, 3);
 
-    await moverEjercicioAlFondo(rutina.id, re3);  // ya está al fondo; muévelo "más abajo"
-    // Ahora mover el primero al fondo
-    const lista0 = await getRutinaEjercicios(rutina.id);
-    await moverEjercicioAlFondo(rutina.id, lista0[0].id);
+    // Orden barajado: el último pasa al frente, el primero al fondo
+    await reordenarEjercicios(rutina.id, [re3, re2, re1]);
+
     const lista = await getRutinaEjercicios(rutina.id);
-    expect(lista[lista.length - 1].ejercicio_id).toBe(ej1.id);
+    expect(lista.map(r => r.ejercicio_id)).toEqual([ej3.id, ej2.id, ej1.id]);
+    expect(lista.map(r => r.orden)).toEqual([1, 2, 3]);
   });
 
-  it('moverEjercicioArriba pone el ejercicio al principio de la lista', async () => {
-    const rutina = await saveRutina('Espalda', 3);
-    const ej1 = await saveEjercicio('Dominadas', 'ESPALDA');
-    const ej2 = await saveEjercicio('Remo T',    'ESPALDA');
-    const ej3 = await saveEjercicio('Jalón',     'ESPALDA');
-    await linkEjercicioToRutina(rutina.id, ej1.id, 1);
-    await linkEjercicioToRutina(rutina.id, ej2.id, 2);
-    const { id: re3 } = await linkEjercicioToRutina(rutina.id, ej3.id, 3);
+  it('reordenarEjercicios sincroniza activo_hoy: TRUE los primeros 8, FALSE los suplentes', async () => {
+    const rutina = await saveRutina('Full Body', 4);
+    const reIds = [];
+    for (let i = 1; i <= 10; i++) {
+      const ej = await saveEjercicio(`Ejercicio ${i}`, 'GENERAL');
+      const { id } = await linkEjercicioToRutina(rutina.id, ej.id, i);
+      reIds.push(id);
+    }
 
-    await moverEjercicioArriba(rutina.id, re3);
+    // El último (suplente) sube al frente: desplaza al 8º a la zona de suplentes
+    const nuevoOrden = [reIds[9], ...reIds.slice(0, 9)];
+    await reordenarEjercicios(rutina.id, nuevoOrden);
+
     const lista = await getRutinaEjercicios(rutina.id);
-    expect(lista[0].ejercicio_id).toBe(ej3.id);
+    expect(lista.map(r => r.id)).toEqual(nuevoOrden);
+    expect(lista.slice(0, 8).every(r => r.activo_hoy === true)).toBe(true);
+    expect(lista.slice(8).every(r => r.activo_hoy === false)).toBe(true);
+  });
+
+  it('reordenarEjercicios ignora ids que no pertenecen a la rutina', async () => {
+    const rutinaA = await saveRutina('A', 5);
+    const rutinaB = await saveRutina('B', 6);
+    const ejA = await saveEjercicio('Curl',  'BRAZO');
+    const ejB = await saveEjercicio('Press', 'HOMBRO');
+    const { id: reA } = await linkEjercicioToRutina(rutinaA.id, ejA.id, 1);
+    const { id: reB } = await linkEjercicioToRutina(rutinaB.id, ejB.id, 7);
+
+    // reB no pertenece a rutinaA: su orden no debe cambiar
+    await reordenarEjercicios(rutinaA.id, [reB, reA]);
+
+    const listaB = await getRutinaEjercicios(rutinaB.id);
+    expect(listaB[0].orden).toBe(7);
+    const listaA = await getRutinaEjercicios(rutinaA.id);
+    expect(listaA[0].orden).toBe(2);
   });
 
   it('clearRutinaDia deja el día sin rutina asignada', async () => {
