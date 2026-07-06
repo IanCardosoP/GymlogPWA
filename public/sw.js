@@ -1,7 +1,9 @@
 // Service Worker: estrategia Cache-First. Cachea recursos al vuelo en la primera carga.
 // Sin ASSETS_TO_CACHE hardcodeados — compatible con filenames hasheados de Vite.
+// Nota: las fuentes woff2 (JetBrains Mono) se sirven same-origin y entran por
+// esta misma vía cache-on-fetch → disponibles offline tras la primera carga.
 
-const CACHE_NAME = 'gymlog-v11';
+const CACHE_NAME = 'gymlog-v12';
 
 self.addEventListener('install', () => self.skipWaiting());
 
