@@ -608,7 +608,7 @@ function handleEliminar(btnDelete, state) {
 
   const panel = cel('div', 'confirm-delete-panel');
   panel.appendChild(cel('span', 'confirm-delete-msg',
-    `¿Eliminar "${nombre}"? Se borrarán todas las series registradas.`));
+    `¿Eliminar "${nombre}"? Se quitará de la rutina. `));
 
   const btnConfirmar = cel('button', 'btn-confirmar-eliminar', '[ ELIMINAR ]');
   btnConfirmar.dataset.ejId = ejId;
