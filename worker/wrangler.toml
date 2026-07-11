@@ -1,0 +1,8 @@
+name = "gymlog-analytics"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gymlog-analytics"
+database_id = "RELLENAR_EN_PARTE_1"   # 🧑 TÚ lo pegas tras crear la D1
