@@ -3,7 +3,7 @@
 // Nota: las fuentes woff2 (JetBrains Mono) se sirven same-origin y entran por
 // esta misma vía cache-on-fetch → disponibles offline tras la primera carga.
 
-const CACHE_NAME = 'gymlog-v13';
+const CACHE_NAME = 'gymlog-v14';
 
 self.addEventListener('install', () => self.skipWaiting());
 
