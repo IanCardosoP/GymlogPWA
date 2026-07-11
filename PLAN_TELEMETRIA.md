@@ -218,7 +218,12 @@ export const registrarUso = (deviceId, evt = 'open') => {
   if (!navigator.onLine) return;                 // offline-first: sin red, no molesta
   if (location.hostname === 'localhost') return; // no contaminar datos con el dev server
   const payload = JSON.stringify({ id: deviceId, evt, v: '1.0' });
-  const blob = new Blob([payload], { type: 'application/json' });
+  // type: 'text/plain' (NO 'application/json') — mantiene la petición como
+  // "simple request" cross-origin y evita el preflight OPTIONS. El Worker
+  // solo acepta POST/OPTIONS-preflight-less; si el navegador mandara un
+  // preflight, el Worker (que responde 405 a todo lo que no sea POST) lo
+  // rechazaría y el beacon nunca llegaría — sin ningún error visible en el cliente.
+  const blob = new Blob([payload], { type: 'text/plain' });
   navigator.sendBeacon(TELEMETRY_URL, blob);
 };
 ```
@@ -284,6 +289,7 @@ pnpm exec wrangler d1 execute gymlog-analytics --remote \
 
 - **Free tier holgadísimo:** Workers 100k req/día · D1 5 GB, 5M lecturas y 100k escrituras/día. Para GymLog sobra por mucho.
 - **Privacidad/OWASP:** solo UUID aleatorio, sin PII, sin cookies. `INSERT` con prepared statement (A03). Mutación de `conf` aislada en `db.js` (A05).
+- **`_headers` está inerte hoy:** el deploy real (`.github/workflows/deploy.yml`) usa `actions/deploy-pages` (GitHub Pages puro), que **no** procesa `_headers` — esa convención es de Cloudflare Pages/Netlify. Hoy no hay CSP activa en producción, así que no hay conflicto con el beacon. Si algún día se agrega un `<meta http-equiv="Content-Security-Policy">` en `index.html`, hay que sumar el dominio del Worker (`https://gymlog-analytics.*.workers.dev`) a `connect-src`, o el propio CSP bloqueará la telemetría.
 - **Seguridad de escritura:** el candado de `Origin` bloquea abuso casual. Para protección "a prueba de determinados" se añadiría Turnstile/rate-limit con un dominio propio (Paso 1.7) — innecesario para uso personal.
 - **Archivos nuevos:** `worker/worker.js`, `worker/schema.sql`, `worker/wrangler.toml`, `js/telemetria.js`. Modificados: `js/db.js`, `js/app.js`, `public/sw.js`, `tests/db.test.js`, `package.json` (dev-dep wrangler).
 ```
