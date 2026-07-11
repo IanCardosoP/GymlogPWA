@@ -157,11 +157,13 @@ export async function render(state) {
       filaWrapper.querySelectorAll('.serie-fila').forEach((fila, i) => {
         const num = i + 1;
         fila.dataset.numSerie = num;
+        const esGuardada = fila.classList.contains('is-saved');
         const label = fila.querySelector('.serie-label');
-        if (label) label.textContent = `S${num}: `;
+        if (label) label.textContent = esGuardada ? `S${num}` : '+';
         const guardarBtn = fila.querySelector('.btn-guardar');
         if (guardarBtn) guardarBtn.dataset.numSerie = num;
       });
+      actualizarConectores(filaWrapper);
       actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
       return;
     }
@@ -210,12 +212,19 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
   const inputReps = fila.querySelector('.input-reps');
   const btn       = fila.querySelector('.btn-guardar');
   const btnX      = fila.querySelector('.btn-delete-serie');
+  const label     = fila.querySelector('.serie-label');
 
   btn.hidden       = true; // serie guardada: solo queda el botón de eliminar
   inputPeso.disabled = true;
   inputReps.disabled = true;
   inputPeso.classList.add('is-saved');
   inputReps.classList.add('is-saved');
+
+  fila.classList.add('is-saved');
+  if (label) {
+    label.textContent = `S${fila.dataset.numSerie}`;
+    label.setAttribute('aria-label', `Serie ${fila.dataset.numSerie} guardada`);
+  }
 
   if (peso === 0) {
     inputPeso.placeholder = 'BW';
@@ -228,6 +237,16 @@ function marcarComoGuardada(fila, peso, reps, serieId) {
     btnX.dataset.serieId = serieId;
     btnX.hidden = false;
   }
+}
+
+function actualizarConectores(filaWrapper) {
+  const filas = [...filaWrapper.querySelectorAll('.serie-fila')];
+  filas.forEach((fila, i) => {
+    const siguiente = filas[i + 1];
+    const conecta = fila.classList.contains('is-saved') &&
+                    !!siguiente && siguiente.classList.contains('is-saved');
+    fila.classList.toggle('has-connector', conecta);
+  });
 }
 
 
@@ -287,6 +306,7 @@ function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
     }
 
     filaWrapper.appendChild(construirFilaSerie(seriesHoy.length + 1, phPeso, phReps));
+    actualizarConectores(filaWrapper);
     cuerpo.appendChild(filaWrapper);
     details.appendChild(cuerpo);
   }
@@ -298,7 +318,9 @@ function construirFilaSerie(num, phPeso, phReps) {
   const fila = cel('div', 'serie-fila');
   fila.dataset.numSerie = num;
 
-  fila.appendChild(cel('span', 'serie-label', `S${num}: `));
+  const label = cel('span', 'serie-label', '+');
+  label.setAttribute('aria-label', `Serie ${num}`);
+  fila.appendChild(label);
 
   const inputPeso = document.createElement('input');
   inputPeso.type = 'number';
@@ -578,6 +600,7 @@ async function handleGuardar(btnGuardar, sesionId) {
 
   marcarComoGuardada(fila, peso, reps, serie.id);
   filaWrapper.appendChild(construirFilaSerie(numSerie + 1, displayPeso, displayReps));
+  actualizarConectores(filaWrapper);
   actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
 }
 

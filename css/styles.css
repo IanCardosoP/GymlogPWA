@@ -275,19 +275,24 @@ details {
   100% { background-position: -200% 0; }
 }
 .ejercicio-bloque[data-progreso="0"] {
-  border-left-color: var(--color-texto-dim);
+  --progreso-color: var(--color-texto-dim);
+  border-left-color: var(--progreso-color);
 }
 .ejercicio-bloque[data-progreso="1"] {
-  border-left-color: color-mix(in srgb, var(--color-acento) 15%, transparent);
+  --progreso-color: color-mix(in srgb, var(--color-acento) 15%, transparent);
+  border-left-color: var(--progreso-color);
 }
 .ejercicio-bloque[data-progreso="2"] {
-  border-left-color: color-mix(in srgb, var(--color-acento) 30%, transparent);
+  --progreso-color: color-mix(in srgb, var(--color-acento) 30%, transparent);
+  border-left-color: var(--progreso-color);
 }
 .ejercicio-bloque[data-progreso="3"] {
-  border-left-color: color-mix(in srgb, var(--color-acento) 65%, transparent);
+  --progreso-color: color-mix(in srgb, var(--color-acento) 65%, transparent);
+  border-left-color: var(--progreso-color);
 }
 .ejercicio-bloque[data-progreso="4"] {
-  border-left-color: var(--color-acento);
+  --progreso-color: var(--color-acento);
+  border-left-color: var(--progreso-color);
 }
 
 summary {
@@ -370,12 +375,53 @@ details > div {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  position: relative;
+  --serie-badge-size: 26px;
 }
 
 .serie-label {
-  font-size: var(--fs-body-sm);
-  color: var(--color-texto-dim);
-  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--serie-badge-size);
+  height: var(--serie-badge-size);
+  flex-shrink: 0;
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+  color: var(--color-acento);
+  position: relative;
+  z-index: 1;
+  background-color: var(--color-fondo);
+}
+
+/* Serie guardada: badge circular con borde de acento y texto compacto "Sn".
+   border-color usa --progreso-color: la misma variable que ya intensifica
+   el borde izquierdo de .ejercicio-bloque según series completadas. */
+.serie-fila.is-saved .serie-label {
+  border: 1px solid var(--progreso-color, var(--color-acento));
+  border-radius: 50%;
+  font-size: var(--fs-detail);
+  font-weight: normal;
+}
+
+/* Línea conectora entre dos círculos guardados consecutivos (patrón stepper).
+   Arranca en el centro vertical de ESTA fila (= centro del badge, gracias a
+   align-items:center) y llega hasta el centro vertical de la siguiente fila,
+   atravesando el gap de .serie-filas; el badge (z-index superior + fondo
+   opaco) la "corta" visualmente en cada parada.
+   left + translateX(-50%) centra la línea sobre el badge sin asumir su
+   ancho exacto en px — evita desalineación por redondeo de subpíxel en
+   distintos DPR/dispositivos. */
+.serie-fila.has-connector::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: calc(var(--serie-badge-size) / 2);
+  transform: translateX(-50%);
+  width: 2px;
+  height: calc(100% + var(--sp-2));
+  background-color: var(--progreso-color, var(--color-acento));
+  z-index: 0;
 }
 
 input.input-peso,
