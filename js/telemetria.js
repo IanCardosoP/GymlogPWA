@@ -1,5 +1,5 @@
 // Beacon anónimo de uso (fire-and-forget). El device_id llega desde app.js.
-const TELEMETRY_URL = 'https://gymlog-analytics.iancardosop.workers.dev';
+const TELEMETRY_URL = 'https://gymlog-d1-h3d9b5g1l5.iancardosop.workers.dev';
 
 // Función pura — solo familia de OS, nunca el user-agent completo (evita huella digital).
 export const detectOS = (userAgent = '') => {
