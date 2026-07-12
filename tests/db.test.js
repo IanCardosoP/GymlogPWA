@@ -7,7 +7,7 @@ import {
   getRutinasDias, addRutinaDia, removeRutinaDia, updateRutinaNombre, deleteRutina,
   saveSesion, getSesionDelDia, touchSesionTiempo, resetSesionTiempoIfVacia,
   saveSerie, deleteSerie, renumerarSeries, getUltimaSerie, getSeriesPorEjercicio, getSeriesDeSesionEjercicio,
-  getConf, updatePrefUnit, updatePrefAcento,
+  getConf, updatePrefUnit, updatePrefAcento, getOrCreateDeviceId,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
   getPesoMaxPorEjercicio, getVolumenPorSesion,
 } from '../js/db.js';
@@ -371,6 +371,19 @@ describe('conf', () => {
   it('no existe función deleteConf en el módulo', async () => {
     const mod = await import('../js/db.js');
     expect(mod.deleteConf).toBeUndefined();
+  });
+
+  it('getOrCreateDeviceId genera un UUID válido en la primera llamada', async () => {
+    const id = await getOrCreateDeviceId();
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+  });
+
+  it('getOrCreateDeviceId es idempotente: la segunda llamada devuelve el mismo id', async () => {
+    const primero  = await getOrCreateDeviceId();
+    const segundo  = await getOrCreateDeviceId();
+    expect(segundo).toBe(primero);
+    const conf = await getConf();
+    expect(conf.device_id).toBe(primero);
   });
 });
 

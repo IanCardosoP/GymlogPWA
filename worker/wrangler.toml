@@ -1,0 +1,8 @@
+name = "gymlog-analytics"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gymlog-analytics"
+database_id = "a0b22b6e-b1f5-476a-94e2-2602c5791be7"

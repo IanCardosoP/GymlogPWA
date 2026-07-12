@@ -3,7 +3,7 @@
 // Nota: las fuentes woff2 (JetBrains Mono) se sirven same-origin y entran por
 // esta misma vía cache-on-fetch → disponibles offline tras la primera carga.
 
-const CACHE_NAME = 'gymlog-v14';
+const CACHE_NAME = 'gymlog-v15';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -17,6 +17,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return; // beacons POST (telemetría) pasan directo a la red
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
