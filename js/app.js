@@ -1,4 +1,5 @@
 // Orquestador principal: Store global, dispatch, routing SPA por manipulación del DOM
+import { registrarUso } from './telemetria.js';
 
 const TABS = ['diario', 'progreso', 'config'];
 
@@ -78,12 +79,13 @@ export async function initApp() {
   RENDERS['progreso'] = renderProgreso;
   RENDERS['config']  = renderConfig;
 
-  const { initDB, getConf } = await import('./db.js');
+  const { initDB, getConf, getOrCreateDeviceId } = await import('./db.js');
   await initDB('idb://gym-log-db');
   const conf = await getConf();
   store.prefUnit  = conf.pref_unit;
   store.acentoKey = conf.pref_acento ?? 'verde';
   aplicarAcento(store.acentoKey);
+  getOrCreateDeviceId().then(id => registrarUso(id, 'open')); // fire-and-forget
 
   bindNav();
   navigateTo('diario');

@@ -60,6 +60,7 @@ export async function initDB(uri = 'idb://gym-log-db') {
     ON CONFLICT (id) DO NOTHING;
 
     ALTER TABLE conf ADD COLUMN IF NOT EXISTS pref_acento TEXT NOT NULL DEFAULT 'verde';
+    ALTER TABLE conf ADD COLUMN IF NOT EXISTS device_id TEXT;
 
     ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_inicio TIMESTAMPTZ;
     ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_fin    TIMESTAMPTZ;
@@ -381,6 +382,14 @@ export async function updatePrefUnit(unit) {
     [unit]
   );
   return result.rows[0];
+}
+
+export async function getOrCreateDeviceId() {
+  const { rows } = await db.query('SELECT device_id FROM conf WHERE id = 1');
+  if (rows[0]?.device_id) return rows[0].device_id;
+  const id = crypto.randomUUID();
+  await db.query('UPDATE conf SET device_id = $1 WHERE id = 1', [id]);
+  return id;
 }
 
 // ── Funciones auxiliares para componentes UI ───────────────────────────────────
