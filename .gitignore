@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Claude Code (skills/tooling del asistente, no del proyecto)
 .claude/
+
+# wrangler (estado local de dev / D1 local, nunca la base real)
+.wrangler/
