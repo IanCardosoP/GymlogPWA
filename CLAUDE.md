@@ -27,6 +27,15 @@ pnpm test             # correr todos los tests (debe terminar en verde antes de 
 pnpm run dev          # servidor local de desarrollo
 ```
 
+**Añadir un ejercicio al catálogo:**
+```bash
+pnpm run catalogo:add     # CLI interactiva: nombres, grupo, equipo, instrucciones, 2 imágenes
+```
+Procesa las imágenes (192px de ancho → WebP) y actualiza `catalogo.json` +
+`instrucciones.json`. Deja los cambios en el working tree: revisa, corre `pnpm test`,
+**sube `CACHE_NAME` en `public/sw.js`** (si no, los usuarios no verán el ejercicio
+nuevo hasta que su caché expire) y commitea.
+
 **Correr un solo archivo de test:**
 ```bash
 pnpm vitest run tests/db.test.js

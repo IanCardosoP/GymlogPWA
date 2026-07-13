@@ -15,8 +15,9 @@ const CATALOGO = JSON.parse(readFileSync(
 ));
 
 describe('catálogo real (integridad del asset)', () => {
-  it('tiene 873 entradas con todos los campos', () => {
-    expect(CATALOGO.length).toBe(873);
+  // Sin cota superior: el catálogo crece con scripts/agregar-ejercicio.js
+  it('tiene al menos los 873 ejercicios base, con todos los campos', () => {
+    expect(CATALOGO.length).toBeGreaterThanOrEqual(873);
     const campos = ['fuente_id', 'nombre_es', 'nombre_en', 'grupo_muscular', 'equipo_es', 'equipo_en', 'imagen_a', 'imagen_b'];
     for (const e of CATALOGO) {
       for (const c of campos) expect(e[c], `campo ${c} en ${e.fuente_id}`).toBeTruthy();
@@ -32,7 +33,7 @@ describe('catálogo real (integridad del asset)', () => {
     expect(new Set(CATALOGO.map(e => e.fuente_id)).size).toBe(CATALOGO.length);
   });
 
-  it('instrucciones.json cubre los 873 ejercicios del catálogo', () => {
+  it('instrucciones.json cubre todos los ejercicios del catálogo', () => {
     const instrucciones = JSON.parse(readFileSync(
       fileURLToPath(new URL('../public/assets/catalogo/instrucciones.json', import.meta.url)),
       'utf-8',

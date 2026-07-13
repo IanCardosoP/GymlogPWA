@@ -5,13 +5,15 @@
   "scripts": {
     "test": "vitest run",
     "dev": "vite --host",
-    "build": "vite build"
+    "build": "vite build",
+    "catalogo:add": "node scripts/agregar-ejercicio.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "jsdom": "^29.1.1",
+    "sharp": "^0.35.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8",
     "wrangler": "^4.110.0"
