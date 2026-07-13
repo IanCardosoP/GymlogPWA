@@ -638,10 +638,12 @@ async function handleDetalles(btnEdit, state) {
   const btnBuscar = cel('button', 'btn-panel-buscar', '[ BUSCAR EN CATÁLOGO ]');
   panel.appendChild(btnBuscar);
 
+  const acciones = cel('div', 'detalle-acciones');
   const btnGuardar  = cel('button', 'btn-panel-accion',  '[ GUARDAR ]');
   const btnCancelar = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
-  panel.appendChild(btnGuardar);
-  panel.appendChild(btnCancelar);
+  acciones.appendChild(btnGuardar);
+  acciones.appendChild(btnCancelar);
+  panel.appendChild(acciones);
 
   const cuerpo = details?.querySelector('.ejercicio-cuerpo');
   if (cuerpo) details.insertBefore(panel, cuerpo);
@@ -754,10 +756,16 @@ async function handleDetalles(btnEdit, state) {
 
 function handleEliminar(btnDelete, state) {
   const details = btnDelete.closest('details');
+
+  // Con el panel de detalles abierto, la ✕ hace de [ CANCELAR ]: lo cierra en vez
+  // de eliminar el ejercicio. Eliminar exige que el panel esté cerrado — así la
+  // ✕ nunca destruye datos mientras el usuario está editando.
+  const panelDetalles = details?.querySelector('.rename-panel');
+  if (panelDetalles) { panelDetalles.remove(); return; }
+
   if (details) details.open = true;
 
   const existente = details?.querySelector('.confirm-delete-panel');
-  details?.querySelector('.rename-panel')?.remove();
   if (existente) { existente.remove(); return; }
 
   const ejId   = parseInt(btnDelete.dataset.ejId);
