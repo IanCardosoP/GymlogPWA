@@ -134,3 +134,86 @@ describe('importarBackup — backup completo', () => {
     expect(rows[0].id).toBeGreaterThan(2);
   });
 });
+
+// ── Vínculo con el catálogo en el backup ─────────────────────────────────────
+// El catálogo es un asset estático y NUNCA se guarda en la base del usuario: el
+// backup solo debe llevar el puntero (catalogo_id) de sus propios ejercicios.
+
+describe('backup y catálogo', () => {
+  it('el ciclo exportar → importar conserva el vínculo con el catálogo', async () => {
+    const {
+      saveRutina, getOrCreateEjercicio, linkEjercicioToRutina,
+      saveSesion, saveSerie, getAllDataForExport, getEjercicios,
+    } = await import('../js/db.js');
+
+    // Un ejercicio del catálogo y otro personalizado (sin vínculo)
+    const rutina = await saveRutina('Pecho', 1);
+    const delCatalogo = await getOrCreateEjercicio('Prensa de pierna', 'PIERNA', 'Leg_Press');
+    const personalizado = await getOrCreateEjercicio('Mi invento raro', 'GENERAL');
+    await linkEjercicioToRutina(rutina.id, delCatalogo.id, 1);
+    await linkEjercicioToRutina(rutina.id, personalizado.id, 2);
+    const sesion = await saveSesion('2026-07-13', rutina.id, null);
+    await saveSerie(sesion.id, delCatalogo.id, 1, 100, 10);
+
+    const datos = await getAllDataForExport();
+
+    // El backup NO arrastra el catálogo: solo los ejercicios del usuario
+    expect(datos.ejercicios).toHaveLength(2);
+    expect(datos.ejercicios.find(e => e.nombre === 'Prensa de pierna').catalogo_id).toBe('Leg_Press');
+
+    // Restaurar sobre una base limpia
+    db = await initDB('memory://');
+    const res = await importarBackup(exportarBackup(datos), db);
+    expect(res.error).toBeNull();
+
+    const restaurados = await getEjercicios();
+    const { rows } = await db.query(
+      'SELECT nombre, catalogo_id, catalogo_revisado FROM ejercicios ORDER BY nombre'
+    );
+    expect(restaurados).toHaveLength(2);
+
+    const prensa = rows.find(r => r.nombre === 'Prensa de pierna');
+    expect(prensa.catalogo_id).toBe('Leg_Press');       // la imagen sigue asociada
+    expect(prensa.catalogo_revisado).toBe(true);
+
+    const invento = rows.find(r => r.nombre === 'Mi invento raro');
+    expect(invento.catalogo_id).toBeNull();             // sin vínculo, como estaba
+    expect(invento.catalogo_revisado).toBe(false);
+
+    // Las series siguen apuntando al ejercicio correcto
+    const { rows: series } = await db.query('SELECT ejercicio_id, peso FROM series');
+    expect(series).toHaveLength(1);
+    expect(Number(series[0].peso)).toBe(100);
+  });
+
+  it('un backup ANTERIOR al catálogo (sin catalogo_id) se importa sin fallar', async () => {
+    // Exactamente lo que exportaba la versión previa: ejercicios sin los campos nuevos
+    const backupViejo = JSON.stringify({
+      version: BACKUP_VERSION,
+      exported_at: '2026-06-01',
+      conf: { pref_unit: 'kg', pref_acento: 'verde' },
+      ejercicios: [
+        { id: 1, nombre: 'Press Banca', grupo_muscular: 'PECHO' },
+        { id: 2, nombre: 'Sentadilla', grupo_muscular: 'PIERNA' },
+      ],
+      rutinas: [{ id: 1, nombre: 'Full Body' }],
+      rutina_ejercicios: [{ rutina_id: 1, ejercicio_id: 1, orden: 1, activo_hoy: true }],
+      rutina_dias: [{ rutina_id: 1, dia: 1 }],
+      sesiones: [{ id: 1, fecha: '2026-06-01', rutina_id: 1, energia_sueno: 3, peso_corporal: 80 }],
+      series: [{ sesion_id: 1, ejercicio_id: 1, numero_serie: 1, peso: 60, repeticiones: 8 }],
+    });
+
+    const res = await importarBackup(backupViejo, db);
+    expect(res.error).toBeNull();
+    expect(res.ejercicios).toBe(2);
+
+    // Los campos nuevos toman su default; el usuario los verá como "por revisar"
+    const { rows } = await db.query(
+      'SELECT nombre, catalogo_id, catalogo_revisado FROM ejercicios ORDER BY id'
+    );
+    for (const r of rows) {
+      expect(r.catalogo_id).toBeNull();
+      expect(r.catalogo_revisado).toBe(false);
+    }
+  });
+});
