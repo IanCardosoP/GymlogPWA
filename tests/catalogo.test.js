@@ -260,13 +260,28 @@ describe('instrucciones (asset lazy)', () => {
 });
 
 describe('equiposDeCatalogo', () => {
-  it('devuelve los equipos únicos en español, ordenados', () => {
+  it('devuelve los equipos únicos en español, sin duplicados', () => {
     const equipos = equiposDeCatalogo(CATALOGO);
     expect(equipos).toContain('mancuerna');
     expect(equipos).toContain('barra');
     expect(equipos).toContain('peso corporal');
     expect(new Set(equipos).size).toBe(equipos.length);
-    expect(equipos).toEqual([...equipos].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it('el equipo de uso frecuente encabeza la lista, en su orden', () => {
+    const equipos = equiposDeCatalogo(CATALOGO);
+    expect(equipos.slice(0, 5)).toEqual(['mancuerna', 'máquina', 'barra', 'polea', 'barra Z']);
+  });
+
+  it('el resto queda alfabético detrás de los prioritarios', () => {
+    const resto = equiposDeCatalogo(CATALOGO).slice(5);
+    expect(resto).toEqual([...resto].sort((a, b) => a.localeCompare(b)));
+    expect(resto).toContain('peso corporal');
+  });
+
+  it('no inventa equipos que no estén en el catálogo', () => {
+    const soloMancuerna = CATALOGO.filter(e => e.equipo_es === 'mancuerna');
+    expect(equiposDeCatalogo(soloMancuerna)).toEqual(['mancuerna']);
   });
 });
 

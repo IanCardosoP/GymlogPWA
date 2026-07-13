@@ -165,8 +165,18 @@ export function mejorMatch(datos, nombreUsuario) {
   return candidatosMatch(datos, nombreUsuario, 1)[0] ?? null;
 }
 
+// Equipo de gimnasio de uso frecuente: sus chips van primero en el modal para
+// no obligar a scrollear la fila. Solo afecta el ORDEN de los chips — el
+// filtrado y el ranking de ejercicios no cambian.
+const EQUIPOS_PRIORITARIOS = ['mancuerna', 'máquina', 'barra', 'polea', 'barra Z'];
+
 export function equiposDeCatalogo(datos) {
-  return [...new Set(datos.map(e => e.equipo_es))].sort((a, b) => a.localeCompare(b));
+  const presentes = new Set(datos.map(e => e.equipo_es));
+  const prioritarios = EQUIPOS_PRIORITARIOS.filter(e => presentes.has(e));
+  const resto = [...presentes]
+    .filter(e => !EQUIPOS_PRIORITARIOS.includes(e))
+    .sort((a, b) => a.localeCompare(b));
+  return [...prioritarios, ...resto];
 }
 
 // ── Wrappers sobre el catálogo cacheado (para la capa de UI) ─────────────────
