@@ -1,6 +1,7 @@
 // Catálogo estático de ejercicios (free-exercise-db): carga, búsqueda bilingüe y sugerencias.
 // Lógica pura — sin imports de DOM ni de db.js. El catálogo NUNCA se inserta en PGLite;
 // vive como JSON en assets y aquí solo se consulta en memoria.
+import { expandirConSinonimos } from './sinonimos.js';
 
 let catalogoCache = null;
 let instruccionesCache = null;
@@ -46,28 +47,68 @@ export function normalizarTexto(texto) {
     .trim();
 }
 
-// Puntúa la coincidencia de una consulta normalizada contra un nombre.
-// 100 exacto · 90 prefijo · 75 inicio de palabra · 60 substring ·
-// 45 todas las palabras de la consulta aparecen · 0 sin match.
-function puntuarNombre(nombre, consultaNorm) {
-  const n = normalizarTexto(nombre);
-  if (n === consultaNorm) return 100;
-  if (n.startsWith(consultaNorm)) return 90;
-  if (n.includes(' ' + consultaNorm)) return 75;
-  if (n.includes(consultaNorm)) return 60;
-  const palabras = consultaNorm.split(/\s+/).filter(Boolean);
-  if (palabras.length > 1 && palabras.every(p => n.includes(p))) return 45;
-  return 0;
+// Palabras sin valor discriminante (es + en, porque también se busca en nombre_en).
+// Exigirlas rompía matches válidos: "Fondos DE tríceps" vs "Fondos versión tríceps".
+const PALABRAS_VACIAS = new Set([
+  'de', 'del', 'la', 'el', 'los', 'las', 'con', 'en', 'a', 'al', 'para', 'y',
+  'por', 'sobre', 'un', 'una',
+  'the', 'of', 'with', 'on', 'to', 'and', 'for',
+]);
+
+// Stemming crudo de plurales: quita la "s" final y luego la "e" final.
+// Lingüísticamente burdo, pero se aplica IGUAL a consulta y catálogo, que es lo
+// único que importa para comparar: cruces/cruce → "cruc", aperturas/apertura →
+// "apertura", flexiones/flexion → "flexion", triceps/tricep → "tricep".
+function raiz(token) {
+  let t = token;
+  if (t.length > 3 && t.endsWith('s')) t = t.slice(0, -1);
+  if (t.length > 3 && t.endsWith('e')) t = t.slice(0, -1);
+  return t;
 }
 
-// La consulta compite contra el nombre en español Y en inglés; gana el mayor.
-// Así "press" encuentra "Prensa de pierna" (via "Leg Press") y "dominadas"
-// encuentra "Dominada" directamente.
-export function puntuarEntrada(entrada, consultaNorm) {
-  return Math.max(
-    puntuarNombre(entrada.nombre_es, consultaNorm),
-    puntuarNombre(entrada.nombre_en, consultaNorm),
+function tokenizar(texto) {
+  return new Set(
+    normalizarTexto(texto)
+      .split(/\s+/)
+      .filter(t => t && !PALABRAS_VACIAS.has(t))
+      .map(raiz)
   );
+}
+
+// Puntúa por solapamiento proporcional de tokens (no todo-o-nada):
+// cobertura = cuánto de lo que el usuario escribió aparece en el nombre;
+// precisión = cuánto del nombre es relevante (penaliza suave el relleno).
+function puntuarNombre(nombre, consultaNorm, tokensConsulta) {
+  const n = normalizarTexto(nombre);
+  if (n === consultaNorm) return 100;
+
+  const tokensNombre = tokenizar(nombre);
+  if (tokensNombre.size === 0 || tokensConsulta.size === 0) return 0;
+
+  let comunes = 0;
+  for (const t of tokensConsulta) if (tokensNombre.has(t)) comunes++;
+  if (comunes === 0) return 0;
+
+  const cobertura = comunes / tokensConsulta.size;
+  const precision = comunes / tokensNombre.size;
+  const puntaje = 100 * (0.7 * cobertura + 0.3 * precision);
+
+  return Math.round(n.startsWith(consultaNorm) ? Math.max(puntaje, 92) : puntaje);
+}
+
+// La consulta compite contra el nombre en español Y en inglés, y contra cada
+// variante de argot (peck deck → mariposa); gana el mayor puntaje.
+export function puntuarEntrada(entrada, consultaNorm) {
+  let mejor = 0;
+  for (const variante of expandirConSinonimos(consultaNorm)) {
+    const tokens = tokenizar(variante);
+    mejor = Math.max(
+      mejor,
+      puntuarNombre(entrada.nombre_es, variante, tokens),
+      puntuarNombre(entrada.nombre_en, variante, tokens),
+    );
+  }
+  return mejor;
 }
 
 export function buscarEnCatalogo(datos, { texto = '', grupo = null, equipo = null, limit = 30, offset = 0 } = {}) {

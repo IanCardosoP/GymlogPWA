@@ -32,7 +32,7 @@ function construirThumb(entrada) {
   return thumb;
 }
 
-// onSeleccionar({ fuente_id, nombre_es, grupo_muscular }) — al elegir del catálogo.
+// onSeleccionar(entrada) — entrada completa del catálogo al elegir una fila.
 // onCrearPersonalizado({ nombre, grupo }) — ejercicio custom con grupo elegido
 // en el selector interno del modal (única vía de alta manual desde el Diario).
 // onCerrar() — siempre que el modal se cierra (antes de los otros callbacks).
@@ -205,11 +205,7 @@ export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerr
       const entrada = entradasVisibles.get(item.dataset.fuenteId);
       if (!entrada) return;
       cerrar();
-      onSeleccionar?.({
-        fuente_id: entrada.fuente_id,
-        nombre_es: entrada.nombre_es,
-        grupo_muscular: entrada.grupo_muscular,
-      });
+      onSeleccionar?.(entrada); // entrada completa: incluye las imágenes del crossfade
     }
   });
 

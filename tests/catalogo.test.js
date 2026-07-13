@@ -172,6 +172,52 @@ describe('candidatosMatch — ciclado de imagen', () => {
   });
 });
 
+// Nombres reales de ejercicios que existían antes del catálogo y no encontraban
+// coincidencia: fallaban por plurales, por palabras vacías o por argot.
+describe('matching de ejercicios preexistentes (regresiones reportadas)', () => {
+  it('"Cruces de Polea Baja" encuentra "Cruce de polea baja" (plural)', () => {
+    expect(mejorMatch(CATALOGO, 'Cruces de Polea Baja')?.nombre_es).toBe('Cruce de polea baja');
+  });
+
+  it('"Fondos de tricep" encuentra "Fondos versión tríceps" (palabra vacía "de")', () => {
+    expect(mejorMatch(CATALOGO, 'Fondos de tricep')?.nombre_es).toBe('Fondos versión tríceps');
+  });
+
+  it('"Peck Deck" encuentra "Mariposa" (argot, sin solapamiento léxico)', () => {
+    expect(mejorMatch(CATALOGO, 'Peck Deck')?.nombre_es).toBe('Mariposa');
+  });
+
+  it('"Aperturas de pecho" encuentra "Mariposa" (argot + plural)', () => {
+    expect(mejorMatch(CATALOGO, 'Aperturas de pecho')?.nombre_es).toBe('Mariposa');
+  });
+
+  it('el argot también funciona en el buscador del modal', () => {
+    const { resultados } = buscarEnCatalogo(CATALOGO, { texto: 'peck deck' });
+    expect(resultados[0]?.nombre_es).toBe('Mariposa');
+  });
+
+  it('el plural no pierde la coincidencia (stemming)', () => {
+    // No se exige el mismo id: con "sentadilla" decenas de entradas empatan por
+    // prefijo. Lo que importa es que ambas formas caigan en el mismo ejercicio.
+    for (const [singular, plural] of [['sentadilla', 'sentadillas'], ['dominada', 'dominadas'], ['cruce', 'cruces']]) {
+      for (const forma of [singular, plural]) {
+        const m = mejorMatch(CATALOGO, forma);
+        expect(m, `sin match para "${forma}"`).not.toBeNull();
+        expect(normalizarTexto(m.nombre_es)).toContain(normalizarTexto(singular));
+      }
+    }
+  });
+
+  it('las palabras vacías no cambian el resultado', () => {
+    expect(mejorMatch(CATALOGO, 'press de banca')?.fuente_id)
+      .toBe(mejorMatch(CATALOGO, 'press banca')?.fuente_id);
+  });
+
+  it('un nombre sin relación real sigue sin dar coincidencias', () => {
+    expect(mejorMatch(CATALOGO, 'Mi ejercicio inventado xyz')).toBeNull();
+  });
+});
+
 describe('instrucciones (asset lazy)', () => {
   it('getInstrucciones devuelve los pasos en español del ejercicio', async () => {
     _inyectarInstrucciones({ Leg_Press: ['Siéntate en la máquina.', 'Empuja la plataforma.'] });

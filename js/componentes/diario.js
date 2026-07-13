@@ -648,6 +648,11 @@ async function handleDetalles(btnEdit, state) {
   const zonaDetalle = cel('div', 'detalle-zona');
   panel.appendChild(zonaDetalle);
 
+  // Vía de escape: siempre hay nombres sin relación léxica con el catálogo.
+  // Elegir aquí NO renombra el ejercicio ni cambia su grupo — solo su imagen.
+  const btnBuscar = cel('button', 'btn-panel-buscar', '[ BUSCAR EN CATÁLOGO ]');
+  panel.appendChild(btnBuscar);
+
   const btnGuardar  = cel('button', 'btn-panel-accion',  '[ GUARDAR ]');
   const btnCancelar = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
   panel.appendChild(btnGuardar);
@@ -720,6 +725,18 @@ async function handleDetalles(btnEdit, state) {
   };
 
   await pintarDetalle();
+
+  // La entrada elegida a mano pasa a ser el candidato del panel; como el resto
+  // de cambios, se persiste al GUARDAR (no al elegirla).
+  btnBuscar.addEventListener('click', () => {
+    abrirCatalogoModal({
+      onSeleccionar: (entrada) => {
+        candidatos = [entrada];
+        indice = 0;
+        pintarDetalle();
+      },
+    });
+  });
 
   const guardar = async () => {
     const nuevoNombre = input.value.trim();
