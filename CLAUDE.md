@@ -54,15 +54,26 @@ Tap del usuario → db.js (SQL puro) → actualizar Store → componente.render(
 | `js/db.js` | Toda interacción con PGLite — solo SQL, solo promesas, cero DOM |
 | `js/componentes/*.js` | Un módulo por pestaña; expone `.render(store)` idempotente, cero SQL |
 | `js/analitico.js` | Lógica pura (Epley 1RM, barras ASCII) — sin imports de DOM ni de db |
+| `js/catalogo.js` | Catálogo de ejercicios: carga y búsqueda bilingüe — lógica pura, sin DOM ni db |
+| `js/sinonimos.js` | Diccionario de argot de gimnasio (datos puros, editable a mano) |
 | `js/csv.js` | Backup JSON completo (export/import) — transacciones obligatorias |
 | `sw.js` | Service Worker Cache-First — sin lógica de negocio |
+
+**Catálogo de ejercicios (regla no negociable):** el catálogo (873 ejercicios de
+`free-exercise-db`, Unlicense) es **dato de referencia estático** en
+`public/assets/catalogo/` — **jamás se inserta en la PGLite del usuario**, que solo
+contiene sus datos (rutinas, sesiones, series). El único vínculo permitido es un
+puntero opaco `ejercicios.catalogo_id` (TEXT, sin FK). `instrucciones.json` (~670 KB)
+se carga **de forma diferida**: solo al abrir un panel de detalles, nunca al arrancar.
 
 **IDs de contenedores clave (inmutables):** `#diario-container`, `#progreso-container`, `#config-container`.
 
 **Modelo de datos (6 tablas PGLite):**
 - `ejercicios` — diccionario global de movimientos
 - `rutinas` — plantillas semanales
-- `rutina_ejercicios` — tabla puente; `activo_hoy=TRUE` = en pantalla, `FALSE` = banco de suplentes
+- `rutina_ejercicios` — tabla puente rutina↔ejercicio (`orden` define la posición).
+  `activo_hoy` es **legado**: el banco de suplentes se retiró y la columna ya no se
+  consulta (ver §Deuda técnica)
 - `sesiones` — cada entrenamiento real (fecha capturada en JS, no en SQL)
 - `series` — cada set individual; `peso=0` = peso corporal (BW)
 - `conf` — singleton de configuración (una sola fila, `id=1`, jamás DELETE)
@@ -105,19 +116,32 @@ gymlog-pwa/
 ├── Agent.md
 ├── Sprints.md
 ├── index.html
-├── sw.js
+├── public/
+│   ├── sw.js
+│   └── assets/catalogo/    ← Catálogo estático (NUNCA en la PGLite del user)
+│       ├── catalogo.json       · 873 ejercicios (nombre es/en, grupo, equipo)
+│       ├── instrucciones.json  · pasos en español (carga diferida)
+│       ├── img/*.webp          · 2 por ejercicio → crossfade
+│       └── ATTRIBUTION.md      · free-exercise-db (Unlicense)
 ├── css/
 │   └── styles.css
 ├── js/
 │   ├── app.js          ← Orquestador, Estado Global, routing DOM
 │   ├── db.js           ← Instancia PGLite, SOLO SQL, SOLO promesas
+│   ├── analitico.js    ← Lógica pura (1RM, barras)
+│   ├── catalogo.js     ← Lógica pura (búsqueda bilingüe en el catálogo)
+│   ├── sinonimos.js    ← Argot de gimnasio (datos puros)
+│   ├── csv.js
 │   └── componentes/
 │       ├── diario.js
 │       ├── progreso.js
-│       └── config.js
+│       ├── config.js
+│       ├── catalogoModal.js  ← Picker del catálogo (compartido, no es pestaña)
+│       └── previewModal.js   ← Vista previa + confirmación (compartido)
 └── tests/
     ├── db.test.js
     ├── analitico.test.js
+    ├── catalogo.test.js
     └── csv.test.js
 ```
 
@@ -169,7 +193,7 @@ Si cualquier registro falla → `ROLLBACK;` automático. Sin excepciones.
 |-----------------------------|-------------------------|--------------------------------|
 | Variables y funciones JS    | `camelCase`             | `loadedExercises`              |
 | Clases y módulos JS         | `PascalCase`            | `DBService`, `DiarioComponent` |
-| Constantes globales         | `UPPER_SNAKE_CASE`      | `MAX_ROUTINE_SLOTS`            |
+| Constantes globales         | `UPPER_SNAKE_CASE`      | `GRUPOS_MUSCULARES`, `BACKUP_VERSION` |
 | Funciones DB asíncronas     | Verbo + sustantivo      | `saveRealSerie()`, `getEjercicios()` |
 | Clases CSS                  | BEM con guiones         | `.diario-acordeon`, `.btn-guardar` |
 
@@ -226,11 +250,37 @@ El agente tiene **prohibido** avanzar al siguiente ticket con tests fallando.
 
 ## 9. LÍMITES DE DISEÑO
 
-- `MAX_ROUTINE_SLOTS = 8` — máximo de ejercicios visibles en el Diario.
+- **El Diario no tiene límite de ejercicios visibles.** El concepto de "8 visibles
+  + banco de suplentes" queda **retirado**: la rutina se muestra completa, sin
+  separador ni corte. (Pendiente de limpieza en código: la constante
+  `MAX_ROUTINE_SLOTS` de `js/componentes/diario.js` y la columna `activo_hoy` de
+  `rutina_ejercicios` ya no se usan — ver §Deuda técnica.)
 - Contenedor: `max-width: 450px`, `margin: 0 auto` en pantallas > 480px.
 - Colores base: fondo `#000000` / `#121212`, fuentes monoespaciadas.
 - Gráfica de progreso: 20 caracteres de ancho fijo (`█` + `░`).
 
 ---
 
-_Última actualización sincronizada con `Agent.md` — Sprint 0 (Setup)_
+## 10. DEUDA TÉCNICA (pendiente)
+
+### Retirar el concepto "8 visibles + banco de suplentes"
+
+Decidido por el PM: **el Diario muestra la rutina completa, sin corte ni suplentes.**
+El separador visual ya se eliminó; falta la limpieza del código, que se hará en una
+sesión dedicada:
+
+- `MAX_ROUTINE_SLOTS = 8` (`js/componentes/diario.js`) — ya no lo usa nadie; solo
+  queda su declaración (está exportado, verificar consumidores antes de borrar).
+- `rutina_ejercicios.activo_hoy` — **nadie la lee ya** para decidir qué se muestra,
+  pero `reordenarEjercicios()` (`js/db.js`) **sigue escribiéndola** (marca `FALSE` a
+  partir del 9º al arrastrar). Es inocuo hoy, pero es escritura muerta.
+  **No basta con un `DROP COLUMN`:** hay que revisar también `updateActivoHoy()` y
+  `getRutinaEjerciciosSuplentes()` en `js/db.js`, y la serialización de `js/csv.js`
+  (los backups antiguos traen la columna → el import debe seguir aceptándolos).
+- Migración: la DDL es idempotente y corre en el dispositivo de cada usuario, así que
+  el cambio debe ser retrocompatible con bases ya existentes.
+
+---
+
+_Última actualización: catálogo de ejercicios (873 movimientos, imágenes e
+instrucciones) — julio 2026_
