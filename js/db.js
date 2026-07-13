@@ -250,7 +250,7 @@ export async function saveRutina(nombre, diaSugerido) {
 export async function getRutinaEjercicios(rutinaId) {
   const result = await db.query(
     `SELECT re.id, re.rutina_id, re.ejercicio_id, re.orden, re.activo_hoy,
-            e.nombre, e.grupo_muscular
+            e.nombre, e.grupo_muscular, e.catalogo_id
      FROM rutina_ejercicios re
      JOIN ejercicios e ON e.id = re.ejercicio_id
      WHERE re.rutina_id = $1

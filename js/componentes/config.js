@@ -9,7 +9,7 @@ import {
   getEjerciciosPendientesRevision, vincularEjercicioCatalogo, descartarSugerenciaCatalogo,
 } from '../db.js';
 import { exportarBackup, importarBackup } from '../csv.js';
-import { sugerirMatch } from '../catalogo.js';
+import { getCandidatos } from '../catalogo.js';
 
 const ACENTOS_LABELS = {
   verde:  'Verde terminal',
@@ -494,9 +494,10 @@ export async function render(state) {
 }
 
 // ── Retrofit de catálogo ──────────────────────────────────────────────────────
-// <details> con los ejercicios del usuario aún sin revisar que tienen una
-// sugerencia razonable en el catálogo. ✓ vincula (solo el puntero catalogo_id),
-// ✕ descarta para siempre. El grupo muscular del usuario nunca se toca.
+// <details> con los ejercicios del usuario aún sin revisar que tienen alguna
+// coincidencia razonable en el catálogo. Tap en la miniatura cicla entre las
+// coincidencias (mismo gesto que el panel de detalles del Diario); ✓ vincula la
+// que esté visible, ✕ descarta para siempre. El grupo muscular nunca se toca.
 
 async function construirSeccionRetrofit() {
   const pendientes = await getEjerciciosPendientesRevision();
@@ -504,8 +505,8 @@ async function construirSeccionRetrofit() {
 
   const sugerencias = [];
   for (const ej of pendientes) {
-    const match = await sugerirMatch(ej.nombre); // catálogo se cachea al primer await
-    if (match) sugerencias.push({ ejercicio: ej, match });
+    const candidatos = await getCandidatos(ej.nombre); // catálogo se cachea al primer await
+    if (candidatos.length > 0) sugerencias.push({ ejercicio: ej, candidatos });
   }
   if (sugerencias.length === 0) return null;
 
@@ -515,46 +516,12 @@ async function construirSeccionRetrofit() {
   detalles.appendChild(resumen);
 
   const listaEl = cel('div', 'retrofit-lista');
-  for (const { ejercicio, match } of sugerencias) {
-    const fila = cel('div', 'retrofit-fila');
-    fila.dataset.ejId = ejercicio.id;
-
-    const thumb = cel('div', 'catalogo-thumb');
-    const imgA = document.createElement('img');
-    const imgB = document.createElement('img');
-    imgA.src = match.imagen_a;
-    imgB.src = match.imagen_b;
-    imgA.alt = '';
-    imgB.alt = '';
-    imgA.loading = 'lazy';
-    imgB.loading = 'lazy';
-    imgA.className = 'catalogo-thumb-a';
-    imgB.className = 'catalogo-thumb-b';
-    thumb.appendChild(imgA);
-    thumb.appendChild(imgB);
-    fila.appendChild(thumb);
-
-    const info = cel('div', 'retrofit-info');
-    info.appendChild(cel('span', 'retrofit-nombre-usuario', ejercicio.nombre));
-    info.appendChild(cel('span', 'retrofit-sugerencia', `→ ${match.nombre_es}`));
-    fila.appendChild(info);
-
-    const btnOk = cel('button', 'btn-add-ok', '✓');
-    btnOk.dataset.accion = 'vincular';
-    btnOk.dataset.fuenteId = match.fuente_id;
-    btnOk.setAttribute('aria-label', `Vincular ${ejercicio.nombre} con ${match.nombre_es}`);
-    fila.appendChild(btnOk);
-
-    const btnNo = cel('button', 'btn-add-cancel', '✕');
-    btnNo.dataset.accion = 'descartar';
-    btnNo.setAttribute('aria-label', `Descartar sugerencia para ${ejercicio.nombre}`);
-    fila.appendChild(btnNo);
-
-    listaEl.appendChild(fila);
+  for (const { ejercicio, candidatos } of sugerencias) {
+    listaEl.appendChild(construirFilaRetrofit(ejercicio, candidatos));
   }
   detalles.appendChild(listaEl);
 
-  // Delegación: un solo listener para todas las filas
+  // Delegación: un solo listener para ✓/✕ de todas las filas
   listaEl.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-accion]');
     if (!btn) return;
@@ -562,7 +529,8 @@ async function construirSeccionRetrofit() {
     const ejId = Number(fila.dataset.ejId);
 
     if (btn.dataset.accion === 'vincular') {
-      await vincularEjercicioCatalogo(ejId, btn.dataset.fuenteId);
+      // Se vincula el candidato visible, que puede no ser el primero (el usuario cicló)
+      await vincularEjercicioCatalogo(ejId, fila.dataset.fuenteId);
     } else {
       await descartarSugerenciaCatalogo(ejId);
     }
@@ -578,6 +546,68 @@ async function construirSeccionRetrofit() {
   });
 
   return detalles;
+}
+
+function construirFilaRetrofit(ejercicio, candidatos) {
+  const fila = cel('div', 'retrofit-fila');
+  fila.dataset.ejId = ejercicio.id;
+
+  let indice = 0;
+
+  const btnImg = cel('button', 'retrofit-thumb catalogo-thumb');
+  const imgA = document.createElement('img');
+  const imgB = document.createElement('img');
+  imgA.alt = '';
+  imgB.alt = '';
+  imgA.loading = 'lazy';
+  imgB.loading = 'lazy';
+  imgA.className = 'catalogo-thumb-a';
+  imgB.className = 'catalogo-thumb-b';
+  btnImg.appendChild(imgA);
+  btnImg.appendChild(imgB);
+  fila.appendChild(btnImg);
+
+  const info = cel('div', 'retrofit-info');
+  info.appendChild(cel('span', 'retrofit-nombre-usuario', ejercicio.nombre));
+  const sugerenciaEl = cel('span', 'retrofit-sugerencia');
+  info.appendChild(sugerenciaEl);
+  fila.appendChild(info);
+
+  const pintar = () => {
+    const match = candidatos[indice];
+    imgA.src = match.imagen_a;
+    imgB.src = match.imagen_b;
+    // fuente_id vive en la fila: el ✓ delegado lee de aquí el candidato visible
+    fila.dataset.fuenteId = match.fuente_id;
+    sugerenciaEl.textContent = candidatos.length > 1
+      ? `→ ${match.nombre_es} (${indice + 1}/${candidatos.length})`
+      : `→ ${match.nombre_es}`;
+    btnImg.setAttribute('aria-label', candidatos.length > 1
+      ? `Cambiar sugerencia para ${ejercicio.nombre}: ${match.nombre_es}, ${indice + 1} de ${candidatos.length}`
+      : `Sugerencia para ${ejercicio.nombre}: ${match.nombre_es}`);
+  };
+  pintar();
+
+  if (candidatos.length > 1) {
+    btnImg.addEventListener('click', () => {
+      indice = (indice + 1) % candidatos.length; // cicla
+      pintar();
+    });
+  } else {
+    btnImg.disabled = true;
+  }
+
+  const btnOk = cel('button', 'btn-add-ok', '✓');
+  btnOk.dataset.accion = 'vincular';
+  btnOk.setAttribute('aria-label', `Vincular ${ejercicio.nombre} con la sugerencia visible`);
+  fila.appendChild(btnOk);
+
+  const btnNo = cel('button', 'btn-add-cancel', '✕');
+  btnNo.dataset.accion = 'descartar';
+  btnNo.setAttribute('aria-label', `Descartar sugerencia para ${ejercicio.nombre}`);
+  fila.appendChild(btnNo);
+
+  return fila;
 }
 
 async function resetearTodo() {

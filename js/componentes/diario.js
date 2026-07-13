@@ -11,14 +11,13 @@ import {
   saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo, resetSesionTiempoIfVacia,
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
-  getOrCreateEjercicio,
+  getOrCreateEjercicio, vincularEjercicioCatalogo,
   updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   linkEjercicioToRutina, reordenarEjercicios,
 } from '../db.js';
+import { getCandidatos, getInstrucciones } from '../catalogo.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
-
-const GRUPOS_MUSCULARES = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', 'GENERAL'];
 
 let clickAbort = null;
 let dragAbort  = null;
@@ -187,7 +186,7 @@ export async function render(state) {
 
     const btnEdit = e.target.closest('.btn-edit');
     if (btnEdit) {
-      handleRenombrar(btnEdit, state);
+      handleDetalles(btnEdit, state);
       return;
     }
 
@@ -276,9 +275,9 @@ function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
 
   if (ej) {
     const btnEdit = cel('button', 'btn-edit', '✎');
-    btnEdit.dataset.ejId  = ej.ejercicio_id;
-    btnEdit.dataset.grupo = ej.grupo_muscular ?? 'GENERAL';
-    btnEdit.setAttribute('aria-label', 'Renombrar ejercicio');
+    btnEdit.dataset.ejId      = ej.ejercicio_id;
+    btnEdit.dataset.catalogoId = ej.catalogo_id ?? '';
+    btnEdit.setAttribute('aria-label', 'Ver detalles y editar ejercicio');
     summary.appendChild(btnEdit);
 
     const btnDelete = cel('button', 'btn-delete', '✕');
@@ -621,7 +620,11 @@ function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   });
 }
 
-function handleRenombrar(btnEdit, state) {
+// Panel de detalles y edición (botón ✎): nombre editable + imagen crossfade +
+// instrucciones. El grupo muscular ya no se edita a mano — lo determina el
+// catálogo al crear el ejercicio. Tap en la imagen cicla entre las coincidencias
+// del catálogo para ese nombre; se persiste al guardar.
+async function handleDetalles(btnEdit, state) {
   const details = btnEdit.closest('details');
   if (details) details.open = true;
 
@@ -629,9 +632,9 @@ function handleRenombrar(btnEdit, state) {
   details?.querySelector('.confirm-delete-panel')?.remove();
   if (existente) { existente.remove(); return; }
 
-  const ejId        = parseInt(btnEdit.dataset.ejId);
+  const ejId         = parseInt(btnEdit.dataset.ejId);
   const nombreActual = details?.querySelector('.ejercicio-nombre')?.textContent ?? '';
-  const grupoActual  = btnEdit.dataset.grupo ?? 'GENERAL';
+  const catalogoIdActual = btnEdit.dataset.catalogoId || null;
 
   const panel = cel('div', 'rename-panel');
 
@@ -642,33 +645,90 @@ function handleRenombrar(btnEdit, state) {
   input.setAttribute('aria-label', 'Nuevo nombre del ejercicio');
   panel.appendChild(input);
 
-  let grupoSeleccionado = grupoActual;
-  const selectorDiv = cel('div', 'grupo-muscular-selector');
-  selectorDiv.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
-  const filaGrupos = cel('div', 'grupo-muscular-btns');
-  GRUPOS_MUSCULARES.forEach(g => {
-    const btn = cel('button', 'btn-grupo-muscular', g);
-    if (g === grupoActual) btn.classList.add('is-active');
-    btn.addEventListener('click', () => {
-      filaGrupos.querySelectorAll('.btn-grupo-muscular').forEach(b => b.classList.remove('is-active'));
-      btn.classList.add('is-active');
-      grupoSeleccionado = g;
-    });
-    filaGrupos.appendChild(btn);
-  });
-  selectorDiv.appendChild(filaGrupos);
-  panel.appendChild(selectorDiv);
+  const zonaDetalle = cel('div', 'detalle-zona');
+  panel.appendChild(zonaDetalle);
 
   const btnGuardar  = cel('button', 'btn-panel-accion',  '[ GUARDAR ]');
   const btnCancelar = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
   panel.appendChild(btnGuardar);
   panel.appendChild(btnCancelar);
 
+  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
+  if (cuerpo) details.insertBefore(panel, cuerpo);
+  else details?.appendChild(panel);
+
+  input.focus();
+  input.select();
+
+  // ── Candidatos del catálogo (best-effort: sin catálogo, el panel es solo rename)
+  let candidatos = [];
+  try {
+    candidatos = await getCandidatos(nombreActual);
+  } catch { /* catálogo no disponible */ }
+
+  // Punto de partida: el vínculo guardado si existe; si no, la mejor coincidencia.
+  const idxGuardado = candidatos.findIndex(c => c.fuente_id === catalogoIdActual);
+  let indice = idxGuardado >= 0 ? idxGuardado : 0;
+
+  const pintarDetalle = async () => {
+    zonaDetalle.textContent = '';
+    const entrada = candidatos[indice];
+
+    if (!entrada) {
+      zonaDetalle.appendChild(cel('p', 'detalle-vacio',
+        'Sin coincidencias en el catálogo para este nombre.'));
+      return;
+    }
+
+    const btnImg = cel('button', 'detalle-imagen catalogo-thumb');
+    btnImg.setAttribute('aria-label',
+      `Cambiar imagen: ${entrada.nombre_es} (coincidencia ${indice + 1} de ${candidatos.length})`);
+    const imgA = document.createElement('img');
+    const imgB = document.createElement('img');
+    imgA.src = entrada.imagen_a;
+    imgB.src = entrada.imagen_b;
+    imgA.alt = '';
+    imgB.alt = '';
+    imgA.className = 'catalogo-thumb-a';
+    imgB.className = 'catalogo-thumb-b';
+    btnImg.appendChild(imgA);
+    btnImg.appendChild(imgB);
+    zonaDetalle.appendChild(btnImg);
+
+    if (candidatos.length > 1) {
+      btnImg.addEventListener('click', () => {
+        indice = (indice + 1) % candidatos.length; // cicla
+        pintarDetalle();
+      });
+      zonaDetalle.appendChild(cel('p', 'detalle-contador',
+        `${entrada.nombre_es} · ${indice + 1}/${candidatos.length} — toca la imagen para cambiarla`));
+    } else {
+      btnImg.disabled = true;
+      zonaDetalle.appendChild(cel('p', 'detalle-contador', entrada.nombre_es));
+    }
+
+    let pasos = [];
+    try {
+      pasos = await getInstrucciones(entrada.fuente_id);
+    } catch { /* instrucciones no disponibles offline */ }
+
+    if (pasos.length > 0) {
+      const ol = cel('ol', 'detalle-instrucciones');
+      for (const paso of pasos) ol.appendChild(cel('li', null, paso));
+      zonaDetalle.appendChild(ol);
+    }
+  };
+
+  await pintarDetalle();
+
   const guardar = async () => {
     const nuevoNombre = input.value.trim();
     if (!nuevoNombre) { panel.remove(); return; }
-    const grupoFinal = grupoSeleccionado !== grupoActual ? grupoSeleccionado : null;
-    await updateEjercicioNombre(ejId, nuevoNombre, grupoFinal);
+    await updateEjercicioNombre(ejId, nuevoNombre);
+    const elegido = candidatos[indice];
+    if (elegido && elegido.fuente_id !== catalogoIdActual) {
+      await vincularEjercicioCatalogo(ejId, elegido.fuente_id);
+    }
     await render(state);
   };
 
@@ -678,13 +738,6 @@ function handleRenombrar(btnEdit, state) {
     if (e.key === 'Enter')  { e.preventDefault(); guardar(); }
     if (e.key === 'Escape') panel.remove();
   });
-
-  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
-  if (cuerpo) details.insertBefore(panel, cuerpo);
-  else details?.appendChild(panel);
-
-  input.focus();
-  input.select();
 }
 
 function handleEliminar(btnDelete, state) {

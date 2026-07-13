@@ -3,6 +3,7 @@
 // vive como JSON en assets y aquí solo se consulta en memoria.
 
 let catalogoCache = null;
+let instruccionesCache = null;
 
 export async function cargarCatalogo(url = 'assets/catalogo/catalogo.json') {
   if (catalogoCache) return catalogoCache;
@@ -12,9 +13,29 @@ export async function cargarCatalogo(url = 'assets/catalogo/catalogo.json') {
   return catalogoCache;
 }
 
-// Solo para tests: inyecta un catálogo sin pasar por fetch.
+// Asset aparte (~700KB) del índice de búsqueda: se descarga solo al abrir el
+// primer panel de detalles, no al arrancar la app ni al abrir el modal.
+export async function cargarInstrucciones(url = 'assets/catalogo/instrucciones.json') {
+  if (instruccionesCache) return instruccionesCache;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`No se pudieron cargar las instrucciones (${res.status})`);
+  instruccionesCache = await res.json();
+  return instruccionesCache;
+}
+
+export async function getInstrucciones(fuenteId) {
+  if (!fuenteId) return [];
+  const todas = await cargarInstrucciones();
+  return todas[fuenteId] ?? [];
+}
+
+// Solo para tests: inyecta datos sin pasar por fetch.
 export function _inyectarCatalogo(datos) {
   catalogoCache = datos;
+}
+
+export function _inyectarInstrucciones(datos) {
+  instruccionesCache = datos;
 }
 
 export function normalizarTexto(texto) {
@@ -81,21 +102,26 @@ export function buscarEnCatalogo(datos, { texto = '', grupo = null, equipo = nul
 // 45 = al menos todas las palabras de su nombre aparecen en el candidato.
 const UMBRAL_SUGERENCIA = 45;
 
-export function mejorMatch(datos, nombreUsuario) {
+// Lista rankeada de coincidencias para un nombre de usuario: alimenta tanto la
+// sugerencia inicial como el ciclado de imagen (tap → siguiente coincidencia).
+export function candidatosMatch(datos, nombreUsuario, limite = 8) {
   const consultaNorm = normalizarTexto(nombreUsuario);
-  if (!consultaNorm) return null;
+  if (!consultaNorm) return [];
 
-  let mejor = null;
-  let mejorPuntaje = 0;
-  for (const entrada of datos) {
-    const puntaje = puntuarEntrada(entrada, consultaNorm);
-    if (puntaje > mejorPuntaje ||
-        (puntaje === mejorPuntaje && mejor && entrada.nombre_es.length < mejor.nombre_es.length)) {
-      mejor = entrada;
-      mejorPuntaje = puntaje;
-    }
-  }
-  return mejorPuntaje >= UMBRAL_SUGERENCIA ? mejor : null;
+  return datos
+    .map(entrada => ({ entrada, puntaje: puntuarEntrada(entrada, consultaNorm) }))
+    .filter(x => x.puntaje >= UMBRAL_SUGERENCIA)
+    .sort((a, b) =>
+      b.puntaje - a.puntaje ||
+      a.entrada.nombre_es.length - b.entrada.nombre_es.length ||
+      a.entrada.nombre_es.localeCompare(b.entrada.nombre_es)
+    )
+    .slice(0, limite)
+    .map(x => x.entrada);
+}
+
+export function mejorMatch(datos, nombreUsuario) {
+  return candidatosMatch(datos, nombreUsuario, 1)[0] ?? null;
 }
 
 export function equiposDeCatalogo(datos) {
@@ -117,6 +143,11 @@ export async function getEquiposCatalogo() {
 export async function sugerirMatch(nombreUsuario) {
   const datos = await cargarCatalogo();
   return mejorMatch(datos, nombreUsuario);
+}
+
+export async function getCandidatos(nombreUsuario, limite = 8) {
+  const datos = await cargarCatalogo();
+  return candidatosMatch(datos, nombreUsuario, limite);
 }
 
 export async function getEntradaCatalogo(fuenteId) {

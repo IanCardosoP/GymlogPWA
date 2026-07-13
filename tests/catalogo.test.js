@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  normalizarTexto, buscarEnCatalogo, mejorMatch, equiposDeCatalogo,
-  _inyectarCatalogo, buscarCatalogo, sugerirMatch, getEntradaCatalogo,
+  normalizarTexto, buscarEnCatalogo, mejorMatch, candidatosMatch, equiposDeCatalogo,
+  _inyectarCatalogo, _inyectarInstrucciones,
+  buscarCatalogo, sugerirMatch, getCandidatos, getEntradaCatalogo, getInstrucciones,
 } from '../js/catalogo.js';
 
 // Catálogo real generado en public/assets — los tests validan contra los datos
@@ -29,6 +30,20 @@ describe('catálogo real (integridad del asset)', () => {
 
   it('no tiene fuente_id duplicados', () => {
     expect(new Set(CATALOGO.map(e => e.fuente_id)).size).toBe(CATALOGO.length);
+  });
+
+  it('instrucciones.json cubre los 873 ejercicios del catálogo', () => {
+    const instrucciones = JSON.parse(readFileSync(
+      fileURLToPath(new URL('../public/assets/catalogo/instrucciones.json', import.meta.url)),
+      'utf-8',
+    ));
+    for (const e of CATALOGO) {
+      expect(Array.isArray(instrucciones[e.fuente_id]), `sin entrada: ${e.fuente_id}`).toBe(true);
+    }
+    // Los pasos nunca son cadenas vacías (la fuente traía algunas, se limpiaron)
+    for (const pasos of Object.values(instrucciones)) {
+      for (const p of pasos) expect(p.trim().length).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -127,6 +142,47 @@ describe('mejorMatch — sugerencias de retrofit', () => {
   it('devuelve null para nombres sin match razonable', () => {
     expect(mejorMatch(CATALOGO, 'mi ejercicio raro inventado 99')).toBeNull();
     expect(mejorMatch(CATALOGO, '')).toBeNull();
+  });
+});
+
+describe('candidatosMatch — ciclado de imagen', () => {
+  it('"sentadilla" devuelve varias variantes rankeadas, no solo una', () => {
+    const candidatos = candidatosMatch(CATALOGO, 'sentadilla');
+    expect(candidatos.length).toBeGreaterThan(1);
+    for (const c of candidatos) {
+      expect(normalizarTexto(c.nombre_es)).toContain('sentadilla');
+    }
+  });
+
+  it('respeta el límite de candidatos', () => {
+    expect(candidatosMatch(CATALOGO, 'sentadilla', 3).length).toBeLessThanOrEqual(3);
+    expect(candidatosMatch(CATALOGO, 'press', 5).length).toBeLessThanOrEqual(5);
+  });
+
+  it('mejorMatch coincide con el primer candidato (sin duplicar lógica)', () => {
+    for (const nombre of ['sentadilla', 'prensa de pierna', 'press banca']) {
+      expect(mejorMatch(CATALOGO, nombre)?.fuente_id)
+        .toBe(candidatosMatch(CATALOGO, nombre)[0]?.fuente_id);
+    }
+  });
+
+  it('devuelve lista vacía si nada supera el umbral', () => {
+    expect(candidatosMatch(CATALOGO, 'xyz inventado 99')).toEqual([]);
+    expect(candidatosMatch(CATALOGO, '')).toEqual([]);
+  });
+});
+
+describe('instrucciones (asset lazy)', () => {
+  it('getInstrucciones devuelve los pasos en español del ejercicio', async () => {
+    _inyectarInstrucciones({ Leg_Press: ['Siéntate en la máquina.', 'Empuja la plataforma.'] });
+    const pasos = await getInstrucciones('Leg_Press');
+    expect(pasos).toEqual(['Siéntate en la máquina.', 'Empuja la plataforma.']);
+  });
+
+  it('devuelve [] para ids desconocidos o nulos, sin lanzar', async () => {
+    _inyectarInstrucciones({ Leg_Press: ['Siéntate.'] });
+    expect(await getInstrucciones('No_Existe')).toEqual([]);
+    expect(await getInstrucciones(null)).toEqual([]);
   });
 });
 
