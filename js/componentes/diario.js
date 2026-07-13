@@ -15,7 +15,7 @@ import {
   updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   linkEjercicioToRutina, reordenarEjercicios,
 } from '../db.js';
-import { getCandidatos, getInstrucciones } from '../catalogo.js';
+import { getCandidatos, getInstrucciones, getEntradaCatalogo } from '../catalogo.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
 
@@ -654,6 +654,15 @@ async function handleDetalles(btnEdit, state) {
   let candidatos = [];
   try {
     candidatos = await getCandidatos(nombreActual);
+
+    // El vínculo guardado manda, aunque no salga al buscar por nombre: si el
+    // usuario lo eligió con [ BUSCAR EN CATÁLOGO ] fue justamente porque ninguna
+    // sugerencia por nombre le servía. Sin esto, el panel lo ignoraría al reabrir
+    // y volvería a mostrar la primera sugerencia descartada.
+    if (catalogoIdActual && !candidatos.some(c => c.fuente_id === catalogoIdActual)) {
+      const vinculada = await getEntradaCatalogo(catalogoIdActual);
+      if (vinculada) candidatos = [vinculada, ...candidatos];
+    }
   } catch { /* catálogo no disponible */ }
 
   // Punto de partida: el vínculo guardado si existe; si no, la mejor coincidencia.
@@ -716,7 +725,8 @@ async function handleDetalles(btnEdit, state) {
   btnBuscar.addEventListener('click', () => {
     abrirCatalogoModal({
       onSeleccionar: (entrada) => {
-        candidatos = [entrada];
+        // Al frente, sin descartar el resto: el usuario sigue pudiendo ciclar.
+        candidatos = [entrada, ...candidatos.filter(c => c.fuente_id !== entrada.fuente_id)];
         indice = 0;
         pintarDetalle();
       },

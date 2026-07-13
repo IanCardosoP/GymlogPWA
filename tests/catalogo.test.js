@@ -218,6 +218,33 @@ describe('matching de ejercicios preexistentes (regresiones reportadas)', () => 
   });
 });
 
+// El panel de detalles reconstruye sus candidatos buscando por NOMBRE. Si el
+// usuario vinculó a mano (con [ BUSCAR EN CATÁLOGO ]) una entrada que no sale en
+// esa búsqueda —el caso típico: fue a buscarla justamente porque las sugerencias
+// no servían—, el vínculo guardado debe seguir mandando al reabrir el panel.
+describe('vínculo manual fuera de las sugerencias por nombre', () => {
+  it('la entrada vinculada no aparece entre los candidatos por nombre', async () => {
+    _inyectarCatalogo(CATALOGO);
+    const candidatos = await getCandidatos('Fondo tricep');
+    expect(candidatos.length).toBeGreaterThan(0);
+    // "Mariposa" no tiene relación léxica con "Fondo tricep"
+    expect(candidatos.some(c => c.fuente_id === 'Butterfly')).toBe(false);
+  });
+
+  it('getEntradaCatalogo la recupera para anteponerla a los candidatos', async () => {
+    _inyectarCatalogo(CATALOGO);
+    const vinculada = await getEntradaCatalogo('Butterfly');
+    expect(vinculada).not.toBeNull();
+
+    const candidatos = await getCandidatos('Fondo tricep');
+    const conVinculo = [vinculada, ...candidatos.filter(c => c.fuente_id !== 'Butterfly')];
+
+    // El vínculo guardado queda primero y es localizable → el panel lo mostrará
+    expect(conVinculo[0].fuente_id).toBe('Butterfly');
+    expect(conVinculo.findIndex(c => c.fuente_id === 'Butterfly')).toBe(0);
+  });
+});
+
 describe('instrucciones (asset lazy)', () => {
   it('getInstrucciones devuelve los pasos en español del ejercicio', async () => {
     _inyectarInstrucciones({ Leg_Press: ['Siéntate en la máquina.', 'Empuja la plataforma.'] });
