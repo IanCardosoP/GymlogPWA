@@ -1,7 +1,7 @@
 // Modal picker del catálogo de ejercicios: búsqueda bilingüe + chips de filtro
 // + lista con miniatura crossfade. Componente compartido (no es pestaña).
 // Importa catalogo.js (lógica pura); nunca db.js — quien persiste es el caller.
-import { buscarCatalogo, getEquiposCatalogo } from '../catalogo.js';
+import { buscarCatalogo, getEquiposCatalogo, getInstrucciones } from '../catalogo.js';
 
 export const GRUPOS_MUSCULARES = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', 'GENERAL'];
 
@@ -149,14 +149,92 @@ export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerr
   };
 
   // ── Cierre y limpieza ──
+  // Escape cierra primero la vista previa (si está abierta), no todo el modal.
   const onKeydown = (e) => {
-    if (e.key === 'Escape') cerrar();
+    if (e.key !== 'Escape') return;
+    const preview = document.querySelector('.preview-scrim');
+    if (preview) { preview.remove(); return; }
+    cerrar();
   };
   const cerrar = () => {
     clearTimeout(debounceTimer);
     document.removeEventListener('keydown', onKeydown);
+    document.querySelector('.preview-scrim')?.remove();
     scrim.remove();
     onCerrar?.();
+  };
+
+  // Segunda capa sobre el modal: el ejercicio en grande + instrucciones, para
+  // confirmar antes de comprometerlo a la rutina. Volver deja el listado intacto
+  // (búsqueda, filtros y scroll siguen como estaban).
+  const abrirPreview = async (entrada) => {
+    const pScrim = cel('div', 'preview-scrim');
+    const pModal = cel('div', 'preview-modal');
+    pModal.setAttribute('role', 'dialog');
+    pModal.setAttribute('aria-modal', 'true');
+    pModal.setAttribute('aria-label', `Vista previa: ${entrada.nombre_es}`);
+
+    const cerrarPreview = () => pScrim.remove();
+
+    const pHeader = cel('div', 'preview-header');
+    pHeader.appendChild(cel('h3', 'preview-titulo', entrada.nombre_es));
+    const btnVolver = cel('button', 'preview-volver', '✕');
+    btnVolver.setAttribute('aria-label', 'Volver al catálogo');
+    pHeader.appendChild(btnVolver);
+    pModal.appendChild(pHeader);
+
+    const pCuerpo = cel('div', 'preview-cuerpo');
+
+    const imagen = construirThumb(entrada);
+    imagen.classList.add('preview-imagen');
+    pCuerpo.appendChild(imagen);
+
+    const meta = cel('div', 'preview-meta');
+    meta.appendChild(cel('span', 'preview-tag', entrada.grupo_muscular));
+    meta.appendChild(cel('span', 'preview-tag', entrada.equipo_es.toUpperCase()));
+    pCuerpo.appendChild(meta);
+
+    const instruccionesEl = cel('div', 'preview-instrucciones-zona');
+    pCuerpo.appendChild(instruccionesEl);
+    pModal.appendChild(pCuerpo);
+
+    const pPie = cel('div', 'preview-pie');
+    const btnCancelar = cel('button', 'preview-cancelar', '[ VOLVER ]');
+    const btnAgregar  = cel('button', 'preview-agregar', '[ + AGREGAR ]');
+    pPie.appendChild(btnCancelar);
+    pPie.appendChild(btnAgregar);
+    pModal.appendChild(pPie);
+
+    pScrim.appendChild(pModal);
+    document.body.appendChild(pScrim);
+    btnAgregar.focus();
+
+    btnVolver.addEventListener('click', cerrarPreview);
+    btnCancelar.addEventListener('click', cerrarPreview);
+    pScrim.addEventListener('click', (e) => {
+      if (e.target === pScrim) cerrarPreview();
+    });
+
+    btnAgregar.addEventListener('click', () => {
+      cerrar(); // cierra preview + catálogo
+      onSeleccionar?.(entrada);
+    });
+
+    // Las instrucciones son un asset aparte con carga diferida: se piden aquí,
+    // no al abrir el modal ni al listar.
+    let pasos = [];
+    try {
+      pasos = await getInstrucciones(entrada.fuente_id);
+    } catch { /* asset no disponible offline */ }
+
+    if (pasos.length > 0) {
+      const ol = cel('ol', 'detalle-instrucciones');
+      for (const paso of pasos) ol.appendChild(cel('li', null, paso));
+      instruccionesEl.appendChild(ol);
+    } else {
+      instruccionesEl.appendChild(
+        cel('p', 'detalle-vacio', 'Este ejercicio no trae instrucciones.'));
+    }
   };
 
   // ── Eventos (delegación en el modal) ──
@@ -204,8 +282,8 @@ export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerr
     if (item) {
       const entrada = entradasVisibles.get(item.dataset.fuenteId);
       if (!entrada) return;
-      cerrar();
-      onSeleccionar?.(entrada); // entrada completa: incluye las imágenes del crossfade
+      // No se compromete a la rutina todavía: primero la vista previa confirma.
+      await abrirPreview(entrada);
     }
   });
 
