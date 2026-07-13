@@ -1853,3 +1853,57 @@ details:not(.metrica-info) > summary:hover {
   font-size: var(--fs-body-sm);
   cursor: pointer;
 }
+
+/* ═══ Retrofit: vincular ejercicios existentes al catálogo (Config) ══════════ */
+
+.retrofit-detalles {
+  margin-top: var(--sp-4);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radius-sm);
+}
+
+.retrofit-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-3);
+  color: var(--color-acento);
+  font-size: var(--fs-body-sm);
+  cursor: pointer;
+  list-style: none;
+}
+
+.retrofit-summary::-webkit-details-marker { display: none; }
+
+.retrofit-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--color-linea);
+}
+
+.retrofit-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.retrofit-nombre-usuario {
+  color: var(--color-texto);
+  font-size: var(--fs-body-sm);
+  overflow-wrap: break-word;
+}
+
+.retrofit-sugerencia {
+  color: var(--color-texto-faint);
+  font-size: var(--fs-caption);
+}
+
+.retrofit-fila .btn-add-ok,
+.retrofit-fila .btn-add-cancel {
+  min-height: 44px;
+  width: 44px;
+}

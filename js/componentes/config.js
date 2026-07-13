@@ -6,8 +6,10 @@ import {
   updateRutinaNombre, deleteRutina,
   getConf, updatePrefUnit, updatePrefAcento,
   getDB, getAllDataForExport,
+  getEjerciciosPendientesRevision, vincularEjercicioCatalogo, descartarSugerenciaCatalogo,
 } from '../db.js';
 import { exportarBackup, importarBackup } from '../csv.js';
+import { sugerirMatch } from '../catalogo.js';
 
 const ACENTOS_LABELS = {
   verde:  'Verde terminal',
@@ -91,6 +93,14 @@ export async function render(state) {
   const btnNueva = cel('button', 'btn-nueva-rutina', '[+ CREAR]');
   nuevaWrapper.appendChild(btnNueva);
   secAdmin.appendChild(nuevaWrapper);
+
+  // Retrofit: vincular ejercicios existentes al catálogo (sugerencia + confirmación,
+  // nunca automático; jamás modifica grupo_muscular). Best-effort: si el catálogo
+  // aún no está en caché (primera carga offline), la sección simplemente no aparece.
+  try {
+    const retrofitEl = await construirSeccionRetrofit();
+    if (retrofitEl) secAdmin.appendChild(retrofitEl);
+  } catch { /* catálogo no disponible — sin sección */ }
 
   container.appendChild(secAdmin);
 
@@ -481,6 +491,93 @@ export async function render(state) {
   btnMercado.addEventListener('click', () => {
     window.open('https://link.mercadopago.com.mx/gymlog', '_blank', 'noopener,noreferrer');
   });
+}
+
+// ── Retrofit de catálogo ──────────────────────────────────────────────────────
+// <details> con los ejercicios del usuario aún sin revisar que tienen una
+// sugerencia razonable en el catálogo. ✓ vincula (solo el puntero catalogo_id),
+// ✕ descarta para siempre. El grupo muscular del usuario nunca se toca.
+
+async function construirSeccionRetrofit() {
+  const pendientes = await getEjerciciosPendientesRevision();
+  if (pendientes.length === 0) return null;
+
+  const sugerencias = [];
+  for (const ej of pendientes) {
+    const match = await sugerirMatch(ej.nombre); // catálogo se cachea al primer await
+    if (match) sugerencias.push({ ejercicio: ej, match });
+  }
+  if (sugerencias.length === 0) return null;
+
+  const detalles = cel('details', 'retrofit-detalles');
+  const resumen = cel('summary', 'retrofit-summary',
+    `[ ▤ ${sugerencias.length} EJERCICIO${sugerencias.length === 1 ? '' : 'S'} PUEDEN VINCULARSE A IMÁGENES ]`);
+  detalles.appendChild(resumen);
+
+  const listaEl = cel('div', 'retrofit-lista');
+  for (const { ejercicio, match } of sugerencias) {
+    const fila = cel('div', 'retrofit-fila');
+    fila.dataset.ejId = ejercicio.id;
+
+    const thumb = cel('div', 'catalogo-thumb');
+    const imgA = document.createElement('img');
+    const imgB = document.createElement('img');
+    imgA.src = match.imagen_a;
+    imgB.src = match.imagen_b;
+    imgA.alt = '';
+    imgB.alt = '';
+    imgA.loading = 'lazy';
+    imgB.loading = 'lazy';
+    imgA.className = 'catalogo-thumb-a';
+    imgB.className = 'catalogo-thumb-b';
+    thumb.appendChild(imgA);
+    thumb.appendChild(imgB);
+    fila.appendChild(thumb);
+
+    const info = cel('div', 'retrofit-info');
+    info.appendChild(cel('span', 'retrofit-nombre-usuario', ejercicio.nombre));
+    info.appendChild(cel('span', 'retrofit-sugerencia', `→ ${match.nombre_es}`));
+    fila.appendChild(info);
+
+    const btnOk = cel('button', 'btn-add-ok', '✓');
+    btnOk.dataset.accion = 'vincular';
+    btnOk.dataset.fuenteId = match.fuente_id;
+    btnOk.setAttribute('aria-label', `Vincular ${ejercicio.nombre} con ${match.nombre_es}`);
+    fila.appendChild(btnOk);
+
+    const btnNo = cel('button', 'btn-add-cancel', '✕');
+    btnNo.dataset.accion = 'descartar';
+    btnNo.setAttribute('aria-label', `Descartar sugerencia para ${ejercicio.nombre}`);
+    fila.appendChild(btnNo);
+
+    listaEl.appendChild(fila);
+  }
+  detalles.appendChild(listaEl);
+
+  // Delegación: un solo listener para todas las filas
+  listaEl.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-accion]');
+    if (!btn) return;
+    const fila = btn.closest('.retrofit-fila');
+    const ejId = Number(fila.dataset.ejId);
+
+    if (btn.dataset.accion === 'vincular') {
+      await vincularEjercicioCatalogo(ejId, btn.dataset.fuenteId);
+    } else {
+      await descartarSugerenciaCatalogo(ejId);
+    }
+    fila.remove();
+
+    const restantes = listaEl.querySelectorAll('.retrofit-fila').length;
+    if (restantes === 0) {
+      detalles.remove();
+    } else {
+      resumen.textContent =
+        `[ ▤ ${restantes} EJERCICIO${restantes === 1 ? '' : 'S'} PUEDEN VINCULARSE A IMÁGENES ]`;
+    }
+  });
+
+  return detalles;
 }
 
 async function resetearTodo() {
