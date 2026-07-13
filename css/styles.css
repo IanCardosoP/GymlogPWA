@@ -1836,6 +1836,12 @@ details:not(.metrica-info) > summary:hover {
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-top: 1px solid var(--color-linea);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.retrofit-fila:active {
+  background-color: var(--velo-acento);
 }
 
 .retrofit-info {
@@ -1923,25 +1929,6 @@ details:not(.metrica-info) > summary:hover {
   padding: var(--sp-3);
 }
 
-/* Miniatura ciclable del retrofit (Config) — mismo gesto, tamaño de lista */
-.retrofit-thumb {
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
-  padding: 0;
-  border: 1px solid transparent;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.retrofit-thumb:not(:disabled):active {
-  border-color: var(--color-acento);
-  opacity: 0.85;
-}
-
-.retrofit-thumb:disabled {
-  cursor: default;
-}
 
 /* ═══ Vista previa del ejercicio (segunda capa sobre el modal del catálogo) ═══ */
 
@@ -2054,6 +2041,7 @@ details:not(.metrica-info) > summary:hover {
 }
 
 .preview-cancelar,
+.preview-siguiente,
 .preview-agregar {
   flex: 1;
   min-height: 44px;
@@ -2065,9 +2053,15 @@ details:not(.metrica-info) > summary:hover {
   background: none;
 }
 
-.preview-cancelar {
+.preview-cancelar,
+.preview-siguiente {
   border: 1px solid var(--color-texto-dim);
   color: var(--color-texto-dim);
+}
+
+.preview-siguiente:active {
+  border-color: var(--color-acento);
+  color: var(--color-acento);
 }
 
 .preview-agregar {
@@ -2078,4 +2072,14 @@ details:not(.metrica-info) > summary:hover {
 .preview-agregar:active {
   background-color: var(--color-acento);
   color: var(--color-fondo);
+}
+
+/* Contexto de qué ejercicio del usuario se está vinculando (retrofit de Config) */
+.preview-subtitulo {
+  align-self: stretch;
+  color: var(--color-texto-faint);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.05em;
+  text-align: center;
+  overflow-wrap: break-word;
 }

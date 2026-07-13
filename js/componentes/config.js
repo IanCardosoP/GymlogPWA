@@ -10,6 +10,7 @@ import {
 } from '../db.js';
 import { exportarBackup, importarBackup } from '../csv.js';
 import { getCandidatos } from '../catalogo.js';
+import { abrirPreviewEjercicio } from './previewModal.js';
 
 const ACENTOS_LABELS = {
   verde:  'Verde terminal',
@@ -495,9 +496,9 @@ export async function render(state) {
 
 // ── Retrofit de catálogo ──────────────────────────────────────────────────────
 // <details> con los ejercicios del usuario aún sin revisar que tienen alguna
-// coincidencia razonable en el catálogo. Tap en la miniatura cicla entre las
-// coincidencias (mismo gesto que el panel de detalles del Diario); ✓ vincula la
-// que esté visible, ✕ descarta para siempre. El grupo muscular nunca se toca.
+// coincidencia razonable en el catálogo. Tap en la fila abre la vista previa
+// (imagen grande + instrucciones), donde se cicla entre sugerencias y se confirma
+// la vinculación; ✕ descarta para siempre. El grupo muscular nunca se toca.
 
 async function construirSeccionRetrofit() {
   const pendientes = await getEjerciciosPendientesRevision();
@@ -510,6 +511,9 @@ async function construirSeccionRetrofit() {
   }
   if (sugerencias.length === 0) return null;
 
+  // La preview necesita los candidatos completos; la fila solo lleva el ejId.
+  const sugerenciasPorEj = new Map(sugerencias.map(s => [s.ejercicio.id, s]));
+
   const detalles = cel('details', 'retrofit-detalles');
   const resumen = cel('summary', 'retrofit-summary',
     `[ ▤ ${sugerencias.length} EJERCICIO${sugerencias.length === 1 ? '' : 'S'} PUEDEN VINCULARSE A IMÁGENES ]`);
@@ -521,21 +525,9 @@ async function construirSeccionRetrofit() {
   }
   detalles.appendChild(listaEl);
 
-  // Delegación: un solo listener para ✓/✕ de todas las filas
-  listaEl.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-accion]');
-    if (!btn) return;
-    const fila = btn.closest('.retrofit-fila');
-    const ejId = Number(fila.dataset.ejId);
-
-    if (btn.dataset.accion === 'vincular') {
-      // Se vincula el candidato visible, que puede no ser el primero (el usuario cicló)
-      await vincularEjercicioCatalogo(ejId, fila.dataset.fuenteId);
-    } else {
-      await descartarSugerenciaCatalogo(ejId);
-    }
+  // Delegación: un solo listener para toda la lista
+  const quitarFila = (fila) => {
     fila.remove();
-
     const restantes = listaEl.querySelectorAll('.retrofit-fila').length;
     if (restantes === 0) {
       detalles.remove();
@@ -543,69 +535,83 @@ async function construirSeccionRetrofit() {
       resumen.textContent =
         `[ ▤ ${restantes} EJERCICIO${restantes === 1 ? '' : 'S'} PUEDEN VINCULARSE A IMÁGENES ]`;
     }
+  };
+
+  listaEl.addEventListener('click', async (e) => {
+    const fila = e.target.closest('.retrofit-fila');
+    if (!fila) return;
+    const ejId = Number(fila.dataset.ejId);
+
+    // ✕ descarta sin abrir nada
+    if (e.target.closest('button[data-accion="descartar"]')) {
+      await descartarSugerenciaCatalogo(ejId);
+      quitarFila(fila);
+      return;
+    }
+
+    // Tap en la fila: vista previa con todas las sugerencias, ciclables ahí dentro
+    const { ejercicio, candidatos } = sugerenciasPorEj.get(ejId);
+    abrirPreviewEjercicio({
+      candidatos,
+      subtitulo: `Vincular «${ejercicio.nombre}» con:`,
+      etiquetaConfirmar: '[ ✓ VINCULAR ]',
+      onConfirmar: async (entrada) => {
+        await vincularEjercicioCatalogo(ejId, entrada.fuente_id);
+        quitarFila(fila);
+      },
+    });
   });
 
   return detalles;
 }
 
+// La fila solo previsualiza la mejor sugerencia; ver el resto, compararlas y
+// confirmar ocurre en la vista previa que abre al tocarla.
 function construirFilaRetrofit(ejercicio, candidatos) {
+  const primera = candidatos[0];
+
   const fila = cel('div', 'retrofit-fila');
   fila.dataset.ejId = ejercicio.id;
+  fila.setAttribute('role', 'button');
+  fila.setAttribute('tabindex', '0');
+  fila.setAttribute('aria-label',
+    `Ver sugerencias para ${ejercicio.nombre}: ${primera.nombre_es}` +
+    (candidatos.length > 1 ? ` y ${candidatos.length - 1} más` : ''));
 
-  let indice = 0;
-
-  const btnImg = cel('button', 'retrofit-thumb catalogo-thumb');
+  const thumb = cel('div', 'catalogo-thumb');
   const imgA = document.createElement('img');
   const imgB = document.createElement('img');
+  imgA.src = primera.imagen_a;
+  imgB.src = primera.imagen_b;
   imgA.alt = '';
   imgB.alt = '';
   imgA.loading = 'lazy';
   imgB.loading = 'lazy';
   imgA.className = 'catalogo-thumb-a';
   imgB.className = 'catalogo-thumb-b';
-  btnImg.appendChild(imgA);
-  btnImg.appendChild(imgB);
-  fila.appendChild(btnImg);
+  thumb.appendChild(imgA);
+  thumb.appendChild(imgB);
+  fila.appendChild(thumb);
 
   const info = cel('div', 'retrofit-info');
   info.appendChild(cel('span', 'retrofit-nombre-usuario', ejercicio.nombre));
-  const sugerenciaEl = cel('span', 'retrofit-sugerencia');
-  info.appendChild(sugerenciaEl);
+  info.appendChild(cel('span', 'retrofit-sugerencia', candidatos.length > 1
+    ? `→ ${primera.nombre_es} · +${candidatos.length - 1} sugerencias`
+    : `→ ${primera.nombre_es}`));
   fila.appendChild(info);
-
-  const pintar = () => {
-    const match = candidatos[indice];
-    imgA.src = match.imagen_a;
-    imgB.src = match.imagen_b;
-    // fuente_id vive en la fila: el ✓ delegado lee de aquí el candidato visible
-    fila.dataset.fuenteId = match.fuente_id;
-    sugerenciaEl.textContent = candidatos.length > 1
-      ? `→ ${match.nombre_es} (${indice + 1}/${candidatos.length})`
-      : `→ ${match.nombre_es}`;
-    btnImg.setAttribute('aria-label', candidatos.length > 1
-      ? `Cambiar sugerencia para ${ejercicio.nombre}: ${match.nombre_es}, ${indice + 1} de ${candidatos.length}`
-      : `Sugerencia para ${ejercicio.nombre}: ${match.nombre_es}`);
-  };
-  pintar();
-
-  if (candidatos.length > 1) {
-    btnImg.addEventListener('click', () => {
-      indice = (indice + 1) % candidatos.length; // cicla
-      pintar();
-    });
-  } else {
-    btnImg.disabled = true;
-  }
-
-  const btnOk = cel('button', 'btn-add-ok', '✓');
-  btnOk.dataset.accion = 'vincular';
-  btnOk.setAttribute('aria-label', `Vincular ${ejercicio.nombre} con la sugerencia visible`);
-  fila.appendChild(btnOk);
 
   const btnNo = cel('button', 'btn-add-cancel', '✕');
   btnNo.dataset.accion = 'descartar';
   btnNo.setAttribute('aria-label', `Descartar sugerencia para ${ejercicio.nombre}`);
   fila.appendChild(btnNo);
+
+  // Teclado: la fila es un role=button, Enter/Espacio la activan como un tap
+  fila.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fila.click();
+    }
+  });
 
   return fila;
 }
