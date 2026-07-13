@@ -575,13 +575,6 @@ input.is-saved::placeholder {
   white-space: nowrap;
 }
 
-.ejercicio-nombre-input {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--fs-body);
-  padding: 4px 8px;
-}
-
 .grupo-muscular-selector {
   padding: 8px 12px;
   background-color: var(--color-fondo-alt);
@@ -1446,21 +1439,9 @@ input.is-saved::placeholder {
   margin-top: 4px;
 }
 
-/* Autocomplete custom (reemplaza <datalist> para compatibilidad móvil) */
-.autocomplete-wrapper {
-  position: relative;
-  flex: 1;
-}
-
-.autocomplete-fila {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-}
-
+/* ✓/✕ compartidos (retrofit de catálogo en Config) */
 .btn-add-ok,
-.btn-add-cancel,
-.btn-add-catalogo {
+.btn-add-cancel {
   flex-shrink: 0;
   width: 36px;
   background: none;
@@ -1484,46 +1465,6 @@ input.is-saved::placeholder {
   color: var(--color-peligro);
 }
 
-.btn-add-catalogo {
-  border-color: var(--color-texto-dim);
-  color: var(--color-texto-dim);
-}
-
-.autocomplete-lista {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  background-color: var(--color-fondo-alt);
-  border: 1px solid var(--color-acento);
-  border-top: none;
-  max-height: 180px;
-  overflow-y: auto;
-}
-
-.autocomplete-lista.is-visible {
-  display: block;
-}
-
-.autocomplete-item {
-  padding: 10px 12px;
-  font-size: var(--fs-body);
-  color: var(--color-texto);
-  cursor: pointer;
-  border-bottom: 1px solid var(--color-linea);
-  font-family: var(--font-mono);
-}
-
-.autocomplete-item:last-child {
-  border-bottom: none;
-}
-
-.autocomplete-item.is-active {
-  background-color: var(--velo-acento);
-  color: var(--color-acento);
-}
 .config-footer-link:hover { color: var(--color-acento); }
 
 /* ── Accesibilidad y micro-interacciones (Fase 2 — DESIGN-SYSTEM.md) ────────── */
@@ -1852,6 +1793,40 @@ details:not(.metrica-info) > summary:hover {
   font-family: var(--font-mono);
   font-size: var(--fs-body-sm);
   cursor: pointer;
+}
+
+/* Crear custom al final de la lista (con o sin resultados) */
+.catalogo-resultados > .catalogo-crear {
+  display: block;
+  margin: var(--sp-3) auto;
+  max-width: calc(100% - var(--sp-6));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selector de grupo muscular para el ejercicio custom (dentro del modal) */
+.catalogo-grupo-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-top: 1px solid var(--color-linea);
+}
+
+.catalogo-grupo-picker-label {
+  color: var(--color-texto-dim);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.08em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogo-grupo-picker-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
 }
 
 /* ═══ Retrofit: vincular ejercicios existentes al catálogo (Config) ══════════ */

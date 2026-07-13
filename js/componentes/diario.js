@@ -11,7 +11,7 @@ import {
   saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo, resetSesionTiempoIfVacia,
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
-  saveEjercicio, getOrCreateEjercicio, getEjercicios,
+  getOrCreateEjercicio,
   updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   linkEjercicioToRutina, reordenarEjercicios,
 } from '../db.js';
@@ -530,7 +530,7 @@ function initDragAndDrop(lista, rutinaHoy, state) {
     if (!e.isPrimary || dragging) return;
     const summary = e.target.closest('.ejercicio-summary');
     if (!summary) return;
-    if (e.target.closest('button, input, .rename-panel, .confirm-delete-panel, .autocomplete-wrapper')) return;
+    if (e.target.closest('button, input, .rename-panel, .confirm-delete-panel')) return;
     const bloque = summary.closest('.ejercicio-bloque');
     if (!bloque?.dataset.reId) return;
 
@@ -605,167 +605,19 @@ async function handleGuardar(btnGuardar, sesionId) {
   actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
 }
 
-async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
-  const nombreActual = nombreEl.textContent;
-  const ejerciciosExistentes = await getEjercicios();
-
-  const wrapper   = cel('div', 'autocomplete-wrapper');
-  const fila      = cel('div', 'autocomplete-fila');
-  const input     = document.createElement('input');
-  input.type        = 'text';
-  input.className   = 'ejercicio-nombre-input';
-  input.placeholder = 'Nombre del ejercicio...';
-
-  const btnCatalogo = cel('button', 'btn-add-catalogo', '▤');
-  btnCatalogo.setAttribute('aria-label', 'Elegir del catálogo de ejercicios');
-  const btnOk     = cel('button', 'btn-add-ok',     '✓');
-  const btnCancel = cel('button', 'btn-add-cancel',  '✕');
-  const lista     = cel('div',   'autocomplete-lista');
-
-  fila.appendChild(input);
-  fila.appendChild(btnCatalogo);
-  fila.appendChild(btnOk);
-  fila.appendChild(btnCancel);
-  wrapper.appendChild(fila);
-  wrapper.appendChild(lista);
-  nombreEl.replaceWith(wrapper);
-  input.focus();
-
-  let itemActivo = -1;
-  let eligiendo  = false;
-
-  const cancelar = () => {
-    ocultarLista();
-    wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
-  };
-
-  const ocultarLista = () => {
-    lista.classList.remove('is-visible');
-    itemActivo = -1;
-  };
-
-  const actualizarLista = () => {
-    const query = input.value.trim();
-    while (lista.firstChild) lista.removeChild(lista.firstChild);
-    itemActivo = -1;
-    if (!query) { ocultarLista(); return; }
-
-    const filtrados = ejerciciosExistentes.filter(
-      e => e.nombre.toLowerCase().includes(query.toLowerCase())
-    );
-    if (filtrados.length === 0) { ocultarLista(); return; }
-
-    filtrados.slice(0, 8).forEach(ej => {
-      const item = cel('div', 'autocomplete-item', ej.nombre);
-      item.addEventListener('mousedown', e => { e.preventDefault(); }); // evita blur en desktop
-      item.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
-      item.addEventListener('click', () => {
-        eligiendo = false;
-        ocultarLista();
-        vincular(ej.nombre, ej.grupo_muscular || 'GENERAL');
-      });
-      lista.appendChild(item);
-    });
-    lista.classList.add('is-visible');
-  };
-
+function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   const vincular = async (nombre, grupo, catalogoId = null) => {
-    ocultarLista();
     const ej = await getOrCreateEjercicio(nombre, grupo, catalogoId);
     const todos = await getRutinaEjercicios(rutinaHoy.id);
     await linkEjercicioToRutina(rutinaHoy.id, ej.id, todos.length + 1);
     await render(state);
   };
 
-  const mostrarSelectorGrupo = (nombre) => {
-    ocultarLista();
-    const selector    = cel('div', 'grupo-muscular-selector');
-    selector.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
-    const filaBtns = cel('div', 'grupo-muscular-btns');
-    GRUPOS_MUSCULARES.forEach(grupo => {
-      const btn = cel('button', 'btn-grupo-muscular', grupo);
-      if (grupo === 'GENERAL') btn.classList.add('is-active');
-      btn.addEventListener('click', () => vincular(nombre, grupo));
-      filaBtns.appendChild(btn);
-    });
-    selector.appendChild(filaBtns);
-    const btnCancelGrupo = cel('button', 'btn-add-cancel', '✕');
-    btnCancelGrupo.addEventListener('click', () => {
-      selector.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
-    });
-    selector.appendChild(btnCancelGrupo);
-    wrapper.replaceWith(selector);
-  };
-
-  const procesarNombre = () => {
-    if (eligiendo) return;
-    ocultarLista();
-    const nuevoNombre = input.value.trim();
-    if (!nuevoNombre || !rutinaHoy) {
-      wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
-      return;
-    }
-    const existente = ejerciciosExistentes.find(
-      e => e.nombre.toLowerCase() === nuevoNombre.toLowerCase()
-    );
-    if (existente) {
-      vincular(nuevoNombre, existente.grupo_muscular || 'GENERAL');
-    } else {
-      mostrarSelectorGrupo(nuevoNombre);
-    }
-  };
-
-  // Botones OK y Cancelar: mousedown.preventDefault() evita blur en desktop;
-  // touchstart con flag evita que blur dispare procesarNombre antes que click en móvil.
-  [btnOk, btnCancel, btnCatalogo].forEach(btn => {
-    btn.addEventListener('mousedown', e => { e.preventDefault(); });
-    btn.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
-  });
-  btnOk.addEventListener('click', () => { eligiendo = false; procesarNombre(); });
-  btnCancel.addEventListener('click', () => { eligiendo = false; cancelar(); });
-
-  btnCatalogo.addEventListener('click', () => {
-    // eligiendo=true congela el blur del input mientras el modal está encima;
-    // onCerrar lo libera pase lo que pase (selección, CTA o cierre sin elegir).
-    eligiendo = true;
-    ocultarLista();
-    abrirCatalogoModal({
-      onCerrar: () => { eligiendo = false; },
-      onSeleccionar: ({ nombre_es, grupo_muscular, fuente_id }) =>
-        vincular(nombre_es, grupo_muscular, fuente_id),
-      onCrearPersonalizado: (texto) => {
-        if (texto) {
-          input.value = texto;
-          procesarNombre(); // cae al selector de grupo muscular manual existente
-        } else {
-          input.focus();
-        }
-      },
-    });
-  });
-
-  input.addEventListener('input', actualizarLista);
-  input.addEventListener('blur', procesarNombre);
-  input.addEventListener('keydown', e => {
-    const items = lista.querySelectorAll('.autocomplete-item');
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      itemActivo = Math.min(itemActivo + 1, items.length - 1);
-      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      itemActivo = Math.max(itemActivo - 1, -1);
-      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (itemActivo >= 0 && items[itemActivo]) {
-        items[itemActivo].click();
-      } else {
-        input.blur();
-      }
-    } else if (e.key === 'Escape') {
-      cancelar();
-    }
+  abrirCatalogoModal({
+    onSeleccionar: ({ nombre_es, grupo_muscular, fuente_id }) =>
+      vincular(nombre_es, grupo_muscular, fuente_id),
+    onCrearPersonalizado: ({ nombre, grupo }) =>
+      vincular(nombre, grupo),
   });
 }
 

@@ -33,7 +33,8 @@ function construirThumb(entrada) {
 }
 
 // onSeleccionar({ fuente_id, nombre_es, grupo_muscular }) — al elegir del catálogo.
-// onCrearPersonalizado(textoBuscado) — CTA cuando no hay resultados.
+// onCrearPersonalizado({ nombre, grupo }) — ejercicio custom con grupo elegido
+// en el selector interno del modal (única vía de alta manual desde el Diario).
 // onCerrar() — siempre que el modal se cierra (antes de los otros callbacks).
 export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerrar }) {
   const filtros = { texto: '', grupo: null, equipo: null };
@@ -91,6 +92,8 @@ export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerr
     }
     lista.querySelector('.catalogo-ver-mas')?.remove();
     lista.querySelector('.catalogo-vacio')?.remove();
+    lista.querySelector('.catalogo-crear')?.remove();
+    lista.querySelector('.catalogo-grupo-picker')?.remove();
 
     for (const entrada of resultados) {
       entradasVisibles.set(entrada.fuente_id, entrada);
@@ -113,10 +116,31 @@ export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerr
     if (total === 0) {
       const vacio = cel('div', 'catalogo-vacio');
       vacio.appendChild(cel('p', 'catalogo-vacio-texto', 'Sin resultados en el catálogo.'));
-      const btnCrear = cel('button', 'catalogo-crear', '+ Crear ejercicio personalizado');
-      vacio.appendChild(btnCrear);
       lista.appendChild(vacio);
     }
+
+    // El alta manual vive aquí: siempre que hay texto, se puede crear tal cual.
+    if (filtros.texto) {
+      lista.appendChild(cel('button', 'catalogo-crear', `+ Crear «${filtros.texto}»`));
+    }
+  };
+
+  // Sustituye el botón crear por el selector de grupo muscular (dentro del modal).
+  const mostrarPickerGrupo = (btnCrear) => {
+    const nombre = filtros.texto;
+    const picker = cel('div', 'catalogo-grupo-picker');
+    picker.appendChild(cel('span', 'catalogo-grupo-picker-label', `GRUPO PARA «${nombre}»:`));
+    const filaBtns = cel('div', 'catalogo-grupo-picker-btns');
+    for (const grupo of GRUPOS_MUSCULARES) {
+      const btn = cel('button', 'catalogo-chip', grupo);
+      btn.addEventListener('click', () => {
+        cerrar();
+        onCrearPersonalizado?.({ nombre, grupo });
+      });
+      filaBtns.appendChild(btn);
+    }
+    picker.appendChild(filaBtns);
+    btnCrear.replaceWith(picker);
   };
 
   const refrescar = () => {
@@ -173,9 +197,7 @@ export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerr
     }
     const crear = e.target.closest('.catalogo-crear');
     if (crear) {
-      const texto = filtros.texto;
-      cerrar();
-      onCrearPersonalizado?.(texto);
+      mostrarPickerGrupo(crear);
       return;
     }
     const item = e.target.closest('.catalogo-item');
