@@ -25,6 +25,10 @@ ya lo incluyen.
 Parado en cualquier carpeta, podés correr los comandos tal cual (no hace falta `cd worker`
 si usás la ruta absoluta del `--config`).
 
+Usar la ejecucion de paquetes
+
+pnpm exec ...
+
 ---
 
 ## 1. El esquema — qué guarda cada ping
@@ -51,21 +55,21 @@ puede rastrear a una persona.
 ### "¿Cuánta gente usa la app en total?" — dispositivos únicos
 
 ```bash
-wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
+pnpm exec wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
   --command="SELECT COUNT(DISTINCT device_id) AS dispositivos_unicos FROM pings"
 ```
 
 ### "¿Cuánto se usa en total?" — aperturas totales
 
 ```bash
-wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
+pnpm exec wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
   --command="SELECT COUNT(*) AS aperturas_totales FROM pings"
 ```
 
 ### "¿Cómo viene la actividad día a día?" — aperturas y dispositivos únicos por día
 
 ```bash
-wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
+pnpm exec wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
   --command="SELECT substr(ts,1,10) AS dia, COUNT(*) AS aperturas, COUNT(DISTINCT device_id) AS dispositivos FROM pings GROUP BY dia ORDER BY dia DESC LIMIT 30"
 ```
 
@@ -74,14 +78,14 @@ Esto es lo más parecido a un "usuarios activos por día" (DAU) que vas a tener.
 ### "¿La gente instala la app o la usa desde el navegador?"
 
 ```bash
-wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
+pnpm exec wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
   --command="SELECT CASE pwa WHEN 1 THEN 'instalada (PWA)' ELSE 'navegador' END AS modo, COUNT(DISTINCT device_id) AS dispositivos FROM pings GROUP BY pwa"
 ```
 
 ### "¿iOS o Android?"
 
 ```bash
-wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
+pnpm exec wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
   --command="SELECT os, COUNT(DISTINCT device_id) AS dispositivos FROM pings GROUP BY os ORDER BY dispositivos DESC"
 ```
 
@@ -90,7 +94,7 @@ wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wr
 Primera y última vez que se vio cada dispositivo (útil para ver quién "se fue"):
 
 ```bash
-wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
+pnpm exec wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
   --command="SELECT device_id, MIN(substr(ts,1,10)) AS primera_vez, MAX(substr(ts,1,10)) AS ultima_vez, COUNT(*) AS aperturas FROM pings GROUP BY device_id ORDER BY ultima_vez DESC"
 ```
 
@@ -102,7 +106,7 @@ Cuando probás algo nuevo (por ejemplo, un dispositivo recién agregado) y quer�
 que el beacon llegó, sin agrupar nada:
 
 ```bash
-wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
+pnpm exec wrangler d1 execute gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml --remote \
   --command="SELECT ts, device_id, evt, pwa, os FROM pings ORDER BY id DESC LIMIT 20"
 ```
 
@@ -114,7 +118,7 @@ Si querés ver en tiempo real cada request que le llega al Worker (útil para co
 un beacon recién enviado desde el celular efectivamente pasó el candado de `Origin`):
 
 ```bash
-wrangler tail gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml
+pnpm exec wrangler tail gymlog-analytics --config /home/ian/Code/GymlogPWA/worker/wrangler.toml
 ```
 
 Dejalo corriendo, abrí la app en el celular, y mirá la terminal.

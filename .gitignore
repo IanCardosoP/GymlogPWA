@@ -147,3 +147,9 @@ vite.config.ts.timestamp-*
 
 # wrangler (estado local de dev / D1 local, nunca la base real)
 .wrangler/
+
+# Obsidian
+.obsidian/
+
+# Dashboard local de telemetría — desarrollo personal, nunca se publica
+monitor/
