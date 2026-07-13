@@ -1,6 +1,7 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
 import html2canvas from 'html2canvas';
 import { store, navigateTo } from '../app.js';
+import { abrirCatalogoModal } from './catalogoModal.js';
 import { calculateEpley1RM } from '../analitico.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
 import motivArt     from '/icons/motiv.txt?raw';
@@ -615,11 +616,14 @@ async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   input.className   = 'ejercicio-nombre-input';
   input.placeholder = 'Nombre del ejercicio...';
 
+  const btnCatalogo = cel('button', 'btn-add-catalogo', '▤');
+  btnCatalogo.setAttribute('aria-label', 'Elegir del catálogo de ejercicios');
   const btnOk     = cel('button', 'btn-add-ok',     '✓');
   const btnCancel = cel('button', 'btn-add-cancel',  '✕');
   const lista     = cel('div',   'autocomplete-lista');
 
   fila.appendChild(input);
+  fila.appendChild(btnCatalogo);
   fila.appendChild(btnOk);
   fila.appendChild(btnCancel);
   wrapper.appendChild(fila);
@@ -665,9 +669,9 @@ async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
     lista.classList.add('is-visible');
   };
 
-  const vincular = async (nombre, grupo) => {
+  const vincular = async (nombre, grupo, catalogoId = null) => {
     ocultarLista();
-    const ej = await getOrCreateEjercicio(nombre, grupo);
+    const ej = await getOrCreateEjercicio(nombre, grupo, catalogoId);
     const todos = await getRutinaEjercicios(rutinaHoy.id);
     await linkEjercicioToRutina(rutinaHoy.id, ej.id, todos.length + 1);
     await render(state);
@@ -713,12 +717,32 @@ async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
 
   // Botones OK y Cancelar: mousedown.preventDefault() evita blur en desktop;
   // touchstart con flag evita que blur dispare procesarNombre antes que click en móvil.
-  [btnOk, btnCancel].forEach(btn => {
+  [btnOk, btnCancel, btnCatalogo].forEach(btn => {
     btn.addEventListener('mousedown', e => { e.preventDefault(); });
     btn.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
   });
   btnOk.addEventListener('click', () => { eligiendo = false; procesarNombre(); });
   btnCancel.addEventListener('click', () => { eligiendo = false; cancelar(); });
+
+  btnCatalogo.addEventListener('click', () => {
+    // eligiendo=true congela el blur del input mientras el modal está encima;
+    // onCerrar lo libera pase lo que pase (selección, CTA o cierre sin elegir).
+    eligiendo = true;
+    ocultarLista();
+    abrirCatalogoModal({
+      onCerrar: () => { eligiendo = false; },
+      onSeleccionar: ({ nombre_es, grupo_muscular, fuente_id }) =>
+        vincular(nombre_es, grupo_muscular, fuente_id),
+      onCrearPersonalizado: (texto) => {
+        if (texto) {
+          input.value = texto;
+          procesarNombre(); // cae al selector de grupo muscular manual existente
+        } else {
+          input.focus();
+        }
+      },
+    });
+  });
 
   input.addEventListener('input', actualizarLista);
   input.addEventListener('blur', procesarNombre);
