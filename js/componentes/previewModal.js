@@ -28,20 +28,23 @@ function construirImagen(entrada) {
 
 // candidatos      — lista de entradas del catálogo; si trae más de una, aparece
 //                   el botón de "siguiente sugerencia" para ciclar entre ellas.
-// subtitulo       — contexto opcional (ej. el nombre que el usuario ya tenía).
+// nombreUsuario   — si viene, el modal entra en modo "vinculando": el título es
+//                   fijo y se explica qué ejercicio propio se está vinculando.
+//                   Si no, es una vista previa normal (título = nombre del ejercicio).
 // etiquetaConfirmar — texto del botón de confirmación.
 // onConfirmar(entrada) — la entrada visible al confirmar. La preview se cierra sola.
 // onCerrar()      — al salir sin confirmar.
 export function abrirPreviewEjercicio({
   candidatos,
   indice = 0,
-  subtitulo = null,
+  nombreUsuario = null,
   etiquetaConfirmar = '[ + AGREGAR ]',
   onConfirmar,
   onCerrar,
 }) {
   if (!candidatos || candidatos.length === 0) return null;
 
+  const vinculando = Boolean(nombreUsuario);
   let actual = indice;
 
   const scrim = cel('div', 'preview-scrim');
@@ -51,6 +54,7 @@ export function abrirPreviewEjercicio({
 
   const header = cel('div', 'preview-header');
   const titulo = cel('h3', 'preview-titulo');
+  if (vinculando) titulo.textContent = 'VINCULANDO EJERCICIO';
   header.appendChild(titulo);
   const btnCerrar = cel('button', 'preview-volver', '✕');
   btnCerrar.setAttribute('aria-label', 'Cerrar vista previa');
@@ -86,11 +90,29 @@ export function abrirPreviewEjercicio({
 
   const pintar = async () => {
     const entrada = candidatos[actual];
-    modal.setAttribute('aria-label', `Vista previa: ${entrada.nombre_es}`);
-    titulo.textContent = entrada.nombre_es;
     cuerpo.textContent = '';
 
-    if (subtitulo) cuerpo.appendChild(cel('p', 'preview-subtitulo', subtitulo));
+    if (vinculando) {
+      modal.setAttribute('aria-label',
+        `Vinculando ${nombreUsuario} con ${entrada.nombre_es}, sugerencia ${actual + 1} de ${candidatos.length}`);
+
+      // "Tu ejercicio «X» se puede vincular con:" → nombre de la sugerencia → contador
+      const explicacion = cel('p', 'preview-explicacion');
+      explicacion.appendChild(document.createTextNode('Tu ejercicio '));
+      explicacion.appendChild(cel('strong', 'preview-nombre-usuario', `«${nombreUsuario}»`));
+      explicacion.appendChild(document.createTextNode(' se puede vincular con:'));
+      cuerpo.appendChild(explicacion);
+
+      cuerpo.appendChild(cel('p', 'preview-sugerencia-nombre', entrada.nombre_es));
+      if (candidatos.length > 1) {
+        cuerpo.appendChild(cel('p', 'preview-contador',
+          `Sugerencia ${actual + 1}/${candidatos.length}`));
+      }
+    } else {
+      modal.setAttribute('aria-label', `Vista previa: ${entrada.nombre_es}`);
+      titulo.textContent = entrada.nombre_es;
+    }
+
     cuerpo.appendChild(construirImagen(entrada));
 
     const meta = cel('div', 'preview-meta');
@@ -99,9 +121,9 @@ export function abrirPreviewEjercicio({
     cuerpo.appendChild(meta);
 
     if (candidatos.length > 1) {
-      btnSiguiente.textContent = `[ SIGUIENTE (${actual + 1}/${candidatos.length}) ]`;
+      btnSiguiente.textContent = '[ SIGUIENTE ]';
       btnSiguiente.setAttribute('aria-label',
-        `Ver la siguiente sugerencia: ${actual + 1} de ${candidatos.length}`);
+        `Ver otra sugerencia. Actual: ${actual + 1} de ${candidatos.length}`);
     }
 
     const zonaInstr = cel('div', 'preview-instrucciones-zona');

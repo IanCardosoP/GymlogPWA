@@ -553,7 +553,7 @@ async function construirSeccionRetrofit() {
     const { ejercicio, candidatos } = sugerenciasPorEj.get(ejId);
     abrirPreviewEjercicio({
       candidatos,
-      subtitulo: `Vincular «${ejercicio.nombre}» con:`,
+      nombreUsuario: ejercicio.nombre,
       etiquetaConfirmar: '[ ✓ VINCULAR ]',
       onConfirmar: async (entrada) => {
         await vincularEjercicioCatalogo(ejId, entrada.fuente_id);

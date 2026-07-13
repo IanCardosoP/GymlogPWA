@@ -249,14 +249,6 @@ details {
   -webkit-user-select: none;
 }
 
-.diario-separador {
-  border: none;
-  border-top: 1px solid var(--color-acento);
-  opacity: 0.35;
-  margin: 15px 0;
-  transition: transform var(--dur-base) var(--ease-out);
-}
-
 .diario-skeleton {
   display: flex;
   flex-direction: column;
@@ -2074,12 +2066,32 @@ details:not(.metrica-info) > summary:hover {
   color: var(--color-fondo);
 }
 
-/* Contexto de qué ejercicio del usuario se está vinculando (retrofit de Config) */
-.preview-subtitulo {
+/* Modo "vinculando" (retrofit de Config): el título es fijo y el cuerpo explica
+   qué ejercicio propio se está vinculando y con cuál sugerencia. */
+.preview-explicacion {
   align-self: stretch;
+  color: var(--color-texto-dim);
+  font-size: var(--fs-body-sm);
+  text-align: center;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+.preview-nombre-usuario {
+  color: var(--color-texto);
+  font-weight: 400;
+}
+
+.preview-sugerencia-nombre {
+  align-self: stretch;
+  color: var(--color-acento);
+  font-size: var(--fs-body-lg);
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+.preview-contador {
   color: var(--color-texto-faint);
   font-size: var(--fs-caption);
   letter-spacing: 0.05em;
-  text-align: center;
-  overflow-wrap: break-word;
 }

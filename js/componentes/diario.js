@@ -118,11 +118,6 @@ export async function render(state) {
   // OPT-4: DocumentFragment — inserta todos los bloques en un solo reflow
   const frag = document.createDocumentFragment();
   for (let i = 0; i < slots.length; i++) {
-    if (i === 8 && todos.length > 8) {
-      const sep = document.createElement('hr');
-      sep.className = 'diario-separador';
-      frag.appendChild(sep);
-    }
     frag.appendChild(construirBloque(slots[i], i, sesion, datosSlots[i]));
   }
   lista.appendChild(frag);
@@ -381,16 +376,6 @@ function renumerarBloques(lista) {
   });
 }
 
-function reposicionarSeparador(lista) {
-  lista.querySelector('.diario-separador')?.remove();
-  const bloques = lista.querySelectorAll('.ejercicio-bloque[data-re-id]');
-  if (bloques.length > 8) {
-    const sep = document.createElement('hr');
-    sep.className = 'diario-separador';
-    lista.insertBefore(sep, bloques[8]);
-  }
-}
-
 function initDragAndDrop(lista, rutinaHoy, state) {
   dragAbort?.abort();
   dragAbort = new AbortController();
@@ -517,8 +502,8 @@ function initDragAndDrop(lista, rutinaHoy, state) {
       .map(b => parseInt(b.dataset.reId));
     try {
       await reordenarEjercicios(rutinaHoy.id, ordenados);
-      renumerarBloques(lista);            // fixup in-place: sin re-render,
-      reposicionarSeparador(lista);       // preserva acordeones e inputs
+      // fixup in-place: sin re-render, preserva acordeones e inputs
+      renumerarBloques(lista);
     } catch {
       await render(state);                // fallo de BD: re-render restaura la verdad
     }
