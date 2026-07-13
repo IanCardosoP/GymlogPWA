@@ -10,6 +10,7 @@ import {
   getConf, updatePrefUnit, updatePrefAcento, getOrCreateDeviceId,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
   getPesoMaxPorEjercicio, getVolumenPorSesion,
+  getEjerciciosPendientesRevision, vincularEjercicioCatalogo, descartarSugerenciaCatalogo,
 } from '../js/db.js';
 
 beforeEach(async () => {
@@ -727,5 +728,63 @@ describe('resetSesionTiempoIfVacia', () => {
       'SELECT hora_inicio FROM sesiones WHERE id = $1', [ses.id]
     );
     expect(row.hora_inicio).not.toBeNull();
+  });
+});
+
+// ── Vínculo con el catálogo estático ─────────────────────────────────────────
+
+describe('vínculo con catálogo (catalogo_id / catalogo_revisado)', () => {
+  it('getOrCreateEjercicio sin catalogoId crea fila sin vínculo, pendiente de revisión', async () => {
+    const ej = await getOrCreateEjercicio('Mi ejercicio raro', 'GENERAL');
+    expect(ej.catalogo_id).toBeNull();
+    expect(ej.catalogo_revisado).toBe(false);
+  });
+
+  it('getOrCreateEjercicio con catalogoId crea fila vinculada y ya revisada', async () => {
+    const ej = await getOrCreateEjercicio('Prensa de pierna', 'PIERNA', 'Leg_Press');
+    expect(ej.catalogo_id).toBe('Leg_Press');
+    expect(ej.catalogo_revisado).toBe(true);
+  });
+
+  it('getOrCreateEjercicio completa el vínculo de una fila existente sin catalogo_id', async () => {
+    const original = await saveEjercicio('Prensa de pierna', 'PIERNA');
+    expect(original.catalogo_id ?? null).toBeNull();
+    const result = await getOrCreateEjercicio('prensa de PIERNA', 'PIERNA', 'Leg_Press');
+    expect(result.id).toBe(original.id);
+    expect(result.catalogo_id).toBe('Leg_Press');
+    const todos = await getEjercicios();
+    expect(todos.length).toBe(1);
+  });
+
+  it('getOrCreateEjercicio NO pisa un vínculo existente distinto', async () => {
+    await getOrCreateEjercicio('Prensa de pierna', 'PIERNA', 'Leg_Press');
+    const result = await getOrCreateEjercicio('Prensa de pierna', 'PIERNA', 'Otro_Id');
+    expect(result.catalogo_id).toBe('Leg_Press');
+  });
+
+  it('getEjerciciosPendientesRevision solo lista filas no revisadas', async () => {
+    await saveEjercicio('Ejercicio viejo A', 'PECHO');
+    await saveEjercicio('Ejercicio viejo B', 'ESPALDA');
+    await getOrCreateEjercicio('Del catálogo', 'PIERNA', 'Leg_Press');
+    const pendientes = await getEjerciciosPendientesRevision();
+    expect(pendientes.map(e => e.nombre)).toEqual(['Ejercicio viejo A', 'Ejercicio viejo B']);
+  });
+
+  it('vincularEjercicioCatalogo asigna el puntero y saca la fila de pendientes', async () => {
+    const ej = await saveEjercicio('Press banca', 'PECHO');
+    const upd = await vincularEjercicioCatalogo(ej.id, 'Barbell_Bench_Press_-_Medium_Grip');
+    expect(upd.catalogo_id).toBe('Barbell_Bench_Press_-_Medium_Grip');
+    expect(upd.catalogo_revisado).toBe(true);
+    expect(await getEjerciciosPendientesRevision()).toEqual([]);
+  });
+
+  it('descartarSugerenciaCatalogo marca revisado sin tocar catalogo_id ni grupo_muscular', async () => {
+    const ej = await saveEjercicio('Mi invento', 'CORE');
+    const upd = await descartarSugerenciaCatalogo(ej.id);
+    expect(upd.catalogo_id).toBeNull();
+    expect(upd.catalogo_revisado).toBe(true);
+    expect(upd.grupo_muscular).toBe('CORE');
+    // Un ejercicio rechazado no vuelve a aparecer como pendiente
+    expect(await getEjerciciosPendientesRevision()).toEqual([]);
   });
 });

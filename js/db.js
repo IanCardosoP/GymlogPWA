@@ -65,6 +65,11 @@ export async function initDB(uri = 'idb://gym-log-db') {
     ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_inicio TIMESTAMPTZ;
     ALTER TABLE sesiones ADD COLUMN IF NOT EXISTS hora_fin    TIMESTAMPTZ;
 
+    -- Puntero opcional al catálogo estático de ejercicios (fuente_id del JSON
+    -- en assets/catalogo/). No es FK: el catálogo nunca vive en esta base.
+    ALTER TABLE ejercicios ADD COLUMN IF NOT EXISTS catalogo_id TEXT;
+    ALTER TABLE ejercicios ADD COLUMN IF NOT EXISTS catalogo_revisado BOOLEAN NOT NULL DEFAULT FALSE;
+
     CREATE TABLE IF NOT EXISTS rutina_dias (
       id        SERIAL PRIMARY KEY,
       rutina_id INT REFERENCES rutinas(id) ON DELETE CASCADE,
@@ -135,17 +140,55 @@ export async function saveEjercicio(nombre, grupoMuscular) {
   return result.rows[0];
 }
 
-export async function getOrCreateEjercicio(nombre, grupoMuscular) {
+export async function getOrCreateEjercicio(nombre, grupoMuscular, catalogoId = null) {
   const { rows } = await db.query(
     'SELECT * FROM ejercicios WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
     [nombre]
   );
-  if (rows.length > 0) return rows[0];
+  if (rows.length > 0) {
+    // Si el usuario lo eligió del catálogo y su fila aún no tiene vínculo, se completa.
+    if (catalogoId && !rows[0].catalogo_id) {
+      const upd = await db.query(
+        'UPDATE ejercicios SET catalogo_id = $1, catalogo_revisado = TRUE WHERE id = $2 RETURNING *',
+        [catalogoId, rows[0].id]
+      );
+      return upd.rows[0];
+    }
+    return rows[0];
+  }
   const result = await db.query(
-    'INSERT INTO ejercicios (nombre, grupo_muscular) VALUES ($1, $2) RETURNING *',
-    [nombre, grupoMuscular]
+    `INSERT INTO ejercicios (nombre, grupo_muscular, catalogo_id, catalogo_revisado)
+     VALUES ($1, $2, $3::text, $3::text IS NOT NULL) RETURNING *`,
+    [nombre, grupoMuscular, catalogoId]
   );
   return result.rows[0];
+}
+
+// ── Vínculo con el catálogo estático (retrofit) ───────────────────────────────
+// El catálogo vive en assets/catalogo/catalogo.json, nunca en esta base.
+// Aquí solo se administra el puntero opaco catalogo_id de las filas del usuario.
+
+export async function getEjerciciosPendientesRevision() {
+  const { rows } = await db.query(
+    'SELECT id, nombre, grupo_muscular FROM ejercicios WHERE catalogo_revisado = FALSE ORDER BY nombre'
+  );
+  return rows;
+}
+
+export async function vincularEjercicioCatalogo(ejercicioId, fuenteId) {
+  const { rows } = await db.query(
+    'UPDATE ejercicios SET catalogo_id = $1, catalogo_revisado = TRUE WHERE id = $2 RETURNING *',
+    [fuenteId, ejercicioId]
+  );
+  return rows[0];
+}
+
+export async function descartarSugerenciaCatalogo(ejercicioId) {
+  const { rows } = await db.query(
+    'UPDATE ejercicios SET catalogo_revisado = TRUE WHERE id = $1 RETURNING *',
+    [ejercicioId]
+  );
+  return rows[0];
 }
 
 // ── Rutinas ───────────────────────────────────────────────────────────────────
@@ -603,7 +646,7 @@ export async function getUltimasSesionesConSeries(n = 2) {
 export async function getAllDataForExport() {
   const [conf, ejercicios, rutinas, reRows, rdRows, sesiones, series] = await Promise.all([
     db.query('SELECT pref_unit, pref_acento FROM conf WHERE id = 1'),
-    db.query('SELECT id, nombre, grupo_muscular FROM ejercicios ORDER BY id'),
+    db.query('SELECT id, nombre, grupo_muscular, catalogo_id, catalogo_revisado FROM ejercicios ORDER BY id'),
     db.query('SELECT id, nombre FROM rutinas ORDER BY id'),
     db.query('SELECT rutina_id, ejercicio_id, orden, activo_hoy FROM rutina_ejercicios ORDER BY rutina_id, orden'),
     db.query('SELECT rutina_id, dia FROM rutina_dias ORDER BY rutina_id, dia'),

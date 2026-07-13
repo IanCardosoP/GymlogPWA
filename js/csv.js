@@ -56,8 +56,15 @@ export async function importarBackup(textoJson, dbInstance) {
     await dbInstance.exec('DELETE FROM rutinas');
     await dbInstance.exec('DELETE FROM ejercicios');
 
+    // Backups previos no traen los campos de catálogo: se normalizan a sus
+    // defaults (catalogo_revisado es NOT NULL, no admite el null de fila[col]).
     await insertarEnLotes(dbInstance, 'ejercicios',
-      ['id', 'nombre', 'grupo_muscular'], ejercicios);
+      ['id', 'nombre', 'grupo_muscular', 'catalogo_id', 'catalogo_revisado'],
+      ejercicios.map(e => ({
+        ...e,
+        catalogo_id: e.catalogo_id ?? null,
+        catalogo_revisado: e.catalogo_revisado ?? false,
+      })));
 
     await insertarEnLotes(dbInstance, 'rutinas',
       ['id', 'nombre'], rutinas);
