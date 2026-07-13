@@ -6,8 +6,11 @@ import {
   updateRutinaNombre, deleteRutina,
   getConf, updatePrefUnit, updatePrefAcento,
   getDB, getAllDataForExport,
+  getEjerciciosPendientesRevision, vincularEjercicioCatalogo, descartarSugerenciaCatalogo,
 } from '../db.js';
 import { exportarBackup, importarBackup } from '../csv.js';
+import { getCandidatos } from '../catalogo.js';
+import { abrirPreviewEjercicio } from './previewModal.js';
 
 const ACENTOS_LABELS = {
   verde:  'Verde terminal',
@@ -91,6 +94,14 @@ export async function render(state) {
   const btnNueva = cel('button', 'btn-nueva-rutina', '[+ CREAR]');
   nuevaWrapper.appendChild(btnNueva);
   secAdmin.appendChild(nuevaWrapper);
+
+  // Retrofit: vincular ejercicios existentes al catálogo (sugerencia + confirmación,
+  // nunca automático; jamás modifica grupo_muscular). Best-effort: si el catálogo
+  // aún no está en caché (primera carga offline), la sección simplemente no aparece.
+  try {
+    const retrofitEl = await construirSeccionRetrofit();
+    if (retrofitEl) secAdmin.appendChild(retrofitEl);
+  } catch { /* catálogo no disponible — sin sección */ }
 
   container.appendChild(secAdmin);
 
@@ -481,6 +492,128 @@ export async function render(state) {
   btnMercado.addEventListener('click', () => {
     window.open('https://link.mercadopago.com.mx/gymlog', '_blank', 'noopener,noreferrer');
   });
+}
+
+// ── Retrofit de catálogo ──────────────────────────────────────────────────────
+// <details> con los ejercicios del usuario aún sin revisar que tienen alguna
+// coincidencia razonable en el catálogo. Tap en la fila abre la vista previa
+// (imagen grande + instrucciones), donde se cicla entre sugerencias y se confirma
+// la vinculación; ✕ descarta para siempre. El grupo muscular nunca se toca.
+
+async function construirSeccionRetrofit() {
+  const pendientes = await getEjerciciosPendientesRevision();
+  if (pendientes.length === 0) return null;
+
+  const sugerencias = [];
+  for (const ej of pendientes) {
+    const candidatos = await getCandidatos(ej.nombre); // catálogo se cachea al primer await
+    if (candidatos.length > 0) sugerencias.push({ ejercicio: ej, candidatos });
+  }
+  if (sugerencias.length === 0) return null;
+
+  // La preview necesita los candidatos completos; la fila solo lleva el ejId.
+  const sugerenciasPorEj = new Map(sugerencias.map(s => [s.ejercicio.id, s]));
+
+  const detalles = cel('details', 'retrofit-detalles');
+  const resumen = cel('summary', 'retrofit-summary',
+    `[ ▤ ${sugerencias.length} EJERCICIO${sugerencias.length === 1 ? '' : 'S'} PUEDEN VINCULARSE A IMÁGENES ]`);
+  detalles.appendChild(resumen);
+
+  const listaEl = cel('div', 'retrofit-lista');
+  for (const { ejercicio, candidatos } of sugerencias) {
+    listaEl.appendChild(construirFilaRetrofit(ejercicio, candidatos));
+  }
+  detalles.appendChild(listaEl);
+
+  // Delegación: un solo listener para toda la lista
+  const quitarFila = (fila) => {
+    fila.remove();
+    const restantes = listaEl.querySelectorAll('.retrofit-fila').length;
+    if (restantes === 0) {
+      detalles.remove();
+    } else {
+      resumen.textContent =
+        `[ ▤ ${restantes} EJERCICIO${restantes === 1 ? '' : 'S'} PUEDEN VINCULARSE A IMÁGENES ]`;
+    }
+  };
+
+  listaEl.addEventListener('click', async (e) => {
+    const fila = e.target.closest('.retrofit-fila');
+    if (!fila) return;
+    const ejId = Number(fila.dataset.ejId);
+
+    // ✕ descarta sin abrir nada
+    if (e.target.closest('button[data-accion="descartar"]')) {
+      await descartarSugerenciaCatalogo(ejId);
+      quitarFila(fila);
+      return;
+    }
+
+    // Tap en la fila: vista previa con todas las sugerencias, ciclables ahí dentro
+    const { ejercicio, candidatos } = sugerenciasPorEj.get(ejId);
+    abrirPreviewEjercicio({
+      candidatos,
+      nombreUsuario: ejercicio.nombre,
+      etiquetaConfirmar: '[ ✓ VINCULAR ]',
+      onConfirmar: async (entrada) => {
+        await vincularEjercicioCatalogo(ejId, entrada.fuente_id);
+        quitarFila(fila);
+      },
+    });
+  });
+
+  return detalles;
+}
+
+// La fila solo previsualiza la mejor sugerencia; ver el resto, compararlas y
+// confirmar ocurre en la vista previa que abre al tocarla.
+function construirFilaRetrofit(ejercicio, candidatos) {
+  const primera = candidatos[0];
+
+  const fila = cel('div', 'retrofit-fila');
+  fila.dataset.ejId = ejercicio.id;
+  fila.setAttribute('role', 'button');
+  fila.setAttribute('tabindex', '0');
+  fila.setAttribute('aria-label',
+    `Ver sugerencias para ${ejercicio.nombre}: ${primera.nombre_es}` +
+    (candidatos.length > 1 ? ` y ${candidatos.length - 1} más` : ''));
+
+  const thumb = cel('div', 'catalogo-thumb');
+  const imgA = document.createElement('img');
+  const imgB = document.createElement('img');
+  imgA.src = primera.imagen_a;
+  imgB.src = primera.imagen_b;
+  imgA.alt = '';
+  imgB.alt = '';
+  imgA.loading = 'lazy';
+  imgB.loading = 'lazy';
+  imgA.className = 'catalogo-thumb-a';
+  imgB.className = 'catalogo-thumb-b';
+  thumb.appendChild(imgA);
+  thumb.appendChild(imgB);
+  fila.appendChild(thumb);
+
+  const info = cel('div', 'retrofit-info');
+  info.appendChild(cel('span', 'retrofit-nombre-usuario', ejercicio.nombre));
+  info.appendChild(cel('span', 'retrofit-sugerencia', candidatos.length > 1
+    ? `→ ${primera.nombre_es} · +${candidatos.length - 1} sugerencias`
+    : `→ ${primera.nombre_es}`));
+  fila.appendChild(info);
+
+  const btnNo = cel('button', 'btn-add-cancel', '✕');
+  btnNo.dataset.accion = 'descartar';
+  btnNo.setAttribute('aria-label', `Descartar sugerencia para ${ejercicio.nombre}`);
+  fila.appendChild(btnNo);
+
+  // Teclado: la fila es un role=button, Enter/Espacio la activan como un tap
+  fila.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fila.click();
+    }
+  });
+
+  return fila;
 }
 
 async function resetearTodo() {

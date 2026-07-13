@@ -1,6 +1,7 @@
 // Componente Diario: acordeones de ejercicios, precarga inteligente y guardado de series
 import html2canvas from 'html2canvas';
 import { store, navigateTo } from '../app.js';
+import { abrirCatalogoModal } from './catalogoModal.js';
 import { calculateEpley1RM } from '../analitico.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
 import motivArt     from '/icons/motiv.txt?raw';
@@ -10,14 +11,13 @@ import {
   saveSerie, deleteSerie, renumerarSeries, touchSesionTiempo, resetSesionTiempoIfVacia,
   getTodasSeriesDeHoy, getUltimasSeriesPorEjercicio,
   getSeriesConEjerciciosBySesion,
-  saveEjercicio, getOrCreateEjercicio, getEjercicios,
+  getOrCreateEjercicio, vincularEjercicioCatalogo,
   updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   linkEjercicioToRutina, reordenarEjercicios,
 } from '../db.js';
+import { getCandidatos, getInstrucciones, getEntradaCatalogo } from '../catalogo.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
-
-const GRUPOS_MUSCULARES = ['PECHO', 'ESPALDA', 'PIERNA', 'HOMBRO', 'BRAZO', 'CORE', 'GENERAL'];
 
 let clickAbort = null;
 let dragAbort  = null;
@@ -118,11 +118,6 @@ export async function render(state) {
   // OPT-4: DocumentFragment — inserta todos los bloques en un solo reflow
   const frag = document.createDocumentFragment();
   for (let i = 0; i < slots.length; i++) {
-    if (i === 8 && todos.length > 8) {
-      const sep = document.createElement('hr');
-      sep.className = 'diario-separador';
-      frag.appendChild(sep);
-    }
     frag.appendChild(construirBloque(slots[i], i, sesion, datosSlots[i]));
   }
   lista.appendChild(frag);
@@ -186,7 +181,7 @@ export async function render(state) {
 
     const btnEdit = e.target.closest('.btn-edit');
     if (btnEdit) {
-      handleRenombrar(btnEdit, state);
+      handleDetalles(btnEdit, state);
       return;
     }
 
@@ -275,9 +270,9 @@ function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
 
   if (ej) {
     const btnEdit = cel('button', 'btn-edit', '✎');
-    btnEdit.dataset.ejId  = ej.ejercicio_id;
-    btnEdit.dataset.grupo = ej.grupo_muscular ?? 'GENERAL';
-    btnEdit.setAttribute('aria-label', 'Renombrar ejercicio');
+    btnEdit.dataset.ejId      = ej.ejercicio_id;
+    btnEdit.dataset.catalogoId = ej.catalogo_id ?? '';
+    btnEdit.setAttribute('aria-label', 'Ver detalles y editar ejercicio');
     summary.appendChild(btnEdit);
 
     const btnDelete = cel('button', 'btn-delete', '✕');
@@ -379,16 +374,6 @@ function renumerarBloques(lista) {
     const num = b.querySelector('.ejercicio-num');
     if (num) num.textContent = `${i + 1}. `;
   });
-}
-
-function reposicionarSeparador(lista) {
-  lista.querySelector('.diario-separador')?.remove();
-  const bloques = lista.querySelectorAll('.ejercicio-bloque[data-re-id]');
-  if (bloques.length > 8) {
-    const sep = document.createElement('hr');
-    sep.className = 'diario-separador';
-    lista.insertBefore(sep, bloques[8]);
-  }
 }
 
 function initDragAndDrop(lista, rutinaHoy, state) {
@@ -517,8 +502,8 @@ function initDragAndDrop(lista, rutinaHoy, state) {
       .map(b => parseInt(b.dataset.reId));
     try {
       await reordenarEjercicios(rutinaHoy.id, ordenados);
-      renumerarBloques(lista);            // fixup in-place: sin re-render,
-      reposicionarSeparador(lista);       // preserva acordeones e inputs
+      // fixup in-place: sin re-render, preserva acordeones e inputs
+      renumerarBloques(lista);
     } catch {
       await render(state);                // fallo de BD: re-render restaura la verdad
     }
@@ -529,7 +514,7 @@ function initDragAndDrop(lista, rutinaHoy, state) {
     if (!e.isPrimary || dragging) return;
     const summary = e.target.closest('.ejercicio-summary');
     if (!summary) return;
-    if (e.target.closest('button, input, .rename-panel, .confirm-delete-panel, .autocomplete-wrapper')) return;
+    if (e.target.closest('button, input, .rename-panel, .confirm-delete-panel')) return;
     const bloque = summary.closest('.ejercicio-bloque');
     if (!bloque?.dataset.reId) return;
 
@@ -604,148 +589,27 @@ async function handleGuardar(btnGuardar, sesionId) {
   actualizarProgreso(filaWrapper.closest('.ejercicio-bloque'));
 }
 
-async function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
-  const nombreActual = nombreEl.textContent;
-  const ejerciciosExistentes = await getEjercicios();
-
-  const wrapper   = cel('div', 'autocomplete-wrapper');
-  const fila      = cel('div', 'autocomplete-fila');
-  const input     = document.createElement('input');
-  input.type        = 'text';
-  input.className   = 'ejercicio-nombre-input';
-  input.placeholder = 'Nombre del ejercicio...';
-
-  const btnOk     = cel('button', 'btn-add-ok',     '✓');
-  const btnCancel = cel('button', 'btn-add-cancel',  '✕');
-  const lista     = cel('div',   'autocomplete-lista');
-
-  fila.appendChild(input);
-  fila.appendChild(btnOk);
-  fila.appendChild(btnCancel);
-  wrapper.appendChild(fila);
-  wrapper.appendChild(lista);
-  nombreEl.replaceWith(wrapper);
-  input.focus();
-
-  let itemActivo = -1;
-  let eligiendo  = false;
-
-  const cancelar = () => {
-    ocultarLista();
-    wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
-  };
-
-  const ocultarLista = () => {
-    lista.classList.remove('is-visible');
-    itemActivo = -1;
-  };
-
-  const actualizarLista = () => {
-    const query = input.value.trim();
-    while (lista.firstChild) lista.removeChild(lista.firstChild);
-    itemActivo = -1;
-    if (!query) { ocultarLista(); return; }
-
-    const filtrados = ejerciciosExistentes.filter(
-      e => e.nombre.toLowerCase().includes(query.toLowerCase())
-    );
-    if (filtrados.length === 0) { ocultarLista(); return; }
-
-    filtrados.slice(0, 8).forEach(ej => {
-      const item = cel('div', 'autocomplete-item', ej.nombre);
-      item.addEventListener('mousedown', e => { e.preventDefault(); }); // evita blur en desktop
-      item.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
-      item.addEventListener('click', () => {
-        eligiendo = false;
-        ocultarLista();
-        vincular(ej.nombre, ej.grupo_muscular || 'GENERAL');
-      });
-      lista.appendChild(item);
-    });
-    lista.classList.add('is-visible');
-  };
-
-  const vincular = async (nombre, grupo) => {
-    ocultarLista();
-    const ej = await getOrCreateEjercicio(nombre, grupo);
+function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
+  const vincular = async (nombre, grupo, catalogoId = null) => {
+    const ej = await getOrCreateEjercicio(nombre, grupo, catalogoId);
     const todos = await getRutinaEjercicios(rutinaHoy.id);
     await linkEjercicioToRutina(rutinaHoy.id, ej.id, todos.length + 1);
     await render(state);
   };
 
-  const mostrarSelectorGrupo = (nombre) => {
-    ocultarLista();
-    const selector    = cel('div', 'grupo-muscular-selector');
-    selector.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
-    const filaBtns = cel('div', 'grupo-muscular-btns');
-    GRUPOS_MUSCULARES.forEach(grupo => {
-      const btn = cel('button', 'btn-grupo-muscular', grupo);
-      if (grupo === 'GENERAL') btn.classList.add('is-active');
-      btn.addEventListener('click', () => vincular(nombre, grupo));
-      filaBtns.appendChild(btn);
-    });
-    selector.appendChild(filaBtns);
-    const btnCancelGrupo = cel('button', 'btn-add-cancel', '✕');
-    btnCancelGrupo.addEventListener('click', () => {
-      selector.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
-    });
-    selector.appendChild(btnCancelGrupo);
-    wrapper.replaceWith(selector);
-  };
-
-  const procesarNombre = () => {
-    if (eligiendo) return;
-    ocultarLista();
-    const nuevoNombre = input.value.trim();
-    if (!nuevoNombre || !rutinaHoy) {
-      wrapper.replaceWith(cel('span', 'ejercicio-nombre', nombreActual));
-      return;
-    }
-    const existente = ejerciciosExistentes.find(
-      e => e.nombre.toLowerCase() === nuevoNombre.toLowerCase()
-    );
-    if (existente) {
-      vincular(nuevoNombre, existente.grupo_muscular || 'GENERAL');
-    } else {
-      mostrarSelectorGrupo(nuevoNombre);
-    }
-  };
-
-  // Botones OK y Cancelar: mousedown.preventDefault() evita blur en desktop;
-  // touchstart con flag evita que blur dispare procesarNombre antes que click en móvil.
-  [btnOk, btnCancel].forEach(btn => {
-    btn.addEventListener('mousedown', e => { e.preventDefault(); });
-    btn.addEventListener('touchstart', () => { eligiendo = true; }, { passive: true });
-  });
-  btnOk.addEventListener('click', () => { eligiendo = false; procesarNombre(); });
-  btnCancel.addEventListener('click', () => { eligiendo = false; cancelar(); });
-
-  input.addEventListener('input', actualizarLista);
-  input.addEventListener('blur', procesarNombre);
-  input.addEventListener('keydown', e => {
-    const items = lista.querySelectorAll('.autocomplete-item');
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      itemActivo = Math.min(itemActivo + 1, items.length - 1);
-      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      itemActivo = Math.max(itemActivo - 1, -1);
-      items.forEach((el, i) => el.classList.toggle('is-active', i === itemActivo));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (itemActivo >= 0 && items[itemActivo]) {
-        items[itemActivo].click();
-      } else {
-        input.blur();
-      }
-    } else if (e.key === 'Escape') {
-      cancelar();
-    }
+  abrirCatalogoModal({
+    onSeleccionar: ({ nombre_es, grupo_muscular, fuente_id }) =>
+      vincular(nombre_es, grupo_muscular, fuente_id),
+    onCrearPersonalizado: ({ nombre, grupo }) =>
+      vincular(nombre, grupo),
   });
 }
 
-function handleRenombrar(btnEdit, state) {
+// Panel de detalles y edición (botón ✎): nombre editable + imagen crossfade +
+// instrucciones. El grupo muscular ya no se edita a mano — lo determina el
+// catálogo al crear el ejercicio. Tap en la imagen cicla entre las coincidencias
+// del catálogo para ese nombre; se persiste al guardar.
+async function handleDetalles(btnEdit, state) {
   const details = btnEdit.closest('details');
   if (details) details.open = true;
 
@@ -753,9 +617,9 @@ function handleRenombrar(btnEdit, state) {
   details?.querySelector('.confirm-delete-panel')?.remove();
   if (existente) { existente.remove(); return; }
 
-  const ejId        = parseInt(btnEdit.dataset.ejId);
+  const ejId         = parseInt(btnEdit.dataset.ejId);
   const nombreActual = details?.querySelector('.ejercicio-nombre')?.textContent ?? '';
-  const grupoActual  = btnEdit.dataset.grupo ?? 'GENERAL';
+  const catalogoIdActual = btnEdit.dataset.catalogoId || null;
 
   const panel = cel('div', 'rename-panel');
 
@@ -766,33 +630,119 @@ function handleRenombrar(btnEdit, state) {
   input.setAttribute('aria-label', 'Nuevo nombre del ejercicio');
   panel.appendChild(input);
 
-  let grupoSeleccionado = grupoActual;
-  const selectorDiv = cel('div', 'grupo-muscular-selector');
-  selectorDiv.appendChild(cel('span', 'grupo-muscular-label', 'GRUPO:'));
-  const filaGrupos = cel('div', 'grupo-muscular-btns');
-  GRUPOS_MUSCULARES.forEach(g => {
-    const btn = cel('button', 'btn-grupo-muscular', g);
-    if (g === grupoActual) btn.classList.add('is-active');
-    btn.addEventListener('click', () => {
-      filaGrupos.querySelectorAll('.btn-grupo-muscular').forEach(b => b.classList.remove('is-active'));
-      btn.classList.add('is-active');
-      grupoSeleccionado = g;
-    });
-    filaGrupos.appendChild(btn);
-  });
-  selectorDiv.appendChild(filaGrupos);
-  panel.appendChild(selectorDiv);
+  const zonaDetalle = cel('div', 'detalle-zona');
+  panel.appendChild(zonaDetalle);
 
+  // Vía de escape: siempre hay nombres sin relación léxica con el catálogo.
+  // Elegir aquí NO renombra el ejercicio ni cambia su grupo — solo su imagen.
+  const btnBuscar = cel('button', 'btn-panel-buscar', '[ BUSCAR EN CATÁLOGO ]');
+  panel.appendChild(btnBuscar);
+
+  const acciones = cel('div', 'detalle-acciones');
   const btnGuardar  = cel('button', 'btn-panel-accion',  '[ GUARDAR ]');
   const btnCancelar = cel('button', 'btn-panel-cancel', '[ CANCELAR ]');
-  panel.appendChild(btnGuardar);
-  panel.appendChild(btnCancelar);
+  acciones.appendChild(btnGuardar);
+  acciones.appendChild(btnCancelar);
+  panel.appendChild(acciones);
+
+  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
+  if (cuerpo) details.insertBefore(panel, cuerpo);
+  else details?.appendChild(panel);
+
+  input.focus();
+  input.select();
+
+  // ── Candidatos del catálogo (best-effort: sin catálogo, el panel es solo rename)
+  let candidatos = [];
+  try {
+    candidatos = await getCandidatos(nombreActual);
+
+    // El vínculo guardado manda, aunque no salga al buscar por nombre: si el
+    // usuario lo eligió con [ BUSCAR EN CATÁLOGO ] fue justamente porque ninguna
+    // sugerencia por nombre le servía. Sin esto, el panel lo ignoraría al reabrir
+    // y volvería a mostrar la primera sugerencia descartada.
+    if (catalogoIdActual && !candidatos.some(c => c.fuente_id === catalogoIdActual)) {
+      const vinculada = await getEntradaCatalogo(catalogoIdActual);
+      if (vinculada) candidatos = [vinculada, ...candidatos];
+    }
+  } catch { /* catálogo no disponible */ }
+
+  // Punto de partida: el vínculo guardado si existe; si no, la mejor coincidencia.
+  const idxGuardado = candidatos.findIndex(c => c.fuente_id === catalogoIdActual);
+  let indice = idxGuardado >= 0 ? idxGuardado : 0;
+
+  const pintarDetalle = async () => {
+    zonaDetalle.textContent = '';
+    const entrada = candidatos[indice];
+
+    if (!entrada) {
+      zonaDetalle.appendChild(cel('p', 'detalle-vacio',
+        'Sin coincidencias en el catálogo para este nombre.'));
+      return;
+    }
+
+    const btnImg = cel('button', 'detalle-imagen catalogo-thumb');
+    btnImg.setAttribute('aria-label',
+      `Cambiar imagen: ${entrada.nombre_es} (coincidencia ${indice + 1} de ${candidatos.length})`);
+    const imgA = document.createElement('img');
+    const imgB = document.createElement('img');
+    imgA.src = entrada.imagen_a;
+    imgB.src = entrada.imagen_b;
+    imgA.alt = '';
+    imgB.alt = '';
+    imgA.className = 'catalogo-thumb-a';
+    imgB.className = 'catalogo-thumb-b';
+    btnImg.appendChild(imgA);
+    btnImg.appendChild(imgB);
+    zonaDetalle.appendChild(btnImg);
+
+    if (candidatos.length > 1) {
+      btnImg.addEventListener('click', () => {
+        indice = (indice + 1) % candidatos.length; // cicla
+        pintarDetalle();
+      });
+      zonaDetalle.appendChild(cel('p', 'detalle-contador',
+        `${entrada.nombre_es} · ${indice + 1}/${candidatos.length} — toca la imagen para cambiarla`));
+    } else {
+      btnImg.disabled = true;
+      zonaDetalle.appendChild(cel('p', 'detalle-contador', entrada.nombre_es));
+    }
+
+    let pasos = [];
+    try {
+      pasos = await getInstrucciones(entrada.fuente_id);
+    } catch { /* instrucciones no disponibles offline */ }
+
+    if (pasos.length > 0) {
+      const ol = cel('ol', 'detalle-instrucciones');
+      for (const paso of pasos) ol.appendChild(cel('li', null, paso));
+      zonaDetalle.appendChild(ol);
+    }
+  };
+
+  await pintarDetalle();
+
+  // La entrada elegida a mano pasa a ser el candidato del panel; como el resto
+  // de cambios, se persiste al GUARDAR (no al elegirla).
+  btnBuscar.addEventListener('click', () => {
+    abrirCatalogoModal({
+      onSeleccionar: (entrada) => {
+        // Al frente, sin descartar el resto: el usuario sigue pudiendo ciclar.
+        candidatos = [entrada, ...candidatos.filter(c => c.fuente_id !== entrada.fuente_id)];
+        indice = 0;
+        pintarDetalle();
+      },
+    });
+  });
 
   const guardar = async () => {
     const nuevoNombre = input.value.trim();
     if (!nuevoNombre) { panel.remove(); return; }
-    const grupoFinal = grupoSeleccionado !== grupoActual ? grupoSeleccionado : null;
-    await updateEjercicioNombre(ejId, nuevoNombre, grupoFinal);
+    await updateEjercicioNombre(ejId, nuevoNombre);
+    const elegido = candidatos[indice];
+    if (elegido && elegido.fuente_id !== catalogoIdActual) {
+      await vincularEjercicioCatalogo(ejId, elegido.fuente_id);
+    }
     await render(state);
   };
 
@@ -802,21 +752,20 @@ function handleRenombrar(btnEdit, state) {
     if (e.key === 'Enter')  { e.preventDefault(); guardar(); }
     if (e.key === 'Escape') panel.remove();
   });
-
-  const cuerpo = details?.querySelector('.ejercicio-cuerpo');
-  if (cuerpo) details.insertBefore(panel, cuerpo);
-  else details?.appendChild(panel);
-
-  input.focus();
-  input.select();
 }
 
 function handleEliminar(btnDelete, state) {
   const details = btnDelete.closest('details');
+
+  // Con el panel de detalles abierto, la ✕ hace de [ CANCELAR ]: lo cierra en vez
+  // de eliminar el ejercicio. Eliminar exige que el panel esté cerrado — así la
+  // ✕ nunca destruye datos mientras el usuario está editando.
+  const panelDetalles = details?.querySelector('.rename-panel');
+  if (panelDetalles) { panelDetalles.remove(); return; }
+
   if (details) details.open = true;
 
   const existente = details?.querySelector('.confirm-delete-panel');
-  details?.querySelector('.rename-panel')?.remove();
   if (existente) { existente.remove(); return; }
 
   const ejId   = parseInt(btnDelete.dataset.ejId);
