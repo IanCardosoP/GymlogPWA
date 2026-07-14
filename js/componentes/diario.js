@@ -605,6 +605,35 @@ function handleAñadirEjercicio(nombreEl, rutinaHoy, state) {
   });
 }
 
+// Hay ejercicios cuyas instrucciones ocupan más que todo el resto del panel. Se
+// recortan a ~5 líneas con un degradado que insinúa la continuación, y el toggle
+// solo aparece si de verdad quedó texto oculto.
+function colapsarInstrucciones(ol) {
+  const caja  = cel('div', 'instrucciones-caja is-colapsado');
+  const visor = cel('div', 'instrucciones-visor');
+  visor.appendChild(ol);
+  caja.appendChild(visor);
+
+  const btn = cel('button', 'btn-instrucciones-toggle', '[ VER MÁS ]');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.addEventListener('click', () => {
+    const colapsado = caja.classList.toggle('is-colapsado');
+    btn.textContent = colapsado ? '[ VER MÁS ]' : '[ VER MENOS ]';
+    btn.setAttribute('aria-expanded', String(!colapsado));
+  });
+  caja.appendChild(btn);
+
+  // El desbordamiento solo se conoce tras el layout, no al construir los nodos.
+  requestAnimationFrame(() => {
+    if (visor.scrollHeight <= visor.clientHeight + 1) {
+      caja.classList.remove('is-colapsado');
+      btn.remove();
+    }
+  });
+
+  return caja;
+}
+
 // Panel de detalles y edición (botón ✎): nombre editable + imagen crossfade +
 // instrucciones. El grupo muscular ya no se edita a mano — lo determina el
 // catálogo al crear el ejercicio. Tap en la imagen cicla entre las coincidencias
@@ -615,7 +644,11 @@ async function handleDetalles(btnEdit, state) {
 
   const existente = details?.querySelector('.rename-panel');
   details?.querySelector('.confirm-delete-panel')?.remove();
-  if (existente) { existente.remove(); return; }
+
+  // Simétrico con la ✕ (que hace de [ CANCELAR ] con el panel abierto): el ✎
+  // hace de [ GUARDAR ]. Reusa el propio botón del panel para no duplicar la
+  // lógica de guardado ni recapturar su estado (nombre, candidato elegido).
+  if (existente) { existente.querySelector('.btn-panel-accion')?.click(); return; }
 
   const ejId         = parseInt(btnEdit.dataset.ejId);
   const nombreActual = details?.querySelector('.ejercicio-nombre')?.textContent ?? '';
@@ -649,8 +682,8 @@ async function handleDetalles(btnEdit, state) {
   if (cuerpo) details.insertBefore(panel, cuerpo);
   else details?.appendChild(panel);
 
-  input.focus();
-  input.select();
+  // Sin foco automático en el input: en móvil abriría el teclado y se comería
+  // media pantalla del panel. El usuario toca el campo si quiere renombrar.
 
   // ── Candidatos del catálogo (best-effort: sin catálogo, el panel es solo rename)
   let candidatos = [];
@@ -702,7 +735,7 @@ async function handleDetalles(btnEdit, state) {
         pintarDetalle();
       });
       zonaDetalle.appendChild(cel('p', 'detalle-contador',
-        `${entrada.nombre_es} · ${indice + 1}/${candidatos.length} — toca la imagen para cambiarla`));
+        `${entrada.nombre_es} · ${indice + 1}/${candidatos.length} — Toca la imagen para ver la siguiente sugerencia de vinculación`));
     } else {
       btnImg.disabled = true;
       zonaDetalle.appendChild(cel('p', 'detalle-contador', entrada.nombre_es));
@@ -716,7 +749,7 @@ async function handleDetalles(btnEdit, state) {
     if (pasos.length > 0) {
       const ol = cel('ol', 'detalle-instrucciones');
       for (const paso of pasos) ol.appendChild(cel('li', null, paso));
-      zonaDetalle.appendChild(ol);
+      zonaDetalle.appendChild(colapsarInstrucciones(ol));
     }
   };
 

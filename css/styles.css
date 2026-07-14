@@ -1914,6 +1914,41 @@ details:not(.metrica-info) > summary:hover {
   color: var(--color-acento);
 }
 
+/* Instrucciones largas: recorte a ~5 líneas + degradado que invita a expandir. */
+.instrucciones-caja {
+  align-self: stretch;
+  width: 100%;
+  font-size: var(--fs-body-sm);
+}
+
+.instrucciones-visor {
+  overflow: hidden;
+}
+
+.instrucciones-caja.is-colapsado .instrucciones-visor {
+  max-height: 7.5em; /* 5 líneas a line-height 1.5 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+
+.btn-instrucciones-toggle {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  background: none;
+  border: none;
+  color: var(--color-acento);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.btn-instrucciones-toggle:active {
+  color: var(--color-texto-dim);
+}
+
 .detalle-vacio {
   color: var(--color-texto-faint);
   font-size: var(--fs-body-sm);
