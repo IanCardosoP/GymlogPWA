@@ -735,7 +735,7 @@ async function handleDetalles(btnEdit, state) {
         pintarDetalle();
       });
       zonaDetalle.appendChild(cel('p', 'detalle-contador',
-        `${entrada.nombre_es} · ${indice + 1}/${candidatos.length} — Toca la imagen para ver la siguiente sugerencia de vinculación`));
+        `${entrada.nombre_es} · ${indice + 1}/${candidatos.length} — Toca la imagen para ver la siguiente sugerencia de variante`));
     } else {
       btnImg.disabled = true;
       zonaDetalle.appendChild(cel('p', 'detalle-contador', entrada.nombre_es));

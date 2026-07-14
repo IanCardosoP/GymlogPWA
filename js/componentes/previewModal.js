@@ -121,7 +121,7 @@ export function abrirPreviewEjercicio({
     cuerpo.appendChild(meta);
 
     if (candidatos.length > 1) {
-      btnSiguiente.textContent = '[ SIGUIENTE ]';
+      btnSiguiente.textContent = '[ SIG. SUGERENCIA ]';
       btnSiguiente.setAttribute('aria-label',
         `Ver otra sugerencia. Actual: ${actual + 1} de ${candidatos.length}`);
     }

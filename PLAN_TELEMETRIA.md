@@ -246,7 +246,7 @@ self.addEventListener('fetch', event => {
   event.respondWith(/* ...lógica actual sin cambios... */);
 });
 ```
-Subir `CACHE_NAME` a `'gymlog-v13'` para forzar el reemplazo del SW en dispositivos ya instalados. *(Editar solo `public/sw.js`; Vite copia `public/` → `dist/` en el build.)*
+No hay que tocar `CACHE_NAME`: el plugin `sello-de-version` (`vite.config.js`) lo estampa en el build con el sha del commit, así que el merge a `main` ya fuerza el reemplazo del SW en los dispositivos instalados. Ver `flujo-prod.md` §Invalidación del caché.
 
 ### 2.5 — `tests/db.test.js` — cobertura (instancia `memory://`)
 - `getOrCreateDeviceId()` devuelve un UUID válido en la 1ª llamada.

@@ -3,7 +3,11 @@
 // Nota: las fuentes woff2 (JetBrains Mono) se sirven same-origin y entran por
 // esta misma vía cache-on-fetch → disponibles offline tras la primera carga.
 
-const CACHE_NAME = 'gymlog-v19';
+// __APP_VERSION__ lo reemplaza el build (ver plugin `sello-de-version` en
+// vite.config.js) por «version de package.json + sha del commit». Nunca escribas
+// aquí un número a mano: el build falla si el placeholder no está.
+// En `pnpm run dev` el literal queda tal cual — es una constante estable, inocua.
+const CACHE_NAME = 'gymlog-v__APP_VERSION__';
 
 self.addEventListener('install', () => self.skipWaiting());
 

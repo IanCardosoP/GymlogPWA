@@ -32,9 +32,8 @@ pnpm run dev          # servidor local de desarrollo
 pnpm run catalogo:add     # CLI interactiva: nombres, grupo, equipo, instrucciones, 2 imágenes
 ```
 Procesa las imágenes (192px de ancho → WebP) y actualiza `catalogo.json` +
-`instrucciones.json`. Deja los cambios en el working tree: revisa, corre `pnpm test`,
-**sube `CACHE_NAME` en `public/sw.js`** (si no, los usuarios no verán el ejercicio
-nuevo hasta que su caché expire) y commitea.
+`instrucciones.json`. Deja los cambios en el working tree: revisa, corre `pnpm test`
+y commitea. El caché se invalida solo en el deploy (ver §Versionado).
 
 **Correr un solo archivo de test:**
 ```bash
@@ -86,6 +85,28 @@ se carga **de forma diferida**: solo al abrir un panel de detalles, nunca al arr
 - `sesiones` — cada entrenamiento real (fecha capturada en JS, no en SQL)
 - `series` — cada set individual; `peso=0` = peso corporal (BW)
 - `conf` — singleton de configuración (una sola fila, `id=1`, jamás DELETE)
+
+---
+
+## VERSIONADO Y CACHÉ DEL SERVICE WORKER
+
+**Nunca se escribe un `CACHE_NAME` a mano.** `public/sw.js` lleva el placeholder
+`__APP_VERSION__`; el plugin `sello-de-version` de `vite.config.js` lo reemplaza
+al construir por `<version de package.json>+<sha corto del commit>`
+(ej. `gymlog-v1.0.19+a691bee`). Si el placeholder no está, **el build falla a
+propósito** — es el seguro contra volver a fijarlo a mano.
+
+Consecuencia: **cada push a `main` genera un `CACHE_NAME` nuevo** (el sha cambia),
+así que la caché de los clientes se invalida sola en cada deploy. No hay nada que
+recordar por ticket.
+
+La versión semántica de `package.json` se sube solo cuando *significa* algo:
+
+```bash
+pnpm version patch   # 1.0.19 → 1.0.20  (fix)   · crea commit + tag de git
+pnpm version minor   # 1.0.19 → 1.1.0   (feature)
+git push --follow-tags
+```
 
 ---
 

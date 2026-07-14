@@ -236,7 +236,8 @@ export function abrirCatalogoModal({ onSeleccionar, onCrearPersonalizado, onCerr
   modal.appendChild(lista);
   scrim.appendChild(modal);
   document.body.appendChild(scrim);
-  input.focus();
+  // Sin foco automático: en móvil el teclado se abriría encima de los chips y la
+  // lista. El usuario toca el buscador cuando quiere escribir.
 
   construirChips(filaGrupos, GRUPOS_MUSCULARES, 'grupo');
   construirChips(filaEquipos, [], 'equipo'); // placeholder hasta que cargue el catálogo

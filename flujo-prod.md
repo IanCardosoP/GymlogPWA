@@ -43,28 +43,58 @@
 
 ---
 
-## Cómo invalidar el caché en dispositivos existentes
+## Invalidación del caché — automática, no se toca a mano
 
-El Service Worker cachea los assets en la primera carga. Si se despliega una nueva versión sin cambiar el nombre del caché, los usuarios que ya tienen la app instalada **seguirán usando la versión anterior** hasta que el navegador actualice el SW (puede tardar horas).
+El Service Worker cachea los assets en la primera carga. Si se despliega una versión
+nueva sin cambiar el nombre del caché, los usuarios con la app instalada **seguirían
+usando la versión anterior**. Antes eso se evitaba subiendo `CACHE_NAME` a mano antes
+de cada merge; **ese paso ya no existe** (y era justo el que se olvidaba).
 
-**Para forzar actualización inmediata en todos los dispositivos:**
-
-Antes del merge a `main`, editar `public/sw.js` y bumpar `CACHE_NAME`:
+Hoy `public/sw.js` no contiene ningún número, sino un placeholder:
 
 ```js
-// Antes
-const CACHE_NAME = 'gymlog-v3';
-
-// Después (incrementar el número)
-const CACHE_NAME = 'gymlog-v4';
+const CACHE_NAME = 'gymlog-v__APP_VERSION__';
 ```
 
-Al activarse el nuevo SW, el `activate` handler borra todos los cachés anteriores y los usuarios reciben los assets frescos en la próxima carga.
+En el build, el plugin `sello-de-version` (`vite.config.js`) lo reemplaza por la
+versión de `package.json` **+ el sha corto del commit**:
 
-**¿Cuándo es obligatorio bumparlo?**
-- Siempre que cambie lógica de negocio (JS) o estilos (CSS)
-- Siempre que se actualice el esquema de la DB (`initDB`)
-- En general: en cada merge a `main` que no sea solo documentación
+```js
+const CACHE_NAME = 'gymlog-v1.0.19+a691bee';
+```
+
+Como el sha cambia en cada merge a `main`, **cada deploy produce un `CACHE_NAME`
+distinto por construcción**: el `activate` handler del SW borra los cachés anteriores
+y los usuarios reciben los assets frescos en la siguiente carga. No hay nada que
+recordar por PR.
+
+> Si alguien vuelve a fijar el `CACHE_NAME` a mano, **el build falla a propósito**
+> (el plugin exige el placeholder). Es el seguro contra reintroducir el paso manual.
+
+---
+
+## Cuándo subir la versión semántica (`pnpm version`)
+
+La versión de `package.json` **ya no sirve para invalidar el caché** — el sha hace ese
+trabajo. Se sube solo cuando el cambio *significa* algo para el usuario, como etiqueta
+de la historia del proyecto. En `main`, con el árbol limpio, antes de pushear:
+
+```bash
+pnpm version patch    # 1.0.19 → 1.0.20 · arreglos sin cambiar lo que la app hace
+pnpm version minor    # 1.0.19 → 1.1.0  · algo nuevo que el usuario puede usar
+pnpm version major    # 1.0.19 → 2.0.0  · ruptura de compatibilidad
+git push --follow-tags
+```
+
+`pnpm version` reescribe `package.json`, crea el commit y le pone el tag de git;
+`--follow-tags` es lo que sube el tag además del commit.
+
+**Qué cuenta como `major` en esta app:** en la práctica, un cambio de esquema en PGLite
+o en el formato del backup JSON que rompa la importación de backups viejos o exija una
+migración no trivial en la DB del usuario. Nada más.
+
+Un push puramente interno (refactor, tests, docs) puede ir **sin bump**: los usuarios
+reciben el código nuevo igual, porque el sha ya invalidó su caché.
 
 ---
 
@@ -74,7 +104,8 @@ Al activarse el nuevo SW, el `activate` handler borra todos los cachés anterior
 |---|---|
 | Crear rama y codificar | Developer |
 | Correr `pnpm test` localmente antes del PR | Developer |
-| Bumpar `CACHE_NAME` antes de mergear a main | Developer |
+| Subir la versión semántica (`pnpm version`) cuando el cambio lo amerite | Developer |
+| Invalidar el `CACHE_NAME` de los clientes | Build — automático (sello sha, ver arriba) |
 | Correr tests en CI (PRs a dev y main) | GitHub Actions — automático |
 | Build + deploy a GitHub Pages | GitHub Actions — automático al mergear a main |
 | Crear checkpoint `sprint-N` al inicio de cada sprint | Developer (regla CLAUDE.md) |
@@ -90,6 +121,9 @@ git checkout -b feature/mi-feature
 
 # Verificar antes de abrir PR
 pnpm test
+
+# Marcar una versión (solo si el cambio lo amerita — ver arriba)
+pnpm version minor && git push --follow-tags
 
 # Build local para inspeccionar dist/ antes de desplegar
 pnpm run build
