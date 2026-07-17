@@ -179,6 +179,17 @@ export function equiposDeCatalogo(datos) {
   return [...prioritarios, ...resto];
 }
 
+// Las rutas de imagen se derivan del fuente_id por convención del generador
+// (scripts/agregar-ejercicio.js) — así la tarjeta del Diario pinta su miniatura
+// sin descargar catalogo.json. catalogo.test.js ancla la convención.
+export function rutasImagenCatalogo(fuenteId) {
+  if (!fuenteId) return null;
+  return {
+    a: `assets/catalogo/img/${fuenteId}_0.webp`,
+    b: `assets/catalogo/img/${fuenteId}_1.webp`,
+  };
+}
+
 // ── Wrappers sobre el catálogo cacheado (para la capa de UI) ─────────────────
 
 export async function buscarCatalogo(opciones = {}) {

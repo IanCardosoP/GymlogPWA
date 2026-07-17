@@ -338,6 +338,19 @@ details > div {
   color: var(--color-acento);
 }
 
+/* Marca de la tarjeta: miniatura del catálogo (añade .catalogo-thumb) o, si el
+   ejercicio no tiene vínculo, su número. Tamaño fijo para que el nombre alinee
+   en ambos casos. */
+.ejercicio-marca,
+.ejercicio-marca.catalogo-thumb { /* gana al 48px por defecto de .catalogo-thumb */
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .ejercicio-num {
   color: var(--color-texto-dim);
 }

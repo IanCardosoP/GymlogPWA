@@ -5,6 +5,7 @@ import {
   normalizarTexto, buscarEnCatalogo, mejorMatch, candidatosMatch, equiposDeCatalogo,
   _inyectarCatalogo, _inyectarInstrucciones,
   buscarCatalogo, sugerirMatch, getCandidatos, getEntradaCatalogo, getInstrucciones,
+  rutasImagenCatalogo,
 } from '../js/catalogo.js';
 
 // Catálogo real generado en public/assets — los tests validan contra los datos
@@ -45,6 +46,24 @@ describe('catálogo real (integridad del asset)', () => {
     for (const pasos of Object.values(instrucciones)) {
       for (const p of pasos) expect(p.trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('rutasImagenCatalogo', () => {
+  // La tarjeta del Diario deriva sus miniaturas del catalogo_id en vez de
+  // descargar catalogo.json (275 KB). Si el generador cambia el naming, esto
+  // cae aquí en vez de dejar imágenes rotas en producción.
+  it('coincide con imagen_a/imagen_b de todas las entradas del catálogo', () => {
+    for (const e of CATALOGO) {
+      const rutas = rutasImagenCatalogo(e.fuente_id);
+      expect(rutas, e.fuente_id).toEqual({ a: e.imagen_a, b: e.imagen_b });
+    }
+  });
+
+  it('devuelve null sin fuente_id (ejercicio sin vínculo al catálogo)', () => {
+    expect(rutasImagenCatalogo(null)).toBeNull();
+    expect(rutasImagenCatalogo('')).toBeNull();
+    expect(rutasImagenCatalogo(undefined)).toBeNull();
   });
 });
 

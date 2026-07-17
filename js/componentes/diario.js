@@ -15,7 +15,7 @@ import {
   updateEjercicioNombre, deleteEjercicio, removeEjercicioDeRutina,
   linkEjercicioToRutina, reordenarEjercicios,
 } from '../db.js';
-import { getCandidatos, getInstrucciones, getEntradaCatalogo } from '../catalogo.js';
+import { getCandidatos, getInstrucciones, getEntradaCatalogo, rutasImagenCatalogo } from '../catalogo.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
 
@@ -245,6 +245,30 @@ function actualizarConectores(filaWrapper) {
 }
 
 
+// Miniatura del catálogo o, sin vínculo, el número de orden. Ocupa el mismo
+// espacio en ambos casos para que el nombre alinee en toda la lista.
+function construirMarca(ej, idx) {
+  const marca = cel('span', 'ejercicio-marca');
+  const rutas = rutasImagenCatalogo(ej.catalogo_id);
+
+  if (!rutas) {
+    marca.appendChild(cel('span', 'ejercicio-num', `${idx + 1}.`));
+    return marca;
+  }
+
+  marca.classList.add('catalogo-thumb');
+  for (const [src, clase] of [[rutas.a, 'catalogo-thumb-a'], [rutas.b, 'catalogo-thumb-b']]) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = ''; // decorativa: el nombre del ejercicio va al lado
+    img.decoding = 'async';
+    img.loading = 'lazy';
+    img.className = clase;
+    marca.appendChild(img);
+  }
+  return marca;
+}
+
 // Construcción DOM síncrona — recibe datos ya cargados, no hace queries
 function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
   const details = document.createElement('details');
@@ -260,8 +284,7 @@ function construirBloque(ej, idx, sesion, { seriesHoy = [], ref = null } = {}) {
     nombreSpan.dataset.reId   = ej.id;
     nombreSpan.dataset.ejId   = ej.ejercicio_id;
     nombreSpan.dataset.nombre = ej.nombre;
-    const numSpan = cel('span', 'ejercicio-num', `${idx + 1}. `);
-    summary.appendChild(numSpan);
+    summary.appendChild(construirMarca(ej, idx));
   } else {
     nombreSpan.classList.add('is-acento');
   }
