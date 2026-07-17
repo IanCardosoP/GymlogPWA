@@ -28,10 +28,22 @@ self.addEventListener('fetch', event => {
       return fetch(event.request).then(response => {
         if (response.ok && response.type !== 'opaque') {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+          // waitUntil: si el navegador mata el SW antes de terminar el put,
+          // la entrada quedaría a medias (visto en Safari/iOS, que es agresivo).
+          event.waitUntil(caches.open(CACHE_NAME).then(c => c.put(event.request, clone)));
         }
         return response;
-      }).catch(() => caches.match(self.registration.scope));
+      }).catch(() => {
+        // Solo la navegación cae al shell de la SPA. Devolver el index.html a un
+        // <img>/JSON fallido lo dejaría "cargado" con cuerpo HTML → imagen en
+        // blanco sin reintento (síntoma real en Safari/iOS, cuyos fetch dentro
+        // del SW fallan de forma intermitente).
+        if (event.request.mode === 'navigate') {
+          return caches.match(self.registration.scope)
+            .then(shell => shell ?? Response.error());
+        }
+        return Response.error();
+      });
     })
   );
 });

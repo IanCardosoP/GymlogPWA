@@ -723,6 +723,8 @@ async function handleDetalles(btnEdit, state) {
     imgB.src = entrada.imagen_b;
     imgA.alt = '';
     imgB.alt = '';
+    imgA.decoding = 'async';
+    imgB.decoding = 'async';
     imgA.className = 'catalogo-thumb-a';
     imgB.className = 'catalogo-thumb-b';
     btnImg.appendChild(imgA);

@@ -19,6 +19,8 @@ function construirImagen(entrada) {
   imgB.src = entrada.imagen_b;
   imgA.alt = '';
   imgB.alt = '';
+  imgA.decoding = 'async';
+  imgB.decoding = 'async';
   imgA.className = 'catalogo-thumb-a';
   imgB.className = 'catalogo-thumb-b';
   wrap.appendChild(imgA);
