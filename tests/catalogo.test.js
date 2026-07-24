@@ -5,7 +5,7 @@ import {
   normalizarTexto, buscarEnCatalogo, mejorMatch, candidatosMatch, equiposDeCatalogo,
   _inyectarCatalogo, _inyectarInstrucciones,
   buscarCatalogo, sugerirMatch, getCandidatos, getEntradaCatalogo, getInstrucciones,
-  rutasImagenCatalogo,
+  rutasImagenCatalogo, urlsParaWarming,
 } from '../js/catalogo.js';
 
 // Catálogo real generado en public/assets — los tests validan contra los datos
@@ -64,6 +64,53 @@ describe('rutasImagenCatalogo', () => {
     expect(rutasImagenCatalogo(null)).toBeNull();
     expect(rutasImagenCatalogo('')).toBeNull();
     expect(rutasImagenCatalogo(undefined)).toBeNull();
+  });
+});
+
+describe('urlsParaWarming', () => {
+  // Alimenta tanto el warming automático (app.js, filas de getRutinaEjercicios)
+  // como la descarga manual del catálogo completo (config.js, catalogo.json
+  // mapeado a {catalogo_id: fuente_id}) — de ahí que solo dependa de esa forma.
+
+  it('produce el par _0.webp/_1.webp por cada catalogo_id, en el mismo orden que rutasImagenCatalogo', () => {
+    const urls = urlsParaWarming([{ catalogo_id: 'Leg_Press' }]);
+    const rutas = rutasImagenCatalogo('Leg_Press');
+    expect(urls).toEqual([rutas.a, rutas.b]);
+  });
+
+  it('deduplica filas con el mismo catalogo_id', () => {
+    const urls = urlsParaWarming([
+      { catalogo_id: 'Leg_Press' },
+      { catalogo_id: 'Leg_Press' },
+      { catalogo_id: 'Leg_Press' },
+    ]);
+    expect(urls.length).toBe(2);
+  });
+
+  it('ignora filas sin catalogo_id (ejercicio sin vínculo al catálogo)', () => {
+    const urls = urlsParaWarming([
+      { catalogo_id: null },
+      { catalogo_id: undefined },
+      { catalogo_id: '' },
+      {},
+    ]);
+    expect(urls).toEqual([]);
+  });
+
+  it('combina varias rutinas: dedup entre filas de distinta rutina, orden estable', () => {
+    const filasRutina1 = [{ catalogo_id: 'Leg_Press' }, { catalogo_id: 'Butterfly' }];
+    const filasRutina2 = [{ catalogo_id: 'Butterfly' }, { catalogo_id: 'Bench_Press' }];
+    const urls = urlsParaWarming([...filasRutina1, ...filasRutina2]);
+
+    expect(urls).toEqual([
+      ...Object.values(rutasImagenCatalogo('Leg_Press')),
+      ...Object.values(rutasImagenCatalogo('Butterfly')),
+      ...Object.values(rutasImagenCatalogo('Bench_Press')),
+    ]);
+  });
+
+  it('lista vacía sin lanzar', () => {
+    expect(urlsParaWarming([])).toEqual([]);
   });
 });
 

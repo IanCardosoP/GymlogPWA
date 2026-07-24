@@ -190,6 +190,26 @@ export function rutasImagenCatalogo(fuenteId) {
   };
 }
 
+// Helper puro para el warming de caché offline (app.js) y la descarga manual
+// del catálogo (componentes/config.js): a partir de filas con `catalogo_id`
+// (p. ej. las de getRutinaEjercicios, o el propio catalogo.json mapeado a
+// {catalogo_id: fuente_id}), deduplica y arma la lista plana de rutas de
+// imagen relativas a precachear. Ignora filas sin vínculo al catálogo. Cero
+// red, cero DOM — solo arma la lista; quien la llama hace el fetch.
+export function urlsParaWarming(filas) {
+  const vistos = new Set();
+  const urls = [];
+  for (const fila of filas) {
+    const catalogoId = fila?.catalogo_id;
+    if (!catalogoId || vistos.has(catalogoId)) continue;
+    vistos.add(catalogoId);
+    const rutas = rutasImagenCatalogo(catalogoId);
+    if (!rutas) continue;
+    urls.push(rutas.a, rutas.b);
+  }
+  return urls;
+}
+
 // ── Wrappers sobre el catálogo cacheado (para la capa de UI) ─────────────────
 
 export async function buscarCatalogo(opciones = {}) {

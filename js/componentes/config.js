@@ -9,7 +9,7 @@ import {
   getEjerciciosPendientesRevision, vincularEjercicioCatalogo, descartarSugerenciaCatalogo,
 } from '../db.js';
 import { exportarBackup, importarBackup } from '../csv.js';
-import { getCandidatos } from '../catalogo.js';
+import { getCandidatos, urlsParaWarming } from '../catalogo.js';
 import { abrirPreviewEjercicio } from './previewModal.js';
 
 const ACENTOS_LABELS = {
@@ -147,6 +147,21 @@ export async function render(state) {
     'Borra el caché del navegador y recarga la versión más reciente de la app.'));
   const btnActualizar = cel('button', 'btn-actualizar-app', '[ ↻ ACTUALIZAR APP ]');
   secApp.appendChild(btnActualizar);
+  const actualizarFeedback = cel('p', 'resultado-importacion');
+  secApp.appendChild(actualizarFeedback);
+
+  secApp.appendChild(cel('hr', 'config-separador'));
+
+  secApp.appendChild(cel('p', 'reset-advertencia',
+    'Descarga las imágenes de los 873 ejercicios del catálogo para tenerlas ' +
+    'disponibles sin conexión. También sirve para traer ejercicios nuevos ' +
+    'que se hayan publicado.'));
+  const btnDescargarCatalogo = cel('button', 'btn-descargar-catalogo',
+    '[ ⇩ DESCARGAR CATÁLOGO PARA OFFLINE (≈9 MB) ]');
+  secApp.appendChild(btnDescargarCatalogo);
+  const catalogoFeedback = cel('p', 'resultado-importacion');
+  secApp.appendChild(catalogoFeedback);
+
   container.appendChild(secApp);
 
   // ── 5. Gestión de datos ──────────────────────────────────────────────────
@@ -230,7 +245,9 @@ export async function render(state) {
   footer.appendChild(versionNode);
   if ('caches' in window) {
     caches.keys().then(keys => {
-      const v = keys.find(k => k.startsWith('gymlog')) ?? 'gymlog';
+      // Solo la caché de shell versionada — nunca gymlog-catalogo, que no
+      // representa la versión de la app.
+      const v = keys.find(k => k.startsWith('gymlog-v')) ?? 'gymlog';
       versionNode.nodeValue = `${v}-wasm | DB: idb://gym-log-db (Postgres)`;
     });
   }
@@ -392,15 +409,88 @@ export async function render(state) {
   });
 
   btnActualizar.addEventListener('click', async () => {
+    actualizarFeedback.textContent = '';
+
+    // Comprobación real de conectividad (navigator.onLine no basta: puede
+    // reportar true con red presente pero sin salida real). Sin red, borrar
+    // la caché del shell dejaría la app sin nada que servir hasta la próxima
+    // conexión — mejor abortar y avisar.
+    let hayRed = true;
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}sw.js`, { method: 'HEAD', cache: 'no-store' });
+      hayRed = res.ok;
+    } catch {
+      hayRed = false;
+    }
+    if (!hayRed) {
+      actualizarFeedback.textContent = 'Sin conexión: no se puede comprobar la versión más reciente.';
+      return;
+    }
+
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      // Solo el shell versionado — gymlog-catalogo (imágenes del catálogo)
+      // jamás se borra desde aquí.
+      await Promise.all(
+        keys.filter(k => k.startsWith('gymlog-v')).map(k => caches.delete(k))
+      );
+    }
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map(r => r.update()));
     }
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    }
     location.reload();
+  });
+
+  btnDescargarCatalogo.addEventListener('click', async () => {
+    if (!navigator.onLine) {
+      catalogoFeedback.textContent = 'Sin conexión: conéctate para descargar el catálogo.';
+      return;
+    }
+
+    btnDescargarCatalogo.disabled = true;
+    catalogoFeedback.textContent = 'Descargando catálogo...';
+
+    try {
+      const base = import.meta.env.BASE_URL;
+      // cache: 'reload' fuerza red y hace que el Service Worker refresque las
+      // entradas en gymlog-catalogo — así este botón también actualiza el
+      // catálogo cuando se publican ejercicios nuevos, no solo la primera vez.
+      const [resCatalogo, resInstrucciones] = await Promise.all([
+        fetch(`${base}assets/catalogo/catalogo.json`, { cache: 'reload' }),
+        fetch(`${base}assets/catalogo/instrucciones.json`, { cache: 'reload' }),
+      ]);
+      if (!resCatalogo.ok || !resInstrucciones.ok) {
+        throw new Error('respuesta no-ok al pedir el catálogo');
+      }
+      const catalogo = await resCatalogo.json();
+
+      const urls = urlsParaWarming(catalogo.map(e => ({ catalogo_id: e.fuente_id })));
+      const total = urls.length;
+      let hechas = 0;
+      let fallidas = 0;
+      const TAMANO_LOTE = 10;
+
+      for (let i = 0; i < urls.length; i += TAMANO_LOTE) {
+        const lote = urls.slice(i, i + TAMANO_LOTE);
+        const resultados = await Promise.allSettled(
+          lote.map(url => fetch(`${base}${url}`))
+        );
+        for (const r of resultados) {
+          if (r.status === 'fulfilled' && r.value.ok) hechas++;
+          else fallidas++;
+        }
+        catalogoFeedback.textContent = `Descargando imágenes: ${hechas + fallidas}/${total}`;
+      }
+
+      catalogoFeedback.textContent = fallidas === 0
+        ? `Catálogo listo para offline: ${hechas}/${total} imágenes.`
+        : `Catálogo descargado con errores: ${hechas}/${total} ok, ${fallidas} fallidas.`;
+    } catch {
+      catalogoFeedback.textContent = 'Error al descargar el catálogo. Inténtalo de nuevo.';
+    } finally {
+      btnDescargarCatalogo.disabled = false;
+    }
   });
 
   btnElegir.addEventListener('click', () => inputArchivo.click());

@@ -1265,6 +1265,7 @@ input.is-saved::placeholder {
 .btn-exportar-csv,
 .btn-importar-csv,
 .btn-actualizar-app,
+.btn-descargar-catalogo,
 .btn-elegir-archivo {
   display: block;
   width: 100%;
@@ -1284,9 +1285,15 @@ input.is-saved::placeholder {
 .btn-exportar-csv:hover,
 .btn-importar-csv:hover,
 .btn-actualizar-app:hover,
+.btn-descargar-catalogo:hover,
 .btn-elegir-archivo:hover {
   background-color: var(--color-acento);
   color: var(--color-fondo);
+}
+
+.btn-descargar-catalogo:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Input nativo oculto — sustituido por btn-elegir-archivo */
@@ -1482,6 +1489,7 @@ details:not(.metrica-info) > summary:hover {
 .btn-exportar-csv:active,
 .btn-importar-csv:active,
 .btn-actualizar-app:active,
+.btn-descargar-catalogo:active,
 .btn-elegir-archivo:active,
 .btn-donar-btc:active,
 .btn-fin-volver:active,
@@ -1543,6 +1551,7 @@ details:not(.metrica-info) > summary:hover {
 .btn-exportar-csv,
 .btn-importar-csv,
 .btn-actualizar-app,
+.btn-descargar-catalogo,
 .btn-elegir-archivo,
 .btn-donar-btc,
 .btn-fin-volver,

@@ -1,5 +1,6 @@
 // Orquestador principal: Store global, dispatch, routing SPA por manipulación del DOM
 import { registrarUso } from './telemetria.js';
+import { urlsParaWarming } from './catalogo.js';
 
 const TABS = ['diario', 'progreso', 'config'];
 
@@ -67,6 +68,34 @@ function bindNav() {
   });
 }
 
+// Warming best-effort de la caché de imágenes del catálogo: tras abrir el
+// Diario, si hay red, precalienta en segundo plano las miniaturas de todos
+// los ejercicios de todas las rutinas del usuario (no solo las visibles). El
+// Service Worker las cachea al pasar (gymlog-catalogo) — así quedan
+// disponibles offline aunque el usuario nunca haya llegado a verlas en
+// pantalla. Fire-and-forget: nunca bloquea la UI, errores silenciosos.
+function calentarCacheImagenesCatalogo(getRutinas, getRutinaEjercicios) {
+  if (!navigator.onLine) return;
+
+  const idle = typeof requestIdleCallback === 'function'
+    ? requestIdleCallback
+    : cb => setTimeout(cb, 1000);
+
+  idle(async () => {
+    try {
+      const rutinas = await getRutinas();
+      const filasPorRutina = await Promise.all(
+        rutinas.map(r => getRutinaEjercicios(r.id))
+      );
+      const urls = urlsParaWarming(filasPorRutina.flat());
+      const base = import.meta.env.BASE_URL;
+      await Promise.allSettled(urls.map(url => fetch(`${base}${url}`)));
+    } catch {
+      // best-effort: red intermitente, DB no lista, etc. — sin romper la app.
+    }
+  });
+}
+
 export async function initApp() {
   const [{ render: renderDiario }, { render: renderProgreso }, { render: renderConfig }] =
     await Promise.all([
@@ -79,7 +108,8 @@ export async function initApp() {
   RENDERS['progreso'] = renderProgreso;
   RENDERS['config']  = renderConfig;
 
-  const { initDB, getConf, getOrCreateDeviceId } = await import('./db.js');
+  const { initDB, getConf, getOrCreateDeviceId, getRutinas, getRutinaEjercicios } =
+    await import('./db.js');
   await initDB('idb://gym-log-db');
   const conf = await getConf();
   store.prefUnit  = conf.pref_unit;
@@ -89,6 +119,8 @@ export async function initApp() {
 
   bindNav();
   navigateTo('diario');
+
+  calentarCacheImagenesCatalogo(getRutinas, getRutinaEjercicios); // fire-and-forget
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -96,6 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
       navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js');
     }
+    // Pide almacenamiento persistente: sin esto, el navegador puede purgar la
+    // caché del catálogo (gymlog-catalogo, ~9 MB) bajo presión de espacio,
+    // justo el bug que motivó separar las cachés. Fire-and-forget: el
+    // navegador decide, y optional chaining degrada en silencio donde no existe.
+    navigator.storage?.persist?.();
     // Feedback háptico de keycap en todo botón (patrón Terminal CLI de la skill).
     // navigator.vibrate no existe en iOS/desktop → optional chaining degrada en silencio.
     document.addEventListener('click', e => {
