@@ -33,13 +33,37 @@ describe('public/sw.js (checks estáticos)', () => {
   });
 
   it('install() precachea el shell dentro de waitUntil antes de skipWaiting', () => {
-    expect(fuente).toMatch(/event\.waitUntil\(\s*caches\.open\(CACHE_NAME\)/);
+    expect(fuente).toMatch(/event\.waitUntil\(\s*Promise\.all\(\[\s*caches\.open\(CACHE_NAME\)/);
     expect(fuente).toContain('cache.addAll(PRECACHE)');
     expect(fuente).toContain('.then(() => self.skipWaiting())');
   });
 
-  it('solo intercepta peticiones GET', () => {
+  it('install() siembra catalogo.json e instrucciones.json en gymlog-catalogo (buscador offline sin haber abierto el picker antes)', () => {
+    expect(fuente).toContain('function sembrarCatalogo()');
+    expect(fuente).toMatch(/event\.waitUntil\(\s*Promise\.all\(\[[\s\S]*?sembrarCatalogo\(\)/);
+    // Construidas desde el scope del registro, no desde PRECACHE (ese es solo shell)
+    expect(fuente).toMatch(/\$\{self\.registration\.scope\}assets\/catalogo\/catalogo\.json/);
+    expect(fuente).toMatch(/\$\{self\.registration\.scope\}assets\/catalogo\/instrucciones\.json/);
+    // No debe re-bajar lo que ya está: primero cache.match, y solo si no hay nada, fetch
+    const cuerpoSiembra = fuente.slice(fuente.indexOf('function sembrarCatalogo'));
+    const idxMatch = cuerpoSiembra.indexOf('cache.match(url)');
+    const idxFetch = cuerpoSiembra.indexOf('fetch(url)');
+    expect(idxMatch).toBeGreaterThan(-1);
+    expect(idxFetch).toBeGreaterThan(idxMatch);
+    // Tolerante a fallos: un .catch() en la cadena de siembra, para no abortar
+    // el precache del shell si la red falla en el install.
+    expect(cuerpoSiembra).toMatch(/\.catch\(\(\) => \{\}\)/);
+  });
+
+  it('solo intercepta peticiones GET y esquemas http (ignora chrome-extension:// y similares)', () => {
     expect(fuente).toMatch(/event\.request\.method !== 'GET'/);
+    expect(fuente).toMatch(/event\.request\.url\.startsWith\('http'\)/);
+    // El guard de esquema debe estar ANTES del ruteo por pathname (new URL(...)),
+    // si no, sigue rompiendo el put() con chrome-extension:// antes de llegar acá.
+    const idxGuardScheme = fuente.indexOf("event.request.url.startsWith('http')");
+    const idxNewURL = fuente.indexOf('new URL(event.request.url)');
+    expect(idxGuardScheme).toBeGreaterThan(-1);
+    expect(idxGuardScheme).toBeLessThan(idxNewURL);
   });
 
   it('el fallback de shell solo aplica a navegaciones (mode === "navigate")', () => {

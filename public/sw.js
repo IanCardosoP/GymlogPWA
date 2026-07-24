@@ -29,14 +29,42 @@ const esDatoCatalogo = pathname =>
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE))
-      // skipWaiting SOLO tras completar el addAll: si el precache del shell
-      // falla a medias, el SW nuevo no toma control con una caché incompleta
-      // (evita la pantalla en blanco que motivó este rediseño).
-      .then(() => self.skipWaiting())
+    Promise.all([
+      caches.open(CACHE_NAME)
+        .then(cache => cache.addAll(PRECACHE))
+        // skipWaiting SOLO tras completar el addAll: si el precache del shell
+        // falla a medias, el SW nuevo no toma control con una caché incompleta
+        // (evita la pantalla en blanco que motivó este rediseño).
+        .then(() => self.skipWaiting()),
+      sembrarCatalogo(),
+    ])
   );
 });
+
+// catalogo.json / instrucciones.json (~800 KB) sembrados en el install para
+// que el buscador del catálogo funcione offline aunque el usuario NUNCA haya
+// abierto el picker con red — el warming de app.js solo cubre imágenes, y
+// stale-while-revalidate solo cachea lo que ya se pidió al menos una vez.
+// Solo si no están ya en gymlog-catalogo: no tiene sentido re-bajar ~800 KB
+// en cada deploy, ya que esta caché persiste entre versiones (no la borra
+// activate). Tolerante a fallos: si la red falla acá, el precache del shell
+// sigue su curso igual — el SWR normal los repone en cuanto haya red.
+function sembrarCatalogo() {
+  const urls = [
+    `${self.registration.scope}assets/catalogo/catalogo.json`,
+    `${self.registration.scope}assets/catalogo/instrucciones.json`,
+  ];
+  return caches.open(CATALOGO_CACHE)
+    .then(cache => Promise.all(urls.map(url =>
+      cache.match(url).then(cached => {
+        if (cached) return;
+        return fetch(url)
+          .then(response => { if (response.ok) return cache.put(url, response); })
+          .catch(() => {});
+      })
+    )))
+    .catch(() => {});
+}
 
 self.addEventListener('activate', event => {
   event.waitUntil(
@@ -55,6 +83,11 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return; // beacons POST (telemetría) pasan directo a la red
+  // Extensiones del navegador (chrome-extension://, moz-extension://, etc.)
+  // interceptadas por el propio SW: Cache.put() lanza TypeError con esos
+  // esquemas ("Request scheme 'chrome-extension' is unsupported"). No son
+  // peticiones nuestras — directo a la red, sin respondWith.
+  if (!event.request.url.startsWith('http')) return;
 
   const { pathname } = new URL(event.request.url);
 
