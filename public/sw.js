@@ -93,8 +93,26 @@ function cacheFirstPuro(event, cacheName) {
 // catalogo.json / instrucciones.json sí cambian (nuevos ejercicios): se sirve
 // la caché al instante si existe y se refresca en segundo plano para la
 // próxima vez — nunca bloquea la respuesta esperando a la red.
+//
+// Excepción: si quien pide el recurso puso cache:'reload' (o 'no-store' /
+// 'no-cache') — el botón «Descargar catálogo» de config.js, precisamente
+// para traer ejercicios nuevos que el PM haya publicado — se invierte a
+// network-first: la respuesta que recibe el llamador ES la de red (no la
+// copia vieja), y de paso se refresca gymlog-catalogo igual. Si la red
+// falla, cae a la copia cacheada en vez de romper.
 function staleWhileRevalidate(event, cacheName) {
   const { request } = event;
+
+  if (request.cache === 'reload' || request.cache === 'no-store' || request.cache === 'no-cache') {
+    return fetch(request).then(response => {
+      if (response.ok && response.type !== 'opaque') {
+        const clone = response.clone();
+        event.waitUntil(caches.open(cacheName).then(c => c.put(request, clone)));
+      }
+      return response;
+    }).catch(() => caches.match(request).then(cached => cached ?? Response.error()));
+  }
+
   const enRed = fetch(request).then(response => {
     if (response.ok && response.type !== 'opaque') {
       const clone = response.clone();

@@ -57,4 +57,24 @@ describe('public/sw.js (checks estáticos)', () => {
     const ocurrencias = fuente.match(/event\.waitUntil\(caches\.open\(cacheName\)\.then\(c => c\.put\(request, clone\)\)\)/g);
     expect(ocurrencias?.length).toBeGreaterThanOrEqual(3); // cacheFirstPuro, staleWhileRevalidate, cacheFirstConFetch
   });
+
+  it('staleWhileRevalidate pasa a network-first cuando el llamador pide cache:"reload"/"no-store"/"no-cache"', () => {
+    // Ancla el fix del botón «Descargar catálogo»: sin esto, cache:'reload'
+    // desde config.js no bastaba para traer ejercicios nuevos en el primer
+    // clic, porque SWR seguía sirviendo la copia cacheada de inmediato.
+    const cuerpoSWR = fuente.slice(
+      fuente.indexOf('function staleWhileRevalidate'),
+      fuente.indexOf('function cacheFirstConFetch')
+    );
+    expect(cuerpoSWR).toMatch(/request\.cache === 'reload'/);
+    expect(cuerpoSWR).toMatch(/request\.cache === 'no-store'/);
+    expect(cuerpoSWR).toMatch(/request\.cache === 'no-cache'/);
+    // El branch de red forzada debe devolver la respuesta de red, no la
+    // cacheada — fetch(request) antes que ningún caches.match/cached.
+    const idxCheck = cuerpoSWR.indexOf("request.cache === 'reload'");
+    const idxFetch = cuerpoSWR.indexOf('fetch(request)', idxCheck);
+    const idxCachesMatchPrevio = cuerpoSWR.lastIndexOf('caches.match(request)', idxFetch);
+    expect(idxFetch).toBeGreaterThan(idxCheck);
+    expect(idxCachesMatchPrevio).toBeLessThan(idxCheck);
+  });
 });
