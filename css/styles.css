@@ -226,9 +226,18 @@ details {
 
 /* Borde izquierdo de progreso — intensidad según series completadas */
 .ejercicio-bloque {
-  border-left-width: 4px;
+  border: none;
+  border-left: 4px solid transparent;
+  border-bottom: 1px solid var(--color-linea);
+  border-radius: 0;
+  margin-bottom: 0;
+  background: none;
   /* Base FLIP: los vecinos desplazados por el drag se asientan animados */
   transition: transform var(--dur-base) var(--ease-out);
+}
+
+.diario-lista > .ejercicio-bloque:last-child {
+  border-bottom: none;
 }
 
 /* Bloque levantado por long-press: sigue al dedo 1:1 (sin transición) */
@@ -241,6 +250,8 @@ details {
   border-left-color: var(--color-acento);
   cursor: grabbing;
   pointer-events: none;
+  background-color: var(--color-fondo-alt);
+  border-bottom-color: transparent;
 }
 
 /* Lista en modo arrastre: sin selección de texto durante el gesto */
@@ -252,12 +263,12 @@ details {
 .diario-skeleton {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 1px;
   padding: 16px 0;
 }
 .diario-skeleton-bloque {
-  height: 56px;
-  border-radius: 4px;
+  height: 88px;
+  border-radius: 0;
   background: linear-gradient(90deg, var(--skeleton-a) 25%, var(--skeleton-b) 50%, var(--skeleton-a) 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.2s infinite;
@@ -338,21 +349,50 @@ details > div {
   color: var(--color-acento);
 }
 
+/* Fila transparente fundida con el fondo, separada por hairline (ver
+   .ejercicio-bloque). Estado abierto: hairline + color acento, sin fondo. */
+.ejercicio-bloque > .ejercicio-summary {
+  background: none;
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  min-height: 56px;
+}
+
+.ejercicio-bloque > .ejercicio-summary:hover {
+  background-color: color-mix(in srgb, var(--color-acento) 4%, transparent);
+}
+
+.ejercicio-bloque[open] > .ejercicio-summary {
+  border-bottom: 1px solid var(--color-linea);
+  color: var(--color-acento);
+}
+
 /* Marca de la tarjeta: miniatura del catálogo (añade .catalogo-thumb) o, si el
    ejercicio no tiene vínculo, su número. Tamaño fijo para que el nombre alinee
    en ambos casos. */
 .ejercicio-marca,
 .ejercicio-marca.catalogo-thumb { /* gana al 48px por defecto de .catalogo-thumb */
-  width: 40px;
-  height: 40px;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.ejercicio-marca:not(.catalogo-thumb) {
+  background-color: var(--color-fondo-alt);
+  border-radius: 8px;
+}
+
 .ejercicio-num {
   color: var(--color-texto-dim);
+  font-size: var(--fs-body-lg);
+}
+
+.ejercicio-bloque .ejercicio-nombre {
+  font-size: var(--fs-body-lg);
+  line-height: 1.35;
 }
 
 .ejercicio-nombre {
@@ -517,6 +557,48 @@ input.is-saved::placeholder {
 .btn-delete-serie:active,
 .btn-delete:active {
   background-color: var(--color-peligro);
+  color: var(--color-fondo);
+}
+
+/* Botones ghost del Diario (summary y cuerpo de series): borde invisible en
+   reposo, glifo atenuado. La zona táctil 44×44 del ::after no cambia. Al
+   presionar se re-afirma la inversión completa de keycap (misma especificidad
+   que los :active de arriba; estas reglas van DESPUÉS para ganar el empate
+   por orden, y además llevan mayor especificidad por el scope). */
+.ejercicio-summary .btn-edit,
+.ejercicio-summary .btn-delete,
+.serie-filas .btn-guardar,
+.serie-filas .btn-delete-serie {
+  border-color: transparent;
+}
+.ejercicio-summary .btn-edit,
+.serie-filas .btn-guardar {
+  color: color-mix(in srgb, var(--color-acento) 70%, transparent);
+}
+.ejercicio-summary .btn-delete,
+.serie-filas .btn-delete-serie {
+  color: color-mix(in srgb, var(--color-peligro) 60%, transparent);
+}
+.ejercicio-summary .btn-edit:hover,
+.serie-filas .btn-guardar:hover {
+  border-color: color-mix(in srgb, var(--color-acento) 55%, transparent);
+  color: var(--color-acento);
+}
+.ejercicio-summary .btn-delete:hover,
+.serie-filas .btn-delete-serie:hover {
+  border-color: color-mix(in srgb, var(--color-peligro) 55%, transparent);
+  color: var(--color-peligro);
+}
+.ejercicio-summary .btn-edit:active,
+.serie-filas .btn-guardar:active {
+  background-color: var(--color-acento);
+  border-color: var(--color-acento);
+  color: var(--color-fondo);
+}
+.ejercicio-summary .btn-delete:active,
+.serie-filas .btn-delete-serie:active {
+  background-color: var(--color-peligro);
+  border-color: var(--color-peligro);
   color: var(--color-fondo);
 }
 
