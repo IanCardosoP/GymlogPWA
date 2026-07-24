@@ -56,7 +56,10 @@ function sembrarCatalogo() {
   ];
   return caches.open(CATALOGO_CACHE)
     .then(cache => Promise.all(urls.map(url =>
-      cache.match(url).then(cached => {
+      // ignoreVary: el fetch de acá va en modo cors (con header Origin); el
+      // <img>/fetch real de la página puede ir sin él (no-cors) — mismo
+      // motivo que el resto de .match() del archivo (ver nota en fetch).
+      cache.match(url, { ignoreVary: true }).then(cached => {
         if (cached) return;
         return fetch(url)
           .then(response => { if (response.ok) return cache.put(url, response); })
@@ -81,6 +84,15 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
+// Todas las llamadas a .match() de este archivo pasan { ignoreVary: true }.
+// Motivo: algunos hostings (vite preview/sirv, y potencialmente cualquiera)
+// responden con `Vary: Origin`. El fetch de cache.addAll() en install va en
+// modo cors y lleva header Origin; la petición real de un <img> de la página
+// va en no-cors, sin Origin → el algoritmo de Vary de la Cache API no
+// matchea esa entrada aunque la URL sea idéntica → miss en todo lo que solo
+// existe por precache (QR, íconos, y hasta el fallback del shell → pantalla
+// blanca). Para assets estáticos same-origin, Vary es irrelevante: ignorarlo
+// es el fix estándar.
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return; // beacons POST (telemetría) pasan directo a la red
   // Extensiones del navegador (chrome-extension://, moz-extension://, etc.)
@@ -109,7 +121,7 @@ self.addEventListener('fetch', event => {
 // shell (una imagen fallida no es una navegación).
 function cacheFirstPuro(event, cacheName) {
   const { request } = event;
-  return caches.match(request).then(cached => {
+  return caches.match(request, { ignoreVary: true }).then(cached => {
     if (cached) return cached;
     return fetch(request).then(response => {
       if (response.ok && response.type !== 'opaque') {
@@ -143,7 +155,7 @@ function staleWhileRevalidate(event, cacheName) {
         event.waitUntil(caches.open(cacheName).then(c => c.put(request, clone)));
       }
       return response;
-    }).catch(() => caches.match(request).then(cached => cached ?? Response.error()));
+    }).catch(() => caches.match(request, { ignoreVary: true }).then(cached => cached ?? Response.error()));
   }
 
   const enRed = fetch(request).then(response => {
@@ -154,13 +166,13 @@ function staleWhileRevalidate(event, cacheName) {
     return response;
   }).catch(() => null);
 
-  return caches.match(request).then(cached => cached ?? enRed.then(r => r ?? Response.error()));
+  return caches.match(request, { ignoreVary: true }).then(cached => cached ?? enRed.then(r => r ?? Response.error()));
 }
 
 // Resto del shell: cache-first con cache-on-fetch, como antes del split.
 function cacheFirstConFetch(event, cacheName) {
   const { request } = event;
-  return caches.match(request).then(cached => {
+  return caches.match(request, { ignoreVary: true }).then(cached => {
     if (cached) return cached;
     return fetch(request).then(response => {
       if (response.ok && response.type !== 'opaque') {
@@ -176,7 +188,7 @@ function cacheFirstConFetch(event, cacheName) {
       // blanco sin reintento (síntoma real en Safari/iOS, cuyos fetch dentro
       // del SW fallan de forma intermitente).
       if (request.mode === 'navigate') {
-        return caches.match(self.registration.scope)
+        return caches.match(self.registration.scope, { ignoreVary: true })
           .then(shell => shell ?? Response.error());
       }
       return Response.error();

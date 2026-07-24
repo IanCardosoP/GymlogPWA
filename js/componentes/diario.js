@@ -5,6 +5,10 @@ import { abrirCatalogoModal } from './catalogoModal.js';
 import { calculateEpley1RM } from '../analitico.js';
 import asciiFinArt  from '/icons/ascii-end.txt?raw';
 import motivArt     from '/icons/motiv.txt?raw';
+// Inlineado como data URI (555 B → ~740 B en el bundle) en vez de fetch en
+// runtime: blindaje contra el bug de Vary:Origin en Cache API (ignoreVary en
+// sw.js ya lo cubre, pero así el QR ni depende de la caché para pintar).
+import appUrlQr     from '/assets/appUrl.png?inline';
 import {
   getRutinas, getRutinasDias, getRutinaEjercicios,
   getSesionDelDia, saveSesion,
@@ -990,7 +994,7 @@ async function mostrarPantallaFin(container, sesion, rutinaHoy, ejercicios) {
 
   const cta = cel('div', 'fin-cta');
   const qr  = document.createElement('img');
-  qr.src    = import.meta.env.BASE_URL + 'assets/appUrl.png';
+  qr.src    = appUrlQr;
   qr.alt    = 'QR GymLog PWA';
   qr.className = 'fin-qr';
   cta.appendChild(qr);

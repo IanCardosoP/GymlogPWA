@@ -46,7 +46,7 @@ describe('public/sw.js (checks estáticos)', () => {
     expect(fuente).toMatch(/\$\{self\.registration\.scope\}assets\/catalogo\/instrucciones\.json/);
     // No debe re-bajar lo que ya está: primero cache.match, y solo si no hay nada, fetch
     const cuerpoSiembra = fuente.slice(fuente.indexOf('function sembrarCatalogo'));
-    const idxMatch = cuerpoSiembra.indexOf('cache.match(url)');
+    const idxMatch = cuerpoSiembra.indexOf('cache.match(url,');
     const idxFetch = cuerpoSiembra.indexOf('fetch(url)');
     expect(idxMatch).toBeGreaterThan(-1);
     expect(idxFetch).toBeGreaterThan(idxMatch);
@@ -68,7 +68,20 @@ describe('public/sw.js (checks estáticos)', () => {
 
   it('el fallback de shell solo aplica a navegaciones (mode === "navigate")', () => {
     expect(fuente).toContain("request.mode === 'navigate'");
-    expect(fuente).toContain('caches.match(self.registration.scope)');
+    expect(fuente).toContain('caches.match(self.registration.scope,');
+  });
+
+  it('todas las llamadas a .match() pasan { ignoreVary: true } (Vary: Origin de hostings + addAll cors vs página no-cors)', () => {
+    // El bug real: cache.addAll() en install pide en modo cors (header Origin);
+    // la petición de un <img>/fetch de la página puede ir sin él → el
+    // algoritmo de Vary de la Cache API no matchea la entrada precacheada
+    // aunque la URL sea idéntica. ignoreVary la vuelve irrelevante.
+    const llamadas = (fuente.match(/\.match\([^)]*\)/g) ?? [])
+      .filter(l => l !== '.match()'); // menciones en prosa dentro de comentarios
+    expect(llamadas.length).toBeGreaterThan(0);
+    for (const llamada of llamadas) {
+      expect(llamada, `sin ignoreVary: ${llamada}`).toContain('ignoreVary: true');
+    }
   });
 
   it('las imágenes del catálogo van cache-first puro; catalogo.json/instrucciones.json, stale-while-revalidate', () => {
@@ -97,7 +110,7 @@ describe('public/sw.js (checks estáticos)', () => {
     // cacheada — fetch(request) antes que ningún caches.match/cached.
     const idxCheck = cuerpoSWR.indexOf("request.cache === 'reload'");
     const idxFetch = cuerpoSWR.indexOf('fetch(request)', idxCheck);
-    const idxCachesMatchPrevio = cuerpoSWR.lastIndexOf('caches.match(request)', idxFetch);
+    const idxCachesMatchPrevio = cuerpoSWR.lastIndexOf('caches.match(request,', idxFetch);
     expect(idxFetch).toBeGreaterThan(idxCheck);
     expect(idxCachesMatchPrevio).toBeLessThan(idxCheck);
   });

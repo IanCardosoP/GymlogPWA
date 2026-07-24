@@ -69,15 +69,16 @@ function selloDeVersion() {
       // siempre acierte, aunque el usuario nunca haya pedido `index.html`.
       // Set: index.html se añade a mano (ver nota en generateBundle) y podría
       // duplicarse si una versión futura de Vite sí la incluyera en `bundle`.
-      // manifest.json, appUrl.png y los dos íconos vienen de public/ (no
-      // pasan por el bundle) pero SÍ se referencian en runtime — el QR del
-      // resumen de sesión (diario.js) y el manifest de instalación (PWA) los
-      // necesitan offline. icons/ascii-end.txt y motiv.txt quedan fuera: se
-      // inlinean en el bundle vía imports `?raw`, no se piden por red.
+      // manifest.json y los dos íconos vienen de public/ (no pasan por el
+      // bundle) pero SÍ se piden por red en runtime — el manifest de
+      // instalación (PWA) los referencia. assets/appUrl.png NO va acá:
+      // diario.js lo importa con `?inline` (data URI embebido en el JS del
+      // bundle), así que nunca se pide por red — el archivo en public/ solo
+      // queda como fuente del import, no como asset servido. icons/ascii-end.txt
+      // y motiv.txt quedan fuera por lo mismo: se inlinean vía `?raw`.
       const lista = [...new Set([
         BASE, `${BASE}index.html`, ...precacheDelShell,
         `${BASE}manifest.json`,
-        `${BASE}assets/appUrl.png`,
         `${BASE}icons/icon-192.svg`,
         `${BASE}icons/icon-512.svg`,
       ])];
