@@ -125,7 +125,12 @@ export async function initApp() {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof window !== 'undefined') {
-    if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
+    // Solo en build de producción. Antes el guard era `hostname !== 'localhost'`,
+    // pero `pnpm run dev` corre con --host justamente para probar en el móvil por
+    // IP de LAN: ahí el SW SÍ se registraba, con los placeholders del manifiesto
+    // sin sellar, y su install fallaba en bucle intentando cachear un string
+    // carácter por carácter. import.meta.env.PROD no depende del hostname.
+    if ('serviceWorker' in navigator && import.meta.env.PROD) {
       navigator.serviceWorker.register(import.meta.env.BASE_URL + 'sw.js');
     }
     // Pide almacenamiento persistente: sin esto, el navegador puede purgar la

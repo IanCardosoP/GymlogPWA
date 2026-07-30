@@ -1,45 +1,113 @@
-// Service Worker: dos cachés independientes.
-//  - CACHE_NAME     (gymlog-v<version>+<sha>): shell versionado por deploy —
-//    HTML, JS/CSS hasheados, fuentes. Se invalida entero en cada push a main
-//    (ver plugin `sello-de-version` en vite.config.js).
-//  - CATALOGO_CACHE (gymlog-catalogo): datos de referencia del catálogo de
-//    ejercicios (873 movimientos, ~9 MB de imágenes). SIN versión — sobrevive
-//    los deploys porque el contenido es de referencia estático: las imágenes
-//    son inmutables por nombre de archivo y catalogo.json/instrucciones.json
-//    se refrescan con stale-while-revalidate, nunca con un borrado completo.
-// Sin ASSETS_TO_CACHE hardcodeados para el resto del shell — compatible con
-// filenames hasheados de Vite; se cachean al vuelo en la primera carga
-// (cache-on-fetch), salvo lo listado en PRECACHE (ver abajo).
+// Service Worker: tres cachés, partidas por MUTABILIDAD del contenido.
+//
+//  - SHELL_CACHE  (gymlog-shell-v<version>+<sha>): los pocos recursos de nombre
+//    fijo cuyo contenido cambia en cada deploy — index.html, manifest.json,
+//    iconos. Son ~30 KB. Se borra entera en cada activate.
+//  - ASSETS_CACHE (gymlog-assets): TODO lo que Vite emite con hash de contenido
+//    en el nombre — JS, CSS, .wasm, .data, .woff2. Al llevar hash, son
+//    inmutables: una entrada existente ES la versión correcta. SIN versión, y
+//    activate() la PODA contra el manifiesto en vez de borrarla.
+//  - CATALOGO_CACHE (gymlog-catalogo): datos de referencia del catálogo (873
+//    movimientos, ~9 MB de imágenes). Sin versión; inmutables por nombre de
+//    archivo, y los JSON se refrescan con stale-while-revalidate.
+//
+// Por qué esta partición y no la anterior (shell versionado + catálogo):
+// el esquema viejo metía los 16.2 MB de artefactos de PGLite en la caché
+// versionada por deploy, y activate() la borraba en cada push a main porque el
+// sha cambia siempre. Si el usuario no completaba la re-descarga de esos 16 MB
+// con red, el arranque siguiente sin red moría en initDB() → pantalla en blanco
+// en iOS. Ahora esos bytes viven en gymlog-assets, sobreviven los deploys, y
+// solo se descargan cuando su hash cambia de verdad.
 
-// Dos placeholders los reemplaza el build (plugin `sello-de-version` en
-// vite.config.js): CACHE_NAME por «version de package.json + sha del commit»,
-// PRECACHE por el array JSON de URLs del shell a precachear. Nunca escribas
-// aquí un valor a mano: el build falla si cualquiera de los dos no está — es
+// Tres placeholders los reemplaza el build (plugin `sello-de-version` en
+// vite.config.js): __APP_VERSION__ por «version de package.json + sha del
+// commit», y los dos manifiestos por sus arrays JSON de URLs. Nunca escribas
+// aquí un valor a mano: el build falla si cualquiera de los tres no está — es
 // el seguro contra volver a fijarlos manualmente.
-// En `pnpm run dev` los literales quedan tal cual — inocuo, porque el SW no
-// se registra en localhost (ver app.js).
-const CACHE_NAME = 'gymlog-v__APP_VERSION__';
+// En un build sin sellar (desarrollo) quedan como strings: el guard de
+// `manifiestosSellados()` detecta eso y omite el precache en vez de intentar
+// cachear un string carácter por carácter.
+const SHELL_CACHE = 'gymlog-shell-v__APP_VERSION__';
+const ASSETS_CACHE = 'gymlog-assets';
 const CATALOGO_CACHE = 'gymlog-catalogo';
-const PRECACHE = '__PRECACHE_MANIFEST__';
+const PRECACHE_SHELL = '__PRECACHE_SHELL__';
+const PRECACHE_ASSETS = '__PRECACHE_ASSETS__';
 
 const esImagenCatalogo = pathname => pathname.includes('/assets/catalogo/img/');
 const esDatoCatalogo = pathname =>
   pathname.endsWith('/assets/catalogo/catalogo.json') ||
   pathname.endsWith('/assets/catalogo/instrucciones.json');
+// Todo lo que emite Rollup vive plano bajo `assets/` y lleva hash de contenido.
+// El catálogo cuelga de `assets/catalogo/` y tiene su propia caché, así que se
+// excluye explícitamente.
+const esAssetHasheado = pathname =>
+  pathname.includes('/assets/') && !pathname.includes('/assets/catalogo/');
+
+// Un build sin sellar deja los placeholders como strings. `cache.addAll(str)`
+// no falla ruidosamente: WebIDL convierte el string en secuencia por el
+// protocolo de iterador y intenta cachear una URL por carácter → 404 en cadena
+// → el install falla en bucle. Pasó de verdad con `pnpm dev --host` (ver el
+// guard de registro en js/app.js).
+const manifiestosSellados = () =>
+  Array.isArray(PRECACHE_SHELL) && Array.isArray(PRECACHE_ASSETS);
 
 self.addEventListener('install', event => {
   event.waitUntil(
     Promise.all([
-      caches.open(CACHE_NAME)
-        .then(cache => cache.addAll(PRECACHE))
-        // skipWaiting SOLO tras completar el addAll: si el precache del shell
-        // falla a medias, el SW nuevo no toma control con una caché incompleta
-        // (evita la pantalla en blanco que motivó este rediseño).
-        .then(() => self.skipWaiting()),
+      // skipWaiting SOLO tras completar el precache: si falla a medias, el SW
+      // nuevo no toma control con una caché incompleta y el SW viejo sigue
+      // sirviendo su copia completa. Reintenta en la visita siguiente. Es el
+      // modo de fallo seguro, y es deliberado (evita la pantalla en blanco).
+      precachear().then(() => self.skipWaiting()),
       sembrarCatalogo(),
     ])
   );
 });
+
+async function precachear() {
+  if (!manifiestosSellados()) {
+    console.warn('[sw] manifiestos sin sellar (build de desarrollo): se omite el precache');
+    return;
+  }
+  // El shell son ~30 KB de nombre fijo: addAll atómico, tiene que entrar entero.
+  const shell = await caches.open(SHELL_CACHE);
+  await shell.addAll(PRECACHE_SHELL);
+  await precachearAssets();
+}
+
+// Los assets se precachean ENTRADA POR ENTRADA, no con un addAll único.
+// Motivo: addAll es todo-o-nada, y acá hay ~17 MB (el motor de la base pesa
+// 16.2). En red móvil un fallo puntual tiraría el lote completo. Además:
+//  - se salta lo que ya está cacheado → un deploy que no cambia PGLite hace
+//    CERO red para esos 16 MB (es el objetivo de toda esta partición);
+//  - un reintento por entrada absorbe los fallos intermitentes de fetch dentro
+//    del SW, que en Safari/iOS son frecuentes.
+// Si algo queda fuera igualmente, lanza: skipWaiting() no corre y el SW viejo
+// (con su caché completa) sigue a cargo.
+async function precachearAssets() {
+  const cache = await caches.open(ASSETS_CACHE);
+  const fallos = [];
+
+  await Promise.all(PRECACHE_ASSETS.map(async url => {
+    // Hash de contenido en el nombre ⇒ si está, es la versión correcta.
+    if (await cache.match(url, { ignoreVary: true })) return;
+
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        const respuesta = await fetch(url);
+        if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+        await cache.put(url, respuesta);
+        return;
+      } catch {
+        if (intento === 1) fallos.push(url);
+      }
+    }
+  }));
+
+  if (fallos.length > 0) {
+    throw new Error(`precache incompleto, ${fallos.length} assets sin cachear: ${fallos.join(', ')}`);
+  }
+}
 
 // catalogo.json / instrucciones.json (~800 KB) sembrados en el install para
 // que el buscador del catálogo funcione offline aunque el usuario NUNCA haya
@@ -70,19 +138,47 @@ function sembrarCatalogo() {
 }
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys
-          // Solo cachés de shell versionadas. `gymlog-catalogo` NUNCA se toca
-          // aquí — es justo lo que la separa de la caché monolítica anterior.
-          .filter(k => k.startsWith('gymlog-v') && k !== CACHE_NAME)
-          .map(k => caches.delete(k))
-      )
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const vigentes = new Set([SHELL_CACHE, ASSETS_CACHE, CATALOGO_CACHE]);
+    const keys = await caches.keys();
+
+    // Borra los shells de deploys anteriores Y las cachés monolíticas legadas
+    // `gymlog-v<sello>` del esquema viejo (su contenido ya está repartido entre
+    // gymlog-shell-v* y gymlog-assets por el install de este mismo SW, que
+    // corre antes que activate). gymlog-assets y gymlog-catalogo están en
+    // `vigentes`, así que nunca entran acá.
+    await Promise.all(
+      keys.filter(k => k.startsWith('gymlog-') && !vigentes.has(k))
+        .map(k => caches.delete(k))
+    );
+
+    await podarAssets();
+    await self.clients.claim();
+  })());
 });
+
+// La diferencia que arregla el bug: gymlog-assets se PODA, no se borra. Se
+// eliminan solo las entradas que ya no están en el manifiesto de este build
+// (chunks de versiones anteriores). Todo lo que sigue vigente — empezando por
+// los 16.2 MB del motor, cuyo hash no cambia entre deploys — se queda donde
+// está y no se vuelve a pedir por red.
+async function podarAssets() {
+  if (!manifiestosSellados()) return;
+
+  const cache = await caches.open(ASSETS_CACHE);
+  // Comparación por pathname: el manifiesto trae rutas absolutas del sitio
+  // (`/GymlogPWA/assets/…`) y las Request cacheadas traen URL completa.
+  const vigentes = new Set(
+    PRECACHE_ASSETS.map(url => new URL(url, self.registration.scope).pathname)
+  );
+  const entradas = await cache.keys();
+
+  await Promise.all(
+    entradas
+      .filter(request => !vigentes.has(new URL(request.url).pathname))
+      .map(request => cache.delete(request))
+  );
+}
 
 // Todas las llamadas a .match() de este archivo pasan { ignoreVary: true }.
 // Motivo: algunos hostings (vite preview/sirv, y potencialmente cualquiera)
@@ -113,7 +209,12 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  event.respondWith(cacheFirstConFetch(event, CACHE_NAME));
+  // La lectura es global (caches.match busca en las tres); el destino del put
+  // sí tiene que ser la caché correcta, o un asset hasheado acabaría en el
+  // shell y se borraría en el deploy siguiente.
+  event.respondWith(
+    cacheFirstConFetch(event, esAssetHasheado(pathname) ? ASSETS_CACHE : SHELL_CACHE)
+  );
 });
 
 // Imágenes del catálogo: inmutables por nombre de archivo (el generador nunca
@@ -169,7 +270,7 @@ function staleWhileRevalidate(event, cacheName) {
   return caches.match(request, { ignoreVary: true }).then(cached => cached ?? enRed.then(r => r ?? Response.error()));
 }
 
-// Resto del shell: cache-first con cache-on-fetch, como antes del split.
+// Resto del shell y assets hasheados: cache-first con cache-on-fetch.
 function cacheFirstConFetch(event, cacheName) {
   const { request } = event;
   return caches.match(request, { ignoreVary: true }).then(cached => {

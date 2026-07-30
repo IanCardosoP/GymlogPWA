@@ -12,30 +12,100 @@ const fuente = readFileSync(SW_PATH, 'utf-8');
 describe('public/sw.js (checks estáticos)', () => {
   it('lleva el placeholder de versión __APP_VERSION__ sin sellar a mano', () => {
     expect(fuente).toContain('__APP_VERSION__');
-    expect(fuente).toContain("const CACHE_NAME = 'gymlog-v__APP_VERSION__';");
+    expect(fuente).toContain("const SHELL_CACHE = 'gymlog-shell-v__APP_VERSION__';");
   });
 
-  it('lleva el placeholder de precache __PRECACHE_MANIFEST__ sin sellar a mano', () => {
-    expect(fuente).toContain('__PRECACHE_MANIFEST__');
-    expect(fuente).toContain("const PRECACHE = '__PRECACHE_MANIFEST__';");
+  it('lleva los dos placeholders de precache sin sellar a mano', () => {
+    expect(fuente).toContain("const PRECACHE_SHELL = '__PRECACHE_SHELL__';");
+    expect(fuente).toContain("const PRECACHE_ASSETS = '__PRECACHE_ASSETS__';");
+  });
+
+  it('la caché de assets hasheados (gymlog-assets) NO lleva placeholder de versión', () => {
+    // Es el núcleo del arreglo: los assets de Vite llevan hash de contenido en
+    // el nombre, así que son inmutables y su caché debe sobrevivir los deploys.
+    // Si esta caché se versionara, activate() volvería a borrar los 16.2 MB del
+    // motor de la base en cada push a main → pantalla en blanco offline.
+    // Anclado a la DECLARACIÓN, no a un escaneo del archivo: los comentarios
+    // nombran las cachés y los placeholders en prosa y darían falso positivo.
+    const declarado = /^const ASSETS_CACHE = '([^']*)';$/m.exec(fuente);
+    expect(declarado?.[1]).toBe('gymlog-assets');
   });
 
   it('la caché del catálogo (gymlog-catalogo) es un literal fijo, sin placeholder de versión', () => {
-    expect(fuente).toContain("const CATALOGO_CACHE = 'gymlog-catalogo';");
     // Si el placeholder de versión apareciera pegado a este nombre, activate()
     // la trataría como una caché de shell y la borraría en cada deploy —
-    // justo lo que la separación de cachés existe para evitar.
-    expect(fuente).not.toMatch(/gymlog-catalogo[^'"]*__APP_VERSION__/);
+    // justo lo que la separación de cachés existe para evitar. Anclado a la
+    // DECLARACIÓN, no a un escaneo del archivo: los comentarios nombran las
+    // cachés y los placeholders en prosa y darían falso positivo.
+    const declarado = /^const CATALOGO_CACHE = '([^']*)';$/m.exec(fuente);
+    expect(declarado?.[1]).toBe('gymlog-catalogo');
   });
 
-  it('activate() solo borra cachés de shell versionadas (gymlog-v*), nunca gymlog-catalogo', () => {
-    expect(fuente).toMatch(/\.filter\(k => k\.startsWith\('gymlog-v'\) && k !== CACHE_NAME\)/);
+  it('activate() nunca borra gymlog-assets ni gymlog-catalogo (están en las vigentes)', () => {
+    expect(fuente).toMatch(
+      /const vigentes = new Set\(\[SHELL_CACHE, ASSETS_CACHE, CATALOGO_CACHE\]\)/
+    );
+    expect(fuente).toMatch(/\.filter\(k => k\.startsWith\('gymlog-'\) && !vigentes\.has\(k\)\)/);
   });
 
-  it('install() precachea el shell dentro de waitUntil antes de skipWaiting', () => {
-    expect(fuente).toMatch(/event\.waitUntil\(\s*Promise\.all\(\[\s*caches\.open\(CACHE_NAME\)/);
-    expect(fuente).toContain('cache.addAll(PRECACHE)');
-    expect(fuente).toContain('.then(() => self.skipWaiting())');
+  it('activate() PODA gymlog-assets contra el manifiesto, no la borra', () => {
+    // La diferencia exacta que arregla el bug. Con borrado completo, cada
+    // deploy tiraba los 16.2 MB del motor porque el sha del CACHE_NAME cambia
+    // en cada push. Con poda, solo se van las entradas que ya no están en el
+    // manifiesto: el hash del wasm no cambia entre deploys → se queda.
+    expect(fuente).toContain('async function podarAssets()');
+    expect(fuente).toMatch(/await podarAssets\(\)/);
+    const cuerpo = fuente.slice(fuente.indexOf('async function podarAssets()'));
+    // Poda = borrar por entrada lo que NO está vigente; jamás caches.delete de
+    // la caché entera.
+    expect(cuerpo).toMatch(/\.filter\(request => !vigentes\.has\(/);
+    expect(cuerpo).toMatch(/\.map\(request => cache\.delete\(request\)\)/);
+    expect(cuerpo).not.toContain('caches.delete(ASSETS_CACHE)');
+  });
+
+  it('install() precachea dentro de waitUntil y skipWaiting solo si el precache completó', () => {
+    expect(fuente).toMatch(
+      /event\.waitUntil\(\s*Promise\.all\(\[[\s\S]*?precachear\(\)\.then\(\(\) => self\.skipWaiting\(\)\)/
+    );
+    expect(fuente).toContain('await shell.addAll(PRECACHE_SHELL)');
+    expect(fuente).toContain('await precachearAssets()');
+  });
+
+  it('precachearAssets() se salta lo ya cacheado — un deploy no re-baja los 16 MB del motor', () => {
+    // El otro lado del arreglo: sin este skip, cada install volvería a pedir
+    // los 16.2 MB por red aunque ya estuvieran en gymlog-assets.
+    const cuerpo = fuente.slice(
+      fuente.indexOf('async function precachearAssets()'),
+      fuente.indexOf('function sembrarCatalogo()')
+    );
+    const idxMatch = cuerpo.indexOf('cache.match(url, { ignoreVary: true })');
+    const idxFetch = cuerpo.indexOf('await fetch(url)');
+    expect(idxMatch).toBeGreaterThan(-1);
+    expect(idxFetch).toBeGreaterThan(idxMatch);
+    // Y no un addAll único: 17 MB en todo-o-nada se caen enteros por un fallo
+    // puntual de red móvil.
+    expect(cuerpo).not.toContain('addAll');
+  });
+
+  it('un manifiesto sin sellar omite el precache en vez de cachear un string carácter por carácter', () => {
+    // `cache.addAll('__PRECACHE_SHELL__')` no falla ruidosamente: WebIDL itera
+    // el string y pide una URL por carácter → 404 en cadena → install en bucle.
+    // Pasó de verdad con `pnpm dev --host`.
+    expect(fuente).toContain('const manifiestosSellados = () =>');
+    expect(fuente).toMatch(/Array\.isArray\(PRECACHE_SHELL\) && Array\.isArray\(PRECACHE_ASSETS\)/);
+    expect(fuente).toMatch(/if \(!manifiestosSellados\(\)\)/);
+  });
+
+  it('los assets hasheados y el shell van a cachés distintas en el put', () => {
+    // La lectura es global (caches.match busca en las tres), pero el destino
+    // del put tiene que ser el correcto: un asset hasheado en la caché del
+    // shell se borraría en el deploy siguiente.
+    expect(fuente).toMatch(
+      /cacheFirstConFetch\(event, esAssetHasheado\(pathname\) \? ASSETS_CACHE : SHELL_CACHE\)/
+    );
+    expect(fuente).toMatch(
+      /esAssetHasheado = pathname =>\s*pathname\.includes\('\/assets\/'\) && !pathname\.includes\('\/assets\/catalogo\/'\)/
+    );
   });
 
   it('install() siembra catalogo.json e instrucciones.json en gymlog-catalogo (buscador offline sin haber abierto el picker antes)', () => {

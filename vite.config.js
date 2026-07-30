@@ -4,15 +4,22 @@ import { defineConfig } from 'vite';
 
 const BASE = '/GymlogPWA/';
 const PLACEHOLDER = '__APP_VERSION__';
-// El placeholder de precache va entrecomillado en public/sw.js (`const PRECACHE =
-// '__PRECACHE_MANIFEST__';`): se reemplaza el literal completo (comillas incluidas)
-// por un array JSON, no un fragmento dentro de otra cadena como __APP_VERSION__.
-const PRECACHE_PLACEHOLDER = "'__PRECACHE_MANIFEST__'";
+// Los placeholders de precache van entrecomillados en public/sw.js (`const
+// PRECACHE_SHELL = '__PRECACHE_SHELL__';`): se reemplaza el literal completo
+// (comillas incluidas) por un array JSON, no un fragmento dentro de otra cadena
+// como __APP_VERSION__.
+const SHELL_PLACEHOLDER  = "'__PRECACHE_SHELL__'";
+const ASSETS_PLACEHOLDER = "'__PRECACHE_ASSETS__'";
 const { version } = JSON.parse(readFileSync('./package.json', 'utf8'));
 
-// El sha hace que CADA deploy tenga un CACHE_NAME distinto aunque nadie suba la
-// versión semántica: es lo que garantiza que el Service Worker de los clientes
-// tire su caché vieja. La versión sola no basta — es justo lo que se olvida.
+// El sha hace que CADA deploy tenga un SHELL_CACHE distinto aunque nadie suba la
+// versión semántica: es lo que garantiza que los clientes tiren su copia vieja
+// de index.html. La versión sola no basta — es justo lo que se olvida.
+//
+// Ojo: esto aplica SOLO al shell. La caché de assets hasheados (gymlog-assets)
+// es deliberadamente independiente del sello y NO se invalida por deploy: sus
+// nombres ya llevan hash de contenido, así que invalidarla por sha era
+// exactamente el bug que dejaba a los iPhones sin poder arrancar offline.
 function idDeBuild() {
   const sha = process.env.GITHUB_SHA ?? (() => {
     try { return execSync('git rev-parse HEAD').toString().trim(); } catch { return ''; }
@@ -25,7 +32,7 @@ function idDeBuild() {
 function selloDeVersion() {
   // Capturado en generateBundle (sí recibe `bundle`) y consumido en closeBundle
   // (no lo recibe) — de ahí el estado de closure entre ambos hooks.
-  let precacheDelShell = [];
+  let assetsHasheados = [];
 
   return {
     name: 'sello-de-version',
@@ -34,15 +41,27 @@ function selloDeVersion() {
       // Nota: en esta versión de Vite/rolldown, `index.html` NO aparece entre
       // las keys de `bundle` en generateBundle (se escribe por una vía
       // aparte) — por eso se añade a mano en closeBundle, igual que
-      // manifest.json. Aquí solo se capturan los JS/CSS hasheados.
-      precacheDelShell = Object.keys(bundle)
+      // manifest.json. Todo lo que SÍ emite Rollup lleva hash de contenido en
+      // el nombre y vive plano bajo `assets/`.
+      //
+      // DENYLIST, no allowlist. Antes esto filtraba por `.js`/`.css`, y ese
+      // filtro dejaba fuera del precache los artefactos de PGLite
+      // (pglite.wasm 9.7 MB, pglite.data 6.1 MB, initdb.wasm) y las fuentes
+      // .woff2 — los bytes SIN los que la app no arranca. Solo se cacheaban al
+      // vuelo, en la caché versionada que activate() borra en cada deploy: de
+      // ahí la pantalla en blanco offline en iOS. Excluir a mano y dejar pasar
+      // todo lo demás falla del lado seguro; una allowlist de extensiones
+      // vuelve a olvidarse del siguiente formato que aparezca.
+      assetsHasheados = Object.keys(bundle)
         // El catálogo (public/assets/catalogo/**) y sw.js no pasan por el
         // bundle de Rollup (los copia Vite tal cual desde public/), pero se
         // excluyen igual como seguro explícito: el catálogo jamás se
         // precachea (regla no negociable de CLAUDE.md) y sw.js no se
         // autoprecachea a sí mismo.
         .filter(key => !key.startsWith('assets/catalogo/') && key !== 'sw.js')
-        .filter(key => key.endsWith('.js') || key.endsWith('.css'))
+        // Sourcemaps: no se generan hoy, pero si alguien los activa no tienen
+        // por qué ocupar cuota offline en el móvil del usuario.
+        .filter(key => !key.endsWith('.map'))
         .map(key => `${BASE}${key}`);
     },
     closeBundle() {
@@ -58,12 +77,24 @@ function selloDeVersion() {
       const sello = `${version}+${idDeBuild()}`;
       fuente = fuente.replaceAll(PLACEHOLDER, sello);
 
-      if (!fuente.includes(PRECACHE_PLACEHOLDER)) {
-        throw new Error(
-          `sw.js no contiene ${PRECACHE_PLACEHOLDER}: alguien fijó PRECACHE a mano. ` +
-          'Restaura el placeholder o el shell dejará de precachearse en el install.'
-        );
+      for (const ph of [SHELL_PLACEHOLDER, ASSETS_PLACEHOLDER]) {
+        if (!fuente.includes(ph)) {
+          throw new Error(
+            `sw.js no contiene ${ph}: alguien fijó el manifiesto a mano. ` +
+            'Restaura el placeholder o dejará de precachearse en el install.'
+          );
+        }
       }
+
+      // Los dos manifiestos se parten por MUTABILIDAD, no por tipo de archivo:
+      //  - shell  → nombres fijos que cambian de contenido en cada deploy.
+      //             Van a gymlog-shell-v<sello>, que activate() borra entera.
+      //  - assets → todo lo que Vite emite con hash de contenido en el nombre,
+      //             o sea inmutable. Va a gymlog-assets, SIN versión, que
+      //             activate() poda contra este manifiesto en vez de borrar.
+      //             Por eso un deploy que no toca PGLite conserva sus 16 MB y
+      //             no los vuelve a bajar nunca.
+      //
       // La entrada del scope (BASE sola, sin sufijo) es la que hace que el
       // fallback de navegación (`caches.match(self.registration.scope)`)
       // siempre acierte, aunque el usuario nunca haya pedido `index.html`.
@@ -76,17 +107,34 @@ function selloDeVersion() {
       // bundle), así que nunca se pide por red — el archivo en public/ solo
       // queda como fuente del import, no como asset servido. icons/ascii-end.txt
       // y motiv.txt quedan fuera por lo mismo: se inlinean vía `?raw`.
-      const lista = [...new Set([
-        BASE, `${BASE}index.html`, ...precacheDelShell,
+      const shell = [...new Set([
+        BASE, `${BASE}index.html`,
         `${BASE}manifest.json`,
         `${BASE}icons/icon-192.svg`,
         `${BASE}icons/icon-512.svg`,
       ])];
-      fuente = fuente.replaceAll(PRECACHE_PLACEHOLDER, JSON.stringify(lista));
+      const assets = [...new Set(assetsHasheados)];
+
+      // Guard de regresión en el propio build: si el motor de la base de datos
+      // no está en el manifiesto de assets, la app no puede arrancar offline y
+      // no tiene sentido publicar ese build. Es el seguro contra volver a
+      // introducir una allowlist de extensiones en generateBundle.
+      const motor = assets.filter(u => u.endsWith('.wasm') || u.endsWith('.data'));
+      if (motor.length === 0) {
+        throw new Error(
+          'El manifiesto de assets no contiene ningún .wasm/.data: el motor de la ' +
+          'base de datos quedaría fuera del precache y la app no arrancaría sin red. ' +
+          'Revisa los filtros de generateBundle en vite.config.js.'
+        );
+      }
+
+      fuente = fuente.replaceAll(SHELL_PLACEHOLDER, JSON.stringify(shell));
+      fuente = fuente.replaceAll(ASSETS_PLACEHOLDER, JSON.stringify(assets));
 
       writeFileSync(ruta, fuente);
-      this.info(`CACHE_NAME → gymlog-v${sello}`);
-      this.info(`PRECACHE → ${lista.length} entradas`);
+      this.info(`SHELL_CACHE → gymlog-shell-v${sello}`);
+      this.info(`PRECACHE_SHELL  → ${shell.length} entradas`);
+      this.info(`PRECACHE_ASSETS → ${assets.length} entradas (${motor.length} del motor)`);
     },
   };
 }

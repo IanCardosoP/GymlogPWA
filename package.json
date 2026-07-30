@@ -6,6 +6,7 @@
     "test": "vitest run",
     "dev": "vite --host",
     "build": "vite build",
+    "preview": "vite preview",
     "catalogo:add": "node scripts/agregar-ejercicio.js"
   },
   "keywords": [],
