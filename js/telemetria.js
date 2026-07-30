@@ -1,6 +1,14 @@
 // Beacon anónimo de uso (fire-and-forget). El device_id llega desde app.js.
 const TELEMETRY_URL = 'https://gymlog-d1-h3d9b5g1l5.iancardosop.workers.dev';
 
+// Versión real de la app, inyectada por el build (`define` en vite.config.js) con
+// el mismo sello que el CACHE_NAME del SW: `<semver>+<sha corto>`.
+// Antes esto era el literal '1.0', así que la columna `v` de D1 no servía para
+// nada: era imposible saber qué versión estaba abriendo cada dispositivo, que es
+// justo el dato que hace falta para saber si un iPhone ya recibió un arreglo.
+// El typeof cubre los tests y el dev server, donde `define` no aplica.
+const VERSION_APP = typeof __GYMLOG_VERSION__ !== 'undefined' ? __GYMLOG_VERSION__ : 'dev';
+
 // Función pura — solo familia de OS, nunca el user-agent completo (evita huella digital).
 export const detectOS = (userAgent = '') => {
   if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
@@ -17,7 +25,7 @@ export const registrarUso = (deviceId, evt = 'open') => {
   const payload = JSON.stringify({
     id: deviceId,
     evt,
-    v: '1.0',
+    v: VERSION_APP,
     pwa: esPWAInstalada(),
     os: detectOS(navigator.userAgent),
   });
@@ -44,7 +52,7 @@ export const registrarFalloArranque = motivo => {
   const payload = JSON.stringify({
     id: '',
     evt: `boot_fail:${codigo}`,
-    v: '1.0',
+    v: VERSION_APP,
     pwa: esPWAInstalada(),
     os: detectOS(navigator.userAgent),
   });

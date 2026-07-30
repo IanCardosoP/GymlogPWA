@@ -27,6 +27,11 @@ function idDeBuild() {
   return sha ? sha.slice(0, 7) : 'local';
 }
 
+// El mismo sello alimenta el CACHE_NAME del SW y la telemetría, así que se calcula
+// una sola vez: si divergieran, el monitor reportaría una versión distinta de la
+// que el dispositivo tiene realmente cacheada.
+const SELLO = `${version}+${idDeBuild()}`;
+
 // Vite copia public/sw.js tal cual (no sustituye variables ahí), así que el sello
 // se estampa sobre el archivo ya emitido: closeBundle corre después de esa copia.
 function selloDeVersion() {
@@ -74,8 +79,7 @@ function selloDeVersion() {
           'Restaura el placeholder o el caché de los clientes dejará de invalidarse.'
         );
       }
-      const sello = `${version}+${idDeBuild()}`;
-      fuente = fuente.replaceAll(PLACEHOLDER, sello);
+      fuente = fuente.replaceAll(PLACEHOLDER, SELLO);
 
       for (const ph of [SHELL_PLACEHOLDER, ASSETS_PLACEHOLDER]) {
         if (!fuente.includes(ph)) {
@@ -132,7 +136,7 @@ function selloDeVersion() {
       fuente = fuente.replaceAll(ASSETS_PLACEHOLDER, JSON.stringify(assets));
 
       writeFileSync(ruta, fuente);
-      this.info(`SHELL_CACHE → gymlog-shell-v${sello}`);
+      this.info(`SHELL_CACHE → gymlog-shell-v${SELLO}`);
       this.info(`PRECACHE_SHELL  → ${shell.length} entradas`);
       this.info(`PRECACHE_ASSETS → ${assets.length} entradas (${motor.length} del motor)`);
     },
@@ -142,5 +146,11 @@ function selloDeVersion() {
 export default defineConfig({
   base: BASE,
   build: { outDir: 'dist' },
+  // La telemetría necesita la versión REAL de la app. Estaba hardcodeada a '1.0'
+  // en telemetria.js, así que el monitor no podía distinguir qué versión abría
+  // cada dispositivo — justo el dato que hace falta para saber si un iPhone ya
+  // recibió el arreglo. Nombre distinto de __APP_VERSION__ a propósito: ese lo
+  // sella el plugin sobre dist/sw.js, que Vite copia verbatim y define no toca.
+  define: { __GYMLOG_VERSION__: JSON.stringify(SELLO) },
   plugins: [selloDeVersion()],
 });
