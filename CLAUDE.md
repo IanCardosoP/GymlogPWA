@@ -59,7 +59,8 @@ Tap del usuario → db.js (SQL puro) → actualizar Store → componente.render(
 | Archivo | Responsabilidad única |
 |---|---|
 | `js/app.js` | Store global (`const store`), `dispatch(action, payload)`, routing SPA por DOM |
-| `js/db.js` | Toda interacción con PGLite — solo SQL, solo promesas, cero DOM |
+| `js/db.js` | Todo el SQL — solo SQL, solo promesas, cero DOM |
+| `js/motor.js` | Motor SQLite (WASM) y persistencia del snapshot en IndexedDB — cero SQL de dominio |
 | `js/componentes/*.js` | Un módulo por pestaña; expone `.render(store)` idempotente, cero SQL |
 | `js/analitico.js` | Lógica pura (Epley 1RM, barras ASCII) — sin imports de DOM ni de db |
 | `js/catalogo.js` | Catálogo de ejercicios: carga y búsqueda bilingüe — lógica pura, sin DOM ni db |
@@ -69,14 +70,14 @@ Tap del usuario → db.js (SQL puro) → actualizar Store → componente.render(
 
 **Catálogo de ejercicios (regla no negociable):** el catálogo (873 ejercicios de
 `free-exercise-db`, Unlicense) es **dato de referencia estático** en
-`public/assets/catalogo/` — **jamás se inserta en la PGLite del usuario**, que solo
+`public/assets/catalogo/` — **jamás se inserta en la base del usuario**, que solo
 contiene sus datos (rutinas, sesiones, series). El único vínculo permitido es un
 puntero opaco `ejercicios.catalogo_id` (TEXT, sin FK). `instrucciones.json` (~670 KB)
 se carga **de forma diferida**: solo al abrir un panel de detalles, nunca al arrancar.
 
 **IDs de contenedores clave (inmutables):** `#diario-container`, `#progreso-container`, `#config-container`.
 
-**Modelo de datos (6 tablas PGLite):**
+**Modelo de datos (7 tablas SQLite):**
 - `ejercicios` — diccionario global de movimientos
 - `rutinas` — plantillas semanales
 - `rutina_ejercicios` — tabla puente rutina↔ejercicio (`orden` define la posición).
@@ -96,9 +97,29 @@ al construir por `<version de package.json>+<sha corto del commit>`
 (ej. `gymlog-v1.0.19+a691bee`). Si el placeholder no está, **el build falla a
 propósito** — es el seguro contra volver a fijarlo a mano.
 
-Consecuencia: **cada push a `main` genera un `CACHE_NAME` nuevo** (el sha cambia),
-así que la caché de los clientes se invalida sola en cada deploy. No hay nada que
-recordar por ticket.
+Consecuencia: **cada push a `main` genera un `SHELL_CACHE` nuevo** (el sha cambia),
+así que la copia de `index.html` de los clientes se invalida sola en cada deploy. No
+hay nada que recordar por ticket.
+
+**Tres cachés, partidas por MUTABILIDAD del contenido — no por tipo de archivo:**
+
+| Caché | Contenido | En `activate()` |
+|---|---|---|
+| `gymlog-shell-v<sello>` | Nombres fijos que cambian por deploy: `index.html`, `manifest.json`, iconos (~30 KB) | se borra entera |
+| `gymlog-assets` | Todo lo que Vite emite con hash de contenido: JS, CSS, `.wasm`, `.woff2` | **se PODA** contra el manifiesto |
+| `gymlog-catalogo` | Datos de referencia del catálogo (~9 MB) | nunca se toca |
+
+La poda es la regla no negociable de esta sección: los assets de Vite llevan hash de
+contenido, así que son **inmutables** y su caché tiene que sobrevivir los deploys. La
+versión anterior los metía en la caché versionada por sha y `activate()` los borraba
+en cada push — incluidos los 16 MB del motor de la base. Eso es lo que dejaba a los
+iPhone sin poder arrancar sin red. **Nunca versiones `gymlog-assets`.**
+
+El manifiesto de precache se arma con una **denylist**, nunca con una allowlist de
+extensiones: el bug original nació de un `.filter(k => k.endsWith('.js') || ...)` que
+se olvidó de los `.wasm`. `tests/precache.test.js` y `tests/sw-ciclo-deploy.test.js`
+son los guards — el segundo ejecuta el `dist/sw.js` sellado contra una Cache API falsa
+y simula dos deploys seguidos.
 
 La versión semántica de `package.json` se sube solo cuando *significa* algo:
 
@@ -131,10 +152,21 @@ y provee aislamiento estricto de dependencias por diseño.
 ## 1. STACK — FUENTES DE VERDAD (NO NEGOCIABLES)
 
 - **UI:** HTML5 semántico nativo · CSS3 puro con variables nativas · JS ES6+ Vanilla
-- **DB:** PGLite (PostgreSQL en WebAssembly) · persistido en `IndexedDB` bajo `idb://gym-log-db`
+- **DB:** SQLite compilado a WebAssembly (`@sqlite.org/sqlite-wasm`, 845 KB) · base en
+  memoria, persistida como archivo serializado en `IndexedDB` (`gymlog-motor`)
+  - **Sin OPFS y sin Web Worker, a propósito.** `opfs-sahpool` exige
+    `createSyncAccessHandle()` (solo existe en workers) y OPFS en iOS tiene bugs
+    propios; el VFS `opfs` clásico necesita `SharedArrayBuffer`, o sea cabeceras
+    COOP/COEP que GitHub Pages no permite fijar. El criterio manda: **menos piezas
+    móviles específicas de iOS**.
+  - Sustituyó a PGLite, cuyos 16.2 MB de artefactos tenían que estar en caché antes
+    de poder pintar nada — y ese volumen era en sí mismo la causa del fallo offline
+    en iOS (WebKit desaloja las cachés del origen bajo presión de cuota).
 - **Offline:** Service Worker `sw.js` con estrategia **Cache-First** estricta
 - **Routing:** Manipulación nativa del DOM. Prohibido usar librerías de enrutamiento.
-- **Testing:** Vitest · instancia PGLite en **`memory://`** para todos los tests (nunca `idb://`)
+- **Testing:** Vitest · `initDB('memory://')` en todos los tests (nunca `idb://`) — el
+  contrato se mantuvo al cambiar de motor: `memory://` da una base efímera sin tocar
+  IndexedDB
 
 ---
 
@@ -148,7 +180,7 @@ gymlog-pwa/
 ├── index.html
 ├── public/
 │   ├── sw.js
-│   └── assets/catalogo/    ← Catálogo estático (NUNCA en la PGLite del user)
+│   └── assets/catalogo/    ← Catálogo estático (NUNCA en la base del user)
 │       ├── catalogo.json       · 873 ejercicios (nombre es/en, grupo, equipo)
 │       ├── instrucciones.json  · pasos en español (carga diferida)
 │       ├── img/*.webp          · 2 por ejercicio → crossfade
@@ -157,7 +189,8 @@ gymlog-pwa/
 │   └── styles.css
 ├── js/
 │   ├── app.js          ← Orquestador, Estado Global, routing DOM
-│   ├── db.js           ← Instancia PGLite, SOLO SQL, SOLO promesas
+│   ├── db.js           ← SOLO SQL, SOLO promesas
+│   ├── motor.js        ← SQLite WASM + snapshot en IndexedDB
 │   ├── analitico.js    ← Lógica pura (1RM, barras)
 │   ├── catalogo.js     ← Lógica pura (búsqueda bilingüe en el catálogo)
 │   ├── sinonimos.js    ← Argot de gimnasio (datos puros)
@@ -293,24 +326,39 @@ El agente tiene **prohibido** avanzar al siguiente ticket con tests fallando.
 
 ## 10. DEUDA TÉCNICA (pendiente)
 
+### Retirar PGLite (bloqueado por un release)
+
+El motor es SQLite desde el cambio de `js/motor.js`, pero PGLite **sigue en
+`dependencies`** y `js/migracion/desdePglite.js` lo importa de forma dinámica para
+migrar a quien venga de una versión anterior. Pendiente, y en este orden:
+
+1. Esperar a que el PM confirme que nadie perdió datos en la migración.
+2. `pnpm remove @electric-sql/pglite`, borrar `js/migracion/`, y borrar la IndexedDB
+   legada (`gym-log-db`) — **no se toca hasta entonces**, es la red de seguridad.
+3. Quitar `esMotorLegado` y el manifiesto `ASSETS_LEGADO` de `vite.config.js` y
+   `public/sw.js`.
+
+Ojo con el orden: `ASSETS_LEGADO` existe para que la poda **no** borre los artefactos
+de PGLite de quien todavía no ha migrado. Retirarlo antes de tiempo deja a ese usuario
+sin poder leer su base vieja hasta tener conexión.
+
 ### Retirar el concepto "8 visibles + banco de suplentes"
 
 Decidido por el PM: **el Diario muestra la rutina completa, sin corte ni suplentes.**
-El separador visual ya se eliminó; falta la limpieza del código, que se hará en una
-sesión dedicada:
+El separador visual ya se eliminó; falta la limpieza del código:
 
 - `MAX_ROUTINE_SLOTS = 8` (`js/componentes/diario.js`) — ya no lo usa nadie; solo
   queda su declaración (está exportado, verificar consumidores antes de borrar).
 - `rutina_ejercicios.activo_hoy` — **nadie la lee ya** para decidir qué se muestra,
-  pero `reordenarEjercicios()` (`js/db.js`) **sigue escribiéndola** (marca `FALSE` a
-  partir del 9º al arrastrar). Es inocuo hoy, pero es escritura muerta.
-  **No basta con un `DROP COLUMN`:** hay que revisar también `updateActivoHoy()` y
+  pero `reordenarEjercicios()` (`js/db.js`) **sigue escribiéndola**. Se portó tal cual
+  a SQLite (como INTEGER) en vez de eliminarla: quitarla toca `csv.js`, `diario.js` y
+  el formato de backup, y acumular eso en el release que reescribe la base de todos
+  los usuarios multiplicaba el riesgo sin necesidad.
+  **No basta con un `DROP COLUMN`:** hay que revisar `updateActivoHoy()` y
   `getRutinaEjerciciosSuplentes()` en `js/db.js`, y la serialización de `js/csv.js`
   (los backups antiguos traen la columna → el import debe seguir aceptándolos).
 - Migración: la DDL es idempotente y corre en el dispositivo de cada usuario, así que
   el cambio debe ser retrocompatible con bases ya existentes.
 
----
-
-_Última actualización: catálogo de ejercicios (873 movimientos, imágenes e
-instrucciones) — julio 2026_
+_Última actualización: arquitectura offline — precache por mutabilidad, arranque
+observable y motor SQLite (845 KB) en lugar de PGLite (16.2 MB) — julio 2026_
