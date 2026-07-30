@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Mapa de arquitectura de GymLog PWA" />
+<style>*{margin:0;padding:0}img{max-width:100%}</style>
+<title>GymLog — Arquitectura</title>
+<style>
+  :root {
+    --bg:        #0a0b0e;
+    --panel:     #111318;
+    --panel-2:   #15181f;
+    --line:      #23272f;
+    --line-soft: #1a1d24;
+    --ink:       #e6ebe8;
+    --ink-dim:   #9aa4a0;
+    --ink-faint: #626b68;
+    --verde:     #00ff88;
+    --cian:      #00d4ff;
+    --morado:    #bf00ff;
+    --rosa:      #ff0080;
+    --amber:     #ffb020;
+    --mono: ui-monospace, "JetBrains Mono", "SF Mono", "Menlo", "Cascadia Code", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  :root[data-theme="light"] {
+    --bg:        #f4f6f5;
+    --panel:     #ffffff;
+    --panel-2:   #f0f3f2;
+    --line:      #d8ded9;
+    --line-soft: #e6ebe7;
+    --ink:       #121614;
+    --ink-dim:   #52605a;
+    --ink-faint: #8b968f;
+    --verde:     #00a758;
+    --cian:      #0088bb;
+    --morado:    #9500cc;
+    --rosa:      #d1006a;
+    --amber:     #b57200;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg:        #f4f6f5;
+      --panel:     #ffffff;
+      --panel-2:   #f0f3f2;
+      --line:      #d8ded9;
+      --line-soft: #e6ebe7;
+      --ink:       #121614;
+      --ink-dim:   #52605a;
+      --ink-faint: #8b968f;
+      --verde:     #00a758;
+      --cian:      #0088bb;
+      --morado:    #9500cc;
+      --rosa:      #d1006a;
+      --amber:     #b57200;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 3vw, 2rem) 5rem; }
+
+  code, .mono, kbd { font-family: var(--mono); }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header { border-bottom: 1px solid var(--line); padding-bottom: 2rem; margin-bottom: 2.5rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--verde); margin: 0 0 1rem;
+  }
+  .eyebrow::before { content: "▚ "; }
+  h1 {
+    font-family: var(--mono); font-weight: 600; font-size: clamp(1.9rem, 5vw, 3rem);
+    margin: 0 0 .6rem; letter-spacing: -.01em; text-wrap: balance; line-height: 1.05;
+  }
+  h1 .br { color: var(--ink-faint); font-weight: 400; }
+  .lede { color: var(--ink-dim); max-width: 62ch; font-size: 1.02rem; margin: 0; }
+  .metabar {
+    display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin-top: 1.4rem;
+    font-family: var(--mono); font-size: .78rem; color: var(--ink-faint);
+  }
+  .metabar b { color: var(--ink-dim); font-weight: 500; }
+  .metabar .dot { color: var(--verde); }
+
+  /* ── Section scaffolding ─────────────────────────────── */
+  section { margin-top: 3.2rem; }
+  .sec-head { display: flex; align-items: baseline; gap: .8rem; margin-bottom: 1.3rem; }
+  .sec-num {
+    font-family: var(--mono); font-size: .78rem; color: var(--verde);
+    border: 1px solid var(--line); border-radius: 4px; padding: .1rem .45rem;
+  }
+  h2 { font-family: var(--mono); font-size: 1.1rem; font-weight: 600; margin: 0; letter-spacing: .01em; }
+  .sec-note { color: var(--ink-faint); font-size: .85rem; margin: .1rem 0 0; font-family: var(--mono); }
+
+  /* ── Flow strip ──────────────────────────────────────── */
+  .flow {
+    display: flex; align-items: stretch; flex-wrap: wrap; gap: .5rem;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1rem;
+  }
+  .flow-node {
+    flex: 1 1 120px; min-width: 120px; text-align: center;
+    border: 1px solid var(--line); border-radius: 8px; padding: .8rem .6rem; background: var(--panel-2);
+  }
+  .flow-node .k { font-family: var(--mono); font-size: .74rem; color: var(--verde); display: block; margin-bottom: .3rem; }
+  .flow-node .v { font-size: .82rem; color: var(--ink-dim); }
+  .flow-arrow { align-self: center; color: var(--ink-faint); font-family: var(--mono); font-size: 1.1rem; }
+
+  /* ── Layer stack ─────────────────────────────────────── */
+  .stack { display: flex; flex-direction: column; gap: .7rem; }
+  .layer {
+    display: grid; grid-template-columns: 168px 1fr; gap: 1rem;
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--lc, var(--verde));
+    border-radius: 10px; padding: 1.1rem 1.2rem;
+  }
+  .layer-label { display: flex; flex-direction: column; gap: .25rem; }
+  .layer-label .lname { font-family: var(--mono); font-weight: 600; font-size: .92rem; color: var(--lc, var(--verde)); }
+  .layer-label .lrole { font-size: .78rem; color: var(--ink-faint); line-height: 1.4; }
+  .mods { display: flex; flex-wrap: wrap; gap: .5rem; align-content: flex-start; }
+  .mod {
+    font-family: var(--mono); font-size: .78rem; color: var(--ink);
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+    padding: .35rem .6rem; display: inline-flex; align-items: center; gap: .45rem;
+  }
+  .mod .tag { color: var(--ink-faint); font-size: .68rem; }
+  .mod.ghost { color: var(--ink-faint); border-style: dashed; }
+
+  .rule { color: var(--ink-faint); font-family: var(--mono); font-size: .76rem; text-align: center;
+          padding: .15rem 0; letter-spacing: .04em; }
+
+  /* ── Generic grid of cards ───────────────────────────── */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .9rem; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1.1rem 1.2rem; border-top: 2px solid var(--cc, var(--line));
+  }
+  .card h3 { font-family: var(--mono); font-size: .9rem; margin: 0 0 .2rem; color: var(--cc, var(--ink)); }
+  .card .sub { font-family: var(--mono); font-size: .72rem; color: var(--ink-faint); margin: 0 0 .7rem; }
+  .card p { font-size: .86rem; color: var(--ink-dim); margin: 0 0 .5rem; }
+  .card ul { margin: .4rem 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .3rem; }
+  .card li { font-family: var(--mono); font-size: .76rem; color: var(--ink-dim); padding-left: 1rem; position: relative; }
+  .card li::before { content: "›"; position: absolute; left: 0; color: var(--cc, var(--verde)); }
+
+  /* ── Data model table ────────────────────────────────── */
+  .tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: .9rem; }
+  .tbl { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .tbl-h {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    padding: .7rem 1rem; background: var(--panel-2); border-bottom: 1px solid var(--line);
+  }
+  .tbl-h .tn { font-family: var(--mono); font-weight: 600; color: var(--cian); font-size: .88rem; }
+  .tbl-h .tn::before { content: "▦ "; color: var(--ink-faint); }
+  .tbl-h .tmeta { font-family: var(--mono); font-size: .68rem; color: var(--ink-faint); }
+  .tbl-b { padding: .5rem 0; }
+  .col { display: grid; grid-template-columns: 1fr auto; gap: .5rem; padding: .28rem 1rem;
+         font-family: var(--mono); font-size: .76rem; border-bottom: 1px solid var(--line-soft); }
+  .col:last-child { border-bottom: 0; }
+  .col .cn { color: var(--ink); }
+  .col .ct { color: var(--ink-faint); font-size: .7rem; text-align: right; }
+  .col .pk { color: var(--verde); }
+  .col .fk { color: var(--morado); }
+  .col .legacy { color: var(--amber); }
+
+  /* ── SW panel ────────────────────────────────────────── */
+  .sw { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+  .sw-cache { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1.1rem 1.2rem; }
+  .sw-cache.shell { border-top: 2px solid var(--verde); }
+  .sw-cache.cat { border-top: 2px solid var(--rosa); }
+  .sw-cache h3 { font-family: var(--mono); font-size: .84rem; margin: 0 0 .1rem; }
+  .sw-cache .cache-id { font-family: var(--mono); font-size: .72rem; color: var(--ink-faint); margin: 0 0 .8rem; }
+  .sw-cache .strat { display: flex; gap: .5rem; margin-bottom: .5rem; align-items: baseline; }
+  .sw-cache .strat b { font-family: var(--mono); font-size: .72rem; color: var(--cian); white-space: nowrap; }
+  .sw-cache .strat span { font-size: .82rem; color: var(--ink-dim); }
+
+  /* ── Build pipeline ──────────────────────────────────── */
+  .pipe { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1.2rem; }
+  .pipe-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-family: var(--mono); font-size: .8rem; }
+  .pipe-step { border: 1px solid var(--line); background: var(--panel-2); border-radius: 6px; padding: .45rem .7rem; color: var(--ink); }
+  .pipe-step .hl { color: var(--verde); }
+  .pipe-arrow { color: var(--ink-faint); }
+  .pipe-out { margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--line); font-size: .84rem; color: var(--ink-dim); }
+  .pipe-out code { color: var(--verde); background: var(--panel-2); padding: .1rem .4rem; border-radius: 4px; font-size: .8rem; }
+
+  /* ── Callouts ────────────────────────────────────────── */
+  .rules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .7rem; }
+  .rulebox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; }
+  .rulebox .rk { font-family: var(--mono); font-size: .74rem; color: var(--verde); margin: 0 0 .3rem; letter-spacing: .02em; }
+  .rulebox p { margin: 0; font-size: .82rem; color: var(--ink-dim); }
+
+  .debt { border: 1px solid var(--amber); border-radius: 10px; padding: 1.1rem 1.2rem; background: color-mix(in srgb, var(--amber) 7%, var(--panel)); }
+  .debt h3 { font-family: var(--mono); font-size: .86rem; margin: 0 0 .5rem; color: var(--amber); }
+  .debt h3::before { content: "⚠ "; }
+  .debt p { margin: 0; font-size: .85rem; color: var(--ink-dim); }
+  .debt code { font-family: var(--mono); color: var(--amber); font-size: .8rem; }
+
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--line);
+           font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: .5rem 1.1rem; margin-top: 1rem; font-family: var(--mono); font-size: .72rem; color: var(--ink-faint); }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  @media (max-width: 620px) {
+    .layer { grid-template-columns: 1fr; gap: .7rem; }
+    .sw { grid-template-columns: 1fr; }
+  }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Mapa de arquitectura · documentación viva</p>
+    <h1>GymLog PWA <span class="br">— arquitectura del sistema</span></h1>
+    <p class="lede">
+      Registro de entrenamientos de fuerza <b>offline-first, sin backend</b>: PostgreSQL corre
+      en el navegador (PGLite/WASM) y persiste en IndexedDB. Vanilla JS en tres capas estrictas
+      que ningún módulo puede cruzar.
+    </p>
+    <div class="metabar">
+      <span><b>v</b> 1.2.0</span>
+      <span class="dot">•</span>
+      <span><b>stack</b> HTML · CSS · JS ES6+ · PGLite · SW</span>
+      <span class="dot">•</span>
+      <span><b>build</b> Vite + pnpm</span>
+      <span class="dot">•</span>
+      <span><b>tests</b> Vitest / memory://</span>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--verde)"></i> orquestador / datos</span>
+      <span><i class="swatch" style="background:var(--cian)"></i> lógica pura</span>
+      <span><i class="swatch" style="background:var(--morado)"></i> UI</span>
+      <span><i class="swatch" style="background:var(--rosa)"></i> catálogo estático</span>
+      <span><i class="swatch" style="background:var(--amber)"></i> legado / deuda</span>
+    </div>
+  </header>
+
+  <!-- FLOW -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <div><h2>Flujo de datos — unidireccional</h2>
+      <p class="sec-note">Flux minimalista · una sola dirección, sin atajos</p></div>
+    </div>
+    <div class="flow">
+      <div class="flow-node"><span class="k">tap</span><span class="v">interacción del usuario</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="k">db.js</span><span class="v">SQL puro (promesas)</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="k">store</span><span class="v">dispatch(action, payload)</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><span class="k">render(store)</span><span class="v">componente idempotente</span></div>
+    </div>
+  </section>
+
+  <!-- LAYERS -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <div><h2>Capas del sistema</h2>
+      <p class="sec-note">de arriba (cascarón) hacia abajo (persistencia) · los límites no se cruzan</p></div>
+    </div>
+    <div class="stack">
+
+      <div class="layer" style="--lc:var(--ink-dim)">
+        <div class="layer-label"><span class="lname">SHELL · BUILD</span><span class="lrole">Cascarón PWA, SW, manifest, sellado de versión</span></div>
+        <div class="mods">
+          <span class="mod">index.html</span>
+          <span class="mod">public/manifest.json</span>
+          <span class="mod">public/sw.js</span>
+          <span class="mod">vite.config.js <span class="tag">sello-de-version</span></span>
+        </div>
+      </div>
+
+      <div class="rule">▲ registra el SW · arranca initApp() ▲</div>
+
+      <div class="layer" style="--lc:var(--verde)">
+        <div class="layer-label"><span class="lname">ORQUESTADOR</span><span class="lrole">Store global · dispatch · routing SPA por DOM</span></div>
+        <div class="mods">
+          <span class="mod">app.js <span class="tag">store · navigateTo · initApp</span></span>
+        </div>
+      </div>
+
+      <div class="rule">▲ import dinámico de cada pestaña · render(store) ▲</div>
+
+      <div class="layer" style="--lc:var(--morado)">
+        <div class="layer-label"><span class="lname">UI · COMPONENTES</span><span class="lrole">Un módulo por pestaña · .render(store) idempotente · cero SQL</span></div>
+        <div class="mods">
+          <span class="mod">diario.js <span class="tag">pestaña</span></span>
+          <span class="mod">progreso.js <span class="tag">pestaña</span></span>
+          <span class="mod">config.js <span class="tag">pestaña</span></span>
+          <span class="mod">catalogoModal.js <span class="tag">picker</span></span>
+          <span class="mod">previewModal.js <span class="tag">detalle</span></span>
+        </div>
+      </div>
+
+      <div class="layer" style="--lc:var(--cian)">
+        <div class="layer-label"><span class="lname">LÓGICA PURA</span><span class="lrole">Sin DOM ni db · cálculo, búsqueda, backup, argot</span></div>
+        <div class="mods">
+          <span class="mod">analitico.js <span class="tag">1RM · barras</span></span>
+          <span class="mod">catalogo.js <span class="tag">búsqueda es/en</span></span>
+          <span class="mod">sinonimos.js <span class="tag">argot</span></span>
+          <span class="mod">csv.js <span class="tag">backup JSON</span></span>
+          <span class="mod">telemetria.js <span class="tag">beacon</span></span>
+        </div>
+      </div>
+
+      <div class="rule">▲ toda mutación pasa por aquí · SQL parametrizado ▲</div>
+
+      <div class="layer" style="--lc:var(--verde)">
+        <div class="layer-label"><span class="lname">DATOS</span><span class="lrole">Instancia PGLite · DDL idempotente · solo promesas</span></div>
+        <div class="mods">
+          <span class="mod">db.js <span class="tag">~40 funciones de servicio SQL</span></span>
+        </div>
+      </div>
+
+      <div class="layer" style="--lc:var(--rosa)">
+        <div class="layer-label"><span class="lname">PERSISTENCIA</span><span class="lrole">DB del usuario + catálogo de referencia estático</span></div>
+        <div class="mods">
+          <span class="mod">IndexedDB <span class="tag">idb://gym-log-db</span></span>
+          <span class="mod ghost">catalogo.json</span>
+          <span class="mod ghost">instrucciones.json</span>
+          <span class="mod ghost">img/*.webp <span class="tag">873 ×2</span></span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- MODULE DETAIL -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <div><h2>Módulos clave</h2>
+      <p class="sec-note">responsabilidad única · qué exporta · de quién depende</p></div>
+    </div>
+    <div class="grid">
+
+      <div class="card" style="--cc:var(--verde)">
+        <h3>app.js</h3>
+        <p class="sub">orquestador · 143 líneas</p>
+        <p>Store, <code>dispatch</code>, <code>navigateTo</code> e <code>initApp</code>. Registra el SW (salvo en localhost), pide almacenamiento persistente y precalienta las imágenes del catálogo tras abrir el Diario.</p>
+        <ul><li>store: currentTab, activeRoutineId, currentSesionId, prefUnit, acentoKey</li><li>SET_SESION · SET_RUTINA · SET_EXERCISES · SET_PREF_UNIT · SET_ACENTO</li></ul>
+      </div>
+
+      <div class="card" style="--cc:var(--verde)">
+        <h3>db.js</h3>
+        <p class="sub">datos · 667 líneas</p>
+        <p>Única puerta a PGLite. DDL idempotente (<code>CREATE IF NOT EXISTS</code> + <code>ALTER ADD COLUMN IF NOT EXISTS</code>) para migraciones retrocompatibles en el dispositivo de cada usuario.</p>
+        <ul><li>ejercicios · rutinas · rutina_dias · sesiones · series · conf</li><li>analítica: estadísticas, volumen, PRs, actividad semanal</li></ul>
+      </div>
+
+      <div class="card" style="--cc:var(--cian)">
+        <h3>catalogo.js</h3>
+        <p class="sub">lógica pura · 238 líneas</p>
+        <p>Carga diferida del catálogo estático. Búsqueda bilingüe (es/en) con tokenización, stemming crudo y sinónimos; ranking por solapamiento proporcional. Deriva rutas de imagen desde <code>fuente_id</code>.</p>
+        <ul><li>buscarEnCatalogo · candidatosMatch · urlsParaWarming</li></ul>
+      </div>
+
+      <div class="card" style="--cc:var(--cian)">
+        <h3>analitico.js</h3>
+        <p class="sub">lógica pura · 184 líneas</p>
+        <p>1RM de Epley (<code>0</code> si es BW, nunca NaN), barras ASCII de 20 chars, preparación de series por métrica, tendencia y racha.</p>
+        <ul><li>1RM · peso máx · volumen · METRICAS_REGISTRY</li></ul>
+      </div>
+
+      <div class="card" style="--cc:var(--cian)">
+        <h3>csv.js</h3>
+        <p class="sub">lógica pura · 111 líneas</p>
+        <p>Backup completo en JSON (nombre «csv» legado). Export/import con transacción obligatoria <code>BEGIN/COMMIT/ROLLBACK</code> e inserción en lotes. Acepta backups antiguos.</p>
+        <ul><li>BACKUP_VERSION · exportarBackup · importarBackup</li></ul>
+      </div>
+
+      <div class="card" style="--cc:var(--rosa)">
+        <h3>telemetria.js</h3>
+        <p class="sub">lógica pura · 29 líneas · externo</p>
+        <p>Beacon anónimo fire-and-forget vía <code>sendBeacon</code> a un Cloudflare Worker con D1. Solo familia de OS. Nunca en localhost ni offline; <code>text/plain</code> para evitar el preflight CORS.</p>
+        <ul><li>detectOS · registrarUso</li></ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- DATA MODEL -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <div><h2>Modelo de datos — PGLite</h2>
+      <p class="sec-note">6 tablas + puente de días · el catálogo JAMÁS vive aquí</p></div>
+    </div>
+    <div class="tables">
+
+      <div class="tbl">
+        <div class="tbl-h"><span class="tn">ejercicios</span><span class="tmeta">diccionario de movimientos</span></div>
+        <div class="tbl-b">
+          <div class="col"><span class="cn"><span class="pk">id</span></span><span class="ct">SERIAL PK</span></div>
+          <div class="col"><span class="cn">nombre</span><span class="ct">TEXT</span></div>
+          <div class="col"><span class="cn">grupo_muscular</span><span class="ct">TEXT</span></div>
+          <div class="col"><span class="cn">catalogo_id</span><span class="ct">TEXT · puntero opaco</span></div>
+          <div class="col"><span class="cn">catalogo_revisado</span><span class="ct">BOOL</span></div>
+        </div>
+      </div>
+
+      <div class="tbl">
+        <div class="tbl-h"><span class="tn">rutinas</span><span class="tmeta">plantillas</span></div>
+        <div class="tbl-b">
+          <div class="col"><span class="cn"><span class="pk">id</span></span><span class="ct">SERIAL PK</span></div>
+          <div class="col"><span class="cn">nombre</span><span class="ct">TEXT</span></div>
+          <div class="col"><span class="cn legacy">dia_sugerido</span><span class="ct">INT · legado</span></div>
+        </div>
+      </div>
+
+      <div class="tbl">
+        <div class="tbl-h"><span class="tn">rutina_ejercicios</span><span class="tmeta">puente rutina↔ejercicio</span></div>
+        <div class="tbl-b">
+          <div class="col"><span class="cn"><span class="pk">id</span></span><span class="ct">SERIAL PK</span></div>
+          <div class="col"><span class="cn"><span class="fk">rutina_id</span></span><span class="ct">FK · CASCADE</span></div>
+          <div class="col"><span class="cn"><span class="fk">ejercicio_id</span></span><span class="ct">FK · CASCADE</span></div>
+          <div class="col"><span class="cn">orden</span><span class="ct">INT · posición</span></div>
+          <div class="col"><span class="cn legacy">activo_hoy</span><span class="ct">BOOL · escritura muerta</span></div>
+        </div>
+      </div>
+
+      <div class="tbl">
+        <div class="tbl-h"><span class="tn">rutina_dias</span><span class="tmeta">día → una sola rutina</span></div>
+        <div class="tbl-b">
+          <div class="col"><span class="cn"><span class="pk">id</span></span><span class="ct">SERIAL PK</span></div>
+          <div class="col"><span class="cn"><span class="fk">rutina_id</span></span><span class="ct">FK · CASCADE</span></div>
+          <div class="col"><span class="cn">dia</span><span class="ct">INT · UNIQUE</span></div>
+        </div>
+      </div>
+
+      <div class="tbl">
+        <div class="tbl-h"><span class="tn">sesiones</span><span class="tmeta">cada entrenamiento real</span></div>
+        <div class="tbl-b">
+          <div class="col"><span class="cn"><span class="pk">id</span></span><span class="ct">SERIAL PK</span></div>
+          <div class="col"><span class="cn">fecha</span><span class="ct">DATE · capturada en JS</span></div>
+          <div class="col"><span class="cn"><span class="fk">rutina_id</span></span><span class="ct">FK</span></div>
+          <div class="col"><span class="cn">energia_sueno</span><span class="ct">INT</span></div>
+          <div class="col"><span class="cn">peso_corporal</span><span class="ct">NUMERIC</span></div>
+          <div class="col"><span class="cn">hora_inicio / fin</span><span class="ct">TIMESTAMPTZ</span></div>
+        </div>
+      </div>
+
+      <div class="tbl">
+        <div class="tbl-h"><span class="tn">series</span><span class="tmeta">cada set · peso 0 = BW</span></div>
+        <div class="tbl-b">
+          <div class="col"><span class="cn"><span class="pk">id</span></span><span class="ct">SERIAL PK</span></div>
+          <div class="col"><span class="cn"><span class="fk">sesion_id</span></span><span class="ct">FK · CASCADE</span></div>
+          <div class="col"><span class="cn"><span class="fk">ejercicio_id</span></span><span class="ct">FK</span></div>
+          <div class="col"><span class="cn">numero_serie</span><span class="ct">INT</span></div>
+          <div class="col"><span class="cn">peso</span><span class="ct">NUMERIC · 0=BW</span></div>
+          <div class="col"><span class="cn">repeticiones</span><span class="ct">INT</span></div>
+        </div>
+      </div>
+
+      <div class="tbl">
+        <div class="tbl-h"><span class="tn">conf</span><span class="tmeta">singleton · id=1 · jamás DELETE</span></div>
+        <div class="tbl-b">
+          <div class="col"><span class="cn"><span class="pk">id</span></span><span class="ct">INT · CHECK id=1</span></div>
+          <div class="col"><span class="cn">pref_unit</span><span class="ct">TEXT · CHECK kg|lb</span></div>
+          <div class="col"><span class="cn">pref_acento</span><span class="ct">TEXT</span></div>
+          <div class="col"><span class="cn">device_id</span><span class="ct">TEXT · UUID</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SERVICE WORKER -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <div><h2>Service Worker — dos cachés independientes</h2>
+      <p class="sec-note">separar el shell del catálogo evita que la presión de espacio purgue ~9 MB de imágenes</p></div>
+    </div>
+    <div class="sw">
+      <div class="sw-cache shell">
+        <h3>Shell versionado</h3>
+        <p class="cache-id mono">gymlog-v&lt;version&gt;+&lt;sha&gt;</p>
+        <div class="strat"><b>estrategia</b><span>cache-first + cache-on-fetch. Navegación falla → fallback al shell (index.html).</span></div>
+        <div class="strat"><b>ciclo vida</b><span>PRECACHE en install; <code>activate</code> borra las <code>gymlog-v*</code> viejas → se invalida en cada deploy.</span></div>
+      </div>
+      <div class="sw-cache cat">
+        <h3>Catálogo estático</h3>
+        <p class="cache-id mono">gymlog-catalogo · sin versión</p>
+        <div class="strat"><b>imágenes</b><span>cache-first puro (inmutables por nombre de archivo).</span></div>
+        <div class="strat"><b>json</b><span>stale-while-revalidate; network-first cuando el llamador pide <code>cache:'reload'</code>.</span></div>
+        <div class="strat"><b>siembra</b><span>catalogo/instrucciones.json en el install; sobrevive a los deploys.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUILD -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">06</span>
+      <div><h2>Build &amp; versionado — sello automático</h2>
+      <p class="sec-note">nunca se escribe un CACHE_NAME a mano · el build falla a propósito si el placeholder no está</p></div>
+    </div>
+    <div class="pipe">
+      <div class="pipe-row">
+        <span class="pipe-step">Vite build</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step"><span class="hl">generateBundle</span> · captura JS/CSS hasheados</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-step"><span class="hl">closeBundle</span> · reemplaza placeholders en dist/sw.js</span>
+      </div>
+      <div class="pipe-out">
+        <code>__APP_VERSION__</code> → <code>&lt;package.json version&gt;+&lt;sha corto&gt;</code> &nbsp;·&nbsp;
+        <code>__PRECACHE_MANIFEST__</code> → array JSON del shell.
+        <br>Cada push a <b>main</b> cambia el sha → <b>CACHE_NAME nuevo</b> → la caché del shell de los clientes se invalida sola.
+        Excluidos del precache: <code>assets/catalogo/**</code> y <code>sw.js</code>.
+      </div>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">07</span>
+      <div><h2>Invariantes no negociables</h2>
+      <p class="sec-note">reglas que cualquier cambio debe respetar</p></div>
+    </div>
+    <div class="rules-grid">
+      <div class="rulebox"><p class="rk">CATÁLOGO</p><p>873 ejercicios como JSON estático en <code>public/assets/</code>. Jamás se insertan en la PGLite del usuario. Único vínculo: <code>catalogo_id</code> (TEXT, sin FK).</p></div>
+      <div class="rulebox"><p class="rk">A03 · SQLi</p><p>Prepared statements siempre (<code>$1, $2…</code>). Prohibida la concatenación de SQL.</p></div>
+      <div class="rulebox"><p class="rk">A01 · XSS</p><p><code>textContent</code> + <code>createElement</code>. Prohibido <code>innerHTML</code> con datos de usuario y <code>eval()</code>.</p></div>
+      <div class="rulebox"><p class="rk">A08 · Integridad</p><p>Importación de backup dentro de <code>BEGIN/COMMIT</code>, con <code>ROLLBACK</code> automático ante cualquier fallo.</p></div>
+      <div class="rulebox"><p class="rk">TIMEZONE</p><p>La fecha la captura JS (<code>toLocaleDateString('en-CA')</code>) antes del INSERT. Nunca <code>CURRENT_DATE</code> de SQL.</p></div>
+      <div class="rulebox"><p class="rk">BW · PESO 0</p><p><code>peso=0</code> = peso corporal. Epley retorna 0, nunca NaN. El frontend pinta «BW».</p></div>
+      <div class="rulebox"><p class="rk">CONF · SINGLETON</p><p>Una sola fila (<code>id=1</code>), jamás <code>DELETE</code>. Mutaciones aisladas en db.js.</p></div>
+      <div class="rulebox"><p class="rk">pnpm</p><p>Gestor de paquetes exclusivo. Prohibido npm/yarn. Tests en verde antes de cada DONE.</p></div>
+    </div>
+  </section>
+
+  <!-- DEBT -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">08</span>
+      <div><h2>Deuda técnica</h2>
+      <p class="sec-note">conocida y acotada</p></div>
+    </div>
+    <div class="debt">
+      <h3>«8 visibles + banco de suplentes» — retirado, pendiente de limpieza</h3>
+      <p>El Diario muestra la rutina completa. Quedan restos: <code>MAX_ROUTINE_SLOTS</code> (diario.js) ya no lo usa nadie, y <code>rutina_ejercicios.activo_hoy</code> es escritura muerta (<code>reordenarEjercicios</code> aún la escribe). Un <code>DROP COLUMN</code> no basta: hay que revisar <code>updateActivoHoy</code>, <code>getRutinaEjerciciosSuplentes</code> (db.js) y la serialización de <code>csv.js</code> — los backups antiguos traen la columna y el import debe seguir aceptándolos.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>GymLog PWA · v1.2.0</span>
+    <span>Generado el 2026-07-27 desde el código fuente</span>
+    <span>Documentación complementaria: <code>docs/arquitectura.json</code></span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "meta": {
+    "proyecto": "GymLog PWA",
+    "descripcion": "Registro de entrenamientos de fuerza, offline-first, sin backend. PostgreSQL (PGLite/WASM) en el navegador, persistido en IndexedDB.",
+    "version": "1.2.0",
+    "generado": "2026-07-27",
+    "fuente": "Derivado del código fuente real (js/, public/, vite.config.js), no solo de CLAUDE.md.",
+    "nota_para_agentes": "Documento de referencia de arquitectura. Las tres capas (app/db/componentes) son límites estrictos: ningún módulo puede cruzarlos. Antes de recomendar un archivo o función, verifica que siga existiendo — este JSON refleja el estado al generarse."
+  },
+  "principios": {
+    "flujo_datos": "Unidireccional (Flux minimalista): Tap del usuario -> db.js (SQL puro) -> actualizar store -> componente.render(store).",
+    "stack": {
+      "ui": "HTML5 semántico + CSS3 con variables nativas + JS ES6+ Vanilla. Sin frameworks ni librerías de routing.",
+      "db": "PGLite (PostgreSQL en WebAssembly), persistido en IndexedDB bajo 'idb://gym-log-db'.",
+      "offline": "Service Worker con dos cachés independientes (shell versionado + catálogo estático).",
+      "routing": "Manipulación nativa del DOM (SPA por show/hide de secciones).",
+      "testing": "Vitest; PGLite en 'memory://' para todos los tests (nunca 'idb://').",
+      "gestor_paquetes": "pnpm exclusivo. Prohibido npm/yarn."
+    },
+    "reglas_owasp": {
+      "A01_xss": "Manipulación segura del DOM (textContent + createElement). Prohibido innerHTML con datos de usuario y eval().",
+      "A03_sqli": "Prepared statements siempre ($1, $2...). Prohibida la concatenación de SQL.",
+      "A05_config": "Tabla conf con una sola fila (id=1); nunca DELETE. Mutaciones aisladas en métodos de db.js.",
+      "A08_integridad": "Importación de backup dentro de BEGIN/COMMIT con ROLLBACK automático ante fallo."
+    },
+    "regla_catalogo": "El catálogo (873 ejercicios de free-exercise-db) es dato de referencia estático en public/assets/catalogo/. JAMÁS se inserta en la PGLite del usuario. Único vínculo permitido: puntero opaco ejercicios.catalogo_id (TEXT, sin FK).",
+    "regla_bw": "peso=0 en la tabla series = ejercicio de peso corporal (BW). Epley retorna 0 si peso===0. El frontend renderiza 'BW'.",
+    "regla_timezone": "La fecha de sesión la captura y formatea JavaScript (toLocaleDateString('en-CA')) antes del INSERT. Nunca DEFAULT CURRENT_DATE de SQL."
+  },
+  "capas": [
+    {
+      "id": "shell",
+      "nombre": "Shell PWA + Build",
+      "responsabilidad": "Cascarón HTML, registro del Service Worker, manifest de instalación y sellado de versión en el build.",
+      "archivos": ["index.html", "public/manifest.json", "public/sw.js", "vite.config.js"]
+    },
+    {
+      "id": "orquestador",
+      "nombre": "Orquestador / Estado global",
+      "responsabilidad": "Store global (const store), dispatch(action, payload), routing SPA por DOM, arranque de la app y warming de caché de imágenes.",
+      "archivos": ["js/app.js"]
+    },
+    {
+      "id": "ui",
+      "nombre": "Componentes de UI",
+      "responsabilidad": "Un módulo por pestaña; expone .render(store) idempotente. Cero SQL directo (todo pasa por db.js). Delegación de eventos en el contenedor.",
+      "archivos": [
+        "js/componentes/diario.js",
+        "js/componentes/progreso.js",
+        "js/componentes/config.js",
+        "js/componentes/catalogoModal.js",
+        "js/componentes/previewModal.js"
+      ]
+    },
+    {
+      "id": "logica",
+      "nombre": "Lógica pura",
+      "responsabilidad": "Cálculo y datos sin DOM ni db: analítica, búsqueda del catálogo, backup, argot, telemetría.",
+      "archivos": [
+        "js/analitico.js",
+        "js/catalogo.js",
+        "js/sinonimos.js",
+        "js/csv.js",
+        "js/telemetria.js"
+      ]
+    },
+    {
+      "id": "datos",
+      "nombre": "Capa de datos",
+      "responsabilidad": "Instancia PGLite, DDL idempotente y funciones de servicio SQL puras (solo promesas, cero DOM).",
+      "archivos": ["js/db.js"]
+    },
+    {
+      "id": "persistencia",
+      "nombre": "Persistencia y assets",
+      "responsabilidad": "Base de datos del usuario en IndexedDB y catálogo de referencia estático (JSON + imágenes WebP).",
+      "archivos": [
+        "IndexedDB: idb://gym-log-db",
+        "public/assets/catalogo/catalogo.json",
+        "public/assets/catalogo/instrucciones.json",
+        "public/assets/catalogo/img/*.webp"
+      ]
+    }
+  ],
+  "modulos": {
+    "js/app.js": {
+      "capa": "orquestador",
+      "lineas": 143,
+      "descripcion": "Orquestador principal: store, dispatch, navigateTo, initApp. Registra el SW (salvo en localhost), pide almacenamiento persistente y precalienta imágenes del catálogo tras abrir el Diario.",
+      "exports": ["store", "dispatch", "navigateTo", "initApp", "aplicarAcento", "ACENTOS"],
+      "importa_de": ["js/telemetria.js", "js/catalogo.js", "js/db.js (dynamic)", "js/componentes/* (dynamic)"],
+      "store": {
+        "currentTab": "diario|progreso|config",
+        "activeRoutineId": "int|null",
+        "loadedExercises": "array",
+        "currentSesionId": "int|null",
+        "prefUnit": "'lb'|'kg'",
+        "acentoKey": "verde|morado|rosa|cian"
+      },
+      "acciones_dispatch": ["SET_SESION", "SET_RUTINA", "SET_EXERCISES", "SET_PREF_UNIT", "SET_ACENTO"]
+    },
+    "js/db.js": {
+      "capa": "datos",
+      "lineas": 667,
+      "descripcion": "Única puerta a PGLite. DDL idempotente en initDB (CREATE IF NOT EXISTS + ALTER ADD COLUMN IF NOT EXISTS para migraciones retrocompatibles en el dispositivo de cada usuario). Solo SQL parametrizado.",
+      "importa_de": ["@electric-sql/pglite"],
+      "grupos_funciones": {
+        "ejercicios": ["getEjercicios", "getOrCreateEjercicio", "saveEjercicio", "updateEjercicioNombre", "deleteEjercicio", "removeEjercicioDeRutina"],
+        "catalogo_retrofit": ["getEjerciciosPendientesRevision", "vincularEjercicioCatalogo", "descartarSugerenciaCatalogo"],
+        "rutinas": ["getRutinas", "saveRutina", "updateRutinaNombre", "deleteRutina", "getRutinaEjercicios", "linkEjercicioToRutina", "swapOrden", "reordenarEjercicios"],
+        "rutina_dias": ["getRutinasDias", "addRutinaDia", "removeRutinaDia", "assignRutinaDiaExclusivo", "updateRutinaDia", "clearRutinaDia"],
+        "sesiones": ["saveSesion", "getSesionDelDia", "touchSesionTiempo", "resetSesionTiempoIfVacia"],
+        "series": ["saveSerie", "deleteSerie", "renumerarSeries", "getUltimaSerie", "getSeriesDeSesionEjercicio", "getTodasSeriesDeHoy", "getUltimasSeriesPorEjercicio", "getSeriesConEjerciciosBySesion", "getSeriesPorEjercicio"],
+        "conf": ["getConf", "updatePrefUnit", "updatePrefAcento", "getOrCreateDeviceId"],
+        "analitica": ["getEstadisticasGlobales", "getActividadSemanal", "getVolumenPorGrupoMuscular", "getPesoMaxPorEjercicio", "getVolumenPorSesion", "getUltimasSesionesConSeries", "getEjerciciosOrdenadosPorUso"],
+        "backup": ["getAllDataForExport"]
+      }
+    },
+    "js/analitico.js": {
+      "capa": "logica",
+      "lineas": 184,
+      "descripcion": "Lógica pura: 1RM Epley, barras ASCII de 20 chars, preparación de datos de progreso (1RM/peso máx/volumen), tendencia y racha.",
+      "exports": ["METRICAS_REGISTRY", "calculateEpley1RM", "calcularBarraProgreso", "prepararDatosProgreso", "prepararDatosPesoMax", "prepararDatosVolumen", "calcularTendencia", "calcularRacha"],
+      "importa_de": []
+    },
+    "js/catalogo.js": {
+      "capa": "logica",
+      "lineas": 238,
+      "descripcion": "Catálogo estático: carga diferida, búsqueda bilingüe (es/en) con tokenización + stemming crudo + sinónimos, ranking por solapamiento, sugerencias de retrofit y derivación de rutas de imagen desde fuente_id.",
+      "exports": ["cargarCatalogo", "cargarInstrucciones", "getInstrucciones", "buscarEnCatalogo", "buscarCatalogo", "candidatosMatch", "mejorMatch", "sugerirMatch", "getCandidatos", "equiposDeCatalogo", "getEquiposCatalogo", "rutasImagenCatalogo", "urlsParaWarming", "getEntradaCatalogo", "normalizarTexto", "puntuarEntrada"],
+      "importa_de": ["js/sinonimos.js"]
+    },
+    "js/sinonimos.js": {
+      "capa": "logica",
+      "lineas": 58,
+      "descripcion": "Diccionario de argot de gimnasio (datos puros, editable a mano). Expande la consulta con variantes antes de buscar.",
+      "exports": ["GRUPOS_SINONIMOS", "expandirConSinonimos"],
+      "importa_de": []
+    },
+    "js/csv.js": {
+      "capa": "logica",
+      "lineas": 111,
+      "descripcion": "Backup completo en JSON (nombre 'csv' es legado). Export/import con transacción obligatoria (BEGIN/COMMIT/ROLLBACK) e inserción en lotes. Acepta backups antiguos (normaliza campos de catálogo).",
+      "exports": ["BACKUP_VERSION", "exportarBackup", "importarBackup"],
+      "importa_de": []
+    },
+    "js/telemetria.js": {
+      "capa": "logica",
+      "lineas": 29,
+      "descripcion": "Beacon anónimo de uso (fire-and-forget) vía navigator.sendBeacon hacia un Cloudflare Worker con D1. Solo familia de OS (nunca UA completo). No dispara en localhost ni offline. text/plain para evitar preflight CORS.",
+      "exports": ["detectOS", "registrarUso"],
+      "importa_de": [],
+      "externo": "Cloudflare Worker D1 (gymlog-d1-...workers.dev)"
+    },
+    "js/componentes/diario.js": {
+      "capa": "ui",
+      "lineas": 1023,
+      "descripcion": "Pestaña principal: rutina del día completa (sin corte ni suplentes), captura de series, miniaturas del catálogo con crossfade, compartir sesión como imagen (html2canvas), QR de la app.",
+      "exports": ["render", "MAX_ROUTINE_SLOTS (legado, ver deuda técnica)"],
+      "importa_de": ["js/app.js", "js/db.js", "js/analitico.js", "js/catalogo.js", "js/componentes/catalogoModal.js", "html2canvas", "assets ?raw/?inline"]
+    },
+    "js/componentes/progreso.js": {
+      "capa": "ui",
+      "lineas": 558,
+      "descripcion": "Pestaña de progreso: estadísticas globales, actividad semanal, volumen por grupo, PRs y gráficas de métricas por ejercicio con barras ASCII.",
+      "exports": ["render"],
+      "importa_de": ["js/db.js", "js/analitico.js"]
+    },
+    "js/componentes/config.js": {
+      "capa": "ui",
+      "lineas": 729,
+      "descripcion": "Pestaña de configuración: unidad (kg/lb), acento de color, gestión de rutinas y días, export/import de backup, descarga manual del catálogo y retrofit de vínculos al catálogo.",
+      "exports": ["render"],
+      "importa_de": ["js/app.js", "js/db.js", "js/csv.js", "js/catalogo.js", "js/componentes/previewModal.js"]
+    },
+    "js/componentes/catalogoModal.js": {
+      "capa": "ui",
+      "lineas": 248,
+      "descripcion": "Picker del catálogo (compartido, no es pestaña): búsqueda + filtros por grupo/equipo, o crear ejercicio personalizado.",
+      "exports": ["abrirCatalogoModal", "GRUPOS_MUSCULARES"],
+      "importa_de": ["js/catalogo.js", "js/componentes/previewModal.js"]
+    },
+    "js/componentes/previewModal.js": {
+      "capa": "ui",
+      "lineas": 172,
+      "descripcion": "Vista previa + confirmación de un ejercicio (compartido). Carga diferida de instrucciones al abrir el detalle.",
+      "exports": ["abrirPreviewEjercicio"],
+      "importa_de": ["js/catalogo.js"]
+    },
+    "public/sw.js": {
+      "capa": "shell",
+      "lineas": 197,
+      "descripcion": "Service Worker con DOS cachés independientes. Placeholders __APP_VERSION__ y __PRECACHE_MANIFEST__ los reemplaza el build.",
+      "cache_shell": {
+        "nombre": "gymlog-v<version>+<sha>",
+        "estrategia": "cache-first con cache-on-fetch; fallback de navegación al shell (index.html); se invalida entera en cada deploy (activate borra las gymlog-v* viejas)."
+      },
+      "cache_catalogo": {
+        "nombre": "gymlog-catalogo (SIN versión)",
+        "estrategia": "Imágenes: cache-first puro (inmutables por nombre). JSON: stale-while-revalidate (network-first si el llamador pide cache:'reload'). Sobrevive a los deploys; se siembra en el install.",
+        "razon": "Separada del shell para que la presión de espacio no purgue ~9 MB de imágenes; motivó pedir navigator.storage.persist()."
+      }
+    }
+  },
+  "modelo_datos": {
+    "motor": "PGLite (PostgreSQL WASM)",
+    "persistencia": "IndexedDB idb://gym-log-db (usuario) / memory:// (tests)",
+    "tablas": {
+      "ejercicios": {
+        "descripcion": "Diccionario global de movimientos del usuario.",
+        "columnas": ["id SERIAL PK", "nombre TEXT", "grupo_muscular TEXT", "catalogo_id TEXT (puntero opaco al catálogo estático, sin FK)", "catalogo_revisado BOOLEAN"]
+      },
+      "rutinas": {
+        "descripcion": "Plantillas de entrenamiento.",
+        "columnas": ["id SERIAL PK", "nombre TEXT", "dia_sugerido INT (legado, migrado a rutina_dias)"]
+      },
+      "rutina_ejercicios": {
+        "descripcion": "Puente rutina<->ejercicio. 'orden' define la posición.",
+        "columnas": ["id SERIAL PK", "rutina_id FK->rutinas ON DELETE CASCADE", "ejercicio_id FK->ejercicios ON DELETE CASCADE", "orden INT", "activo_hoy BOOLEAN (LEGADO, escritura muerta, ver deuda técnica)"]
+      },
+      "rutina_dias": {
+        "descripcion": "Días de la semana asignados a una rutina (un día pertenece a una sola rutina).",
+        "columnas": ["id SERIAL PK", "rutina_id FK->rutinas ON DELETE CASCADE", "dia INT", "UNIQUE(rutina_id, dia)"]
+      },
+      "sesiones": {
+        "descripcion": "Cada entrenamiento real. La fecha la captura JS (regla timezone).",
+        "columnas": ["id SERIAL PK", "fecha DATE", "rutina_id FK->rutinas", "energia_sueno INT", "peso_corporal NUMERIC", "sensacion_final TEXT", "cardio_tipo TEXT", "cardio_tiempo INT", "hora_inicio TIMESTAMPTZ", "hora_fin TIMESTAMPTZ"]
+      },
+      "series": {
+        "descripcion": "Cada set individual. peso=0 => peso corporal (BW).",
+        "columnas": ["id SERIAL PK", "sesion_id FK->sesiones ON DELETE CASCADE", "ejercicio_id FK->ejercicios", "numero_serie INT", "peso NUMERIC", "repeticiones INT"]
+      },
+      "conf": {
+        "descripcion": "Singleton de configuración. UNA fila (id=1), jamás DELETE.",
+        "columnas": ["id INT PK DEFAULT 1 (CHECK id=1)", "pref_unit TEXT (CHECK kg|lb)", "pref_acento TEXT", "device_id TEXT (UUID para telemetría)"]
+      }
+    },
+    "indices": ["idx_sesiones_fecha", "idx_series_sesion_id", "idx_series_ejercicio_id", "idx_re_rutina_orden"]
+  },
+  "build_versionado": {
+    "herramienta": "Vite (base '/GymlogPWA/'), plugin 'sello-de-version'.",
+    "flujo": "generateBundle captura los JS/CSS hasheados del shell -> closeBundle reemplaza __APP_VERSION__ por '<version de package.json>+<sha corto>' y __PRECACHE_MANIFEST__ por el array de URLs del shell. Si falta cualquier placeholder, el build FALLA a propósito (seguro anti-hardcode).",
+    "consecuencia": "Cada push a main genera un CACHE_NAME nuevo (el sha cambia) -> la caché del shell de los clientes se invalida sola en cada deploy. pnpm version solo cuando el cambio significa algo.",
+    "excluido_de_precache": "public/assets/catalogo/** (regla no negociable) y sw.js (no se autoprecachea)."
+  },
+  "externos": {
+    "dependencias": {
+      "@electric-sql/pglite": "^0.5.2 (PostgreSQL en WASM)",
+      "html2canvas": "^1.4.1 (compartir sesión como imagen)"
+    },
+    "servicios": {
+      "cloudflare_worker_d1": "Endpoint de telemetría anónima (sendBeacon POST text/plain). Fuera del repo."
+    }
+  },
+  "tests": {
+    "runner": "Vitest, PGLite en memory://",
+    "archivos": ["db.test.js", "analitico.test.js", "catalogo.test.js", "csv.test.js", "assets.test.js", "integracion.test.js", "navegacion.test.js", "smoke.test.js", "sw.test.js", "telemetria.test.js"],
+    "regla": "pnpm test debe terminar en verde antes de marcar cualquier ticket como DONE."
+  },
+  "deuda_tecnica": {
+    "suplentes_retirados": "El concepto '8 visibles + banco de suplentes' quedó retirado: el Diario muestra la rutina completa. Pendiente de limpieza: MAX_ROUTINE_SLOTS (diario.js) ya no se usa; rutina_ejercicios.activo_hoy es escritura muerta (reordenarEjercicios aún la escribe). Un DROP COLUMN no basta: revisar updateActivoHoy, getRutinaEjerciciosSuplentes (db.js) y la serialización de csv.js (los backups antiguos traen la columna)."
+  }
+}

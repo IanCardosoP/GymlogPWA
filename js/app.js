@@ -1,6 +1,9 @@
 // Orquestador principal: Store global, dispatch, routing SPA por manipulación del DOM
-import { registrarUso } from './telemetria.js';
+import { registrarUso, registrarFalloArranque } from './telemetria.js';
 import { urlsParaWarming } from './catalogo.js';
+// Import ESTÁTICO a propósito: el panel de error no puede depender de un chunk
+// que quizá sea justamente el que no carga.
+import * as arranque from './componentes/arranque.js';
 
 const TABS = ['diario', 'progreso', 'config'];
 
@@ -25,6 +28,10 @@ export const store = {
   currentSesionId: null,
   prefUnit: 'lb',
   acentoKey: 'verde',
+  // 'arrancando' | 'listo' | 'fallo'. Los componentes solo se renderizan en
+  // 'listo': sus render() consultan la base, y antes de que initDB() resuelva
+  // eso lanzaría. Mientras no lo esté, se pinta el panel de arranque.
+  estado: 'arrancando',
 };
 
 export function dispatch(action, payload) {
@@ -55,6 +62,14 @@ export function navigateTo(tabName) {
     if (tab === tabName) container.removeAttribute('hidden');
     else container.setAttribute('hidden', '');
   });
+
+  // Mientras la app no esté lista, la pestaña que se abra muestra el estado de
+  // arranque en vez de quedarse vacía. Navegar tiene que funcionar igual: es lo
+  // que distingue "está cargando" de "está rota".
+  if (store.estado !== 'listo') {
+    arranque.render(`${tabName}-container`);
+    return;
+  }
 
   RENDERS[tabName]?.(store);
 }
@@ -96,31 +111,99 @@ function calentarCacheImagenesCatalogo(getRutinas, getRutinaEjercicios) {
   });
 }
 
+// Umbral del watchdog. Cubre el caso *lie-fi* (red conectada con throughput ~0):
+// ahí el fetch interno del motor no resuelve NI rechaza, así que sin esto la app
+// se quedaría en «cargando» para siempre y sin forma de reintentar.
+const TIMEOUT_ARRANQUE = 15_000;
+
+// No aborta nada: solo avisa. La promesa del arranque sigue viva, porque si la
+// descarga acaba llegando queremos que la app entre normal.
+function armarWatchdog() {
+  const id = setTimeout(() => {
+    arranque.setFallo({
+      titulo: '[ TARDA MÁS DE LO NORMAL ]',
+      mensaje: 'La app sigue intentando preparar la base de datos. Si acabas de ' +
+        'actualizar, puede estar descargando el motor.',
+    });
+    arranque.render(`${store.currentTab}-container`);
+  }, TIMEOUT_ARRANQUE);
+
+  return () => clearTimeout(id);
+}
+
+// Código corto y de conjunto cerrado para la telemetría: nunca se manda a la red
+// un string arbitrario (mismo criterio que el whitelist del worker).
+function clasificarFallo(error) {
+  if (!navigator.onLine) return 'sin-red';
+  const texto = String(error?.message ?? error);
+  if (/dynamically imported module|Importing a module script failed/i.test(texto)) return 'chunk';
+  if (/wasm|WebAssembly|\.data/i.test(texto)) return 'motor';
+  return 'db';
+}
+
+function fallarArranque(error) {
+  store.estado = 'fallo';
+
+  arranque.setFallo({
+    titulo: '[ ✕ NO SE PUDO INICIAR ]',
+    mensaje: navigator.onLine
+      ? 'No se pudo preparar la base de datos. Falta parte de la app en la caché ' +
+        'del dispositivo.'
+      : 'Falta parte de la app en la caché del dispositivo y no hay conexión para ' +
+        'reponerla.',
+    detalle: `${error?.name ?? 'Error'}: ${error?.message ?? error}`,
+  });
+  arranque.render(`${store.currentTab}-container`);
+
+  registrarFalloArranque(clasificarFallo(error)); // fire-and-forget
+}
+
 export async function initApp() {
-  const [{ render: renderDiario }, { render: renderProgreso }, { render: renderConfig }] =
-    await Promise.all([
-      import('./componentes/diario.js'),
-      import('./componentes/progreso.js'),
-      import('./componentes/config.js'),
-    ]);
-
-  RENDERS['diario']  = renderDiario;
-  RENDERS['progreso'] = renderProgreso;
-  RENDERS['config']  = renderConfig;
-
-  const { initDB, getConf, getOrCreateDeviceId, getRutinas, getRutinaEjercicios } =
-    await import('./db.js');
-  await initDB('idb://gym-log-db');
-  const conf = await getConf();
-  store.prefUnit  = conf.pref_unit;
-  store.acentoKey = conf.pref_acento ?? 'verde';
-  aplicarAcento(store.acentoKey);
-  getOrCreateDeviceId().then(id => registrarUso(id, 'open')); // fire-and-forget
-
+  // bindNav ANTES de cualquier await. Estaba después de `await initDB()`, así que
+  // cuando la base no cargaba la nav quedaba pintada pero inerte: ni se podía
+  // cambiar de pestaña. Poder navegar es lo que distingue "está cargando" de
+  // "está rota".
   bindNav();
-  navigateTo('diario');
+  arranque.setCargando('Preparando la aplicación…');
+  arranque.render('diario-container');
 
-  calentarCacheImagenesCatalogo(getRutinas, getRutinaEjercicios); // fire-and-forget
+  const desarmar = armarWatchdog();
+
+  try {
+    const [{ render: renderDiario }, { render: renderProgreso }, { render: renderConfig }] =
+      await Promise.all([
+        import('./componentes/diario.js'),
+        import('./componentes/progreso.js'),
+        import('./componentes/config.js'),
+      ]);
+
+    RENDERS['diario']  = renderDiario;
+    RENDERS['progreso'] = renderProgreso;
+    RENDERS['config']  = renderConfig;
+
+    const { initDB, getConf, getOrCreateDeviceId, getRutinas, getRutinaEjercicios } =
+      await import('./db.js');
+
+    arranque.setCargando('Preparando base de datos…');
+    arranque.render(`${store.currentTab}-container`);
+
+    await initDB('idb://gym-log-db');
+    const conf = await getConf();
+    store.prefUnit  = conf.pref_unit;
+    store.acentoKey = conf.pref_acento ?? 'verde';
+    aplicarAcento(store.acentoKey);
+    getOrCreateDeviceId().then(id => registrarUso(id, 'open')); // fire-and-forget
+
+    store.estado = 'listo';
+    arranque.limpiar();
+    navigateTo(store.currentTab);
+
+    calentarCacheImagenesCatalogo(getRutinas, getRutinaEjercicios); // fire-and-forget
+  } catch (error) {
+    fallarArranque(error);
+  } finally {
+    desarmar();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -143,6 +226,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', e => {
       if (e.target.closest('button')) navigator.vibrate?.(10);
     });
-    initApp();
+    // .catch() de último recurso: initApp ya captura lo suyo, pero un fallo al
+    // pintar el propio panel de error no puede quedar como unhandled rejection
+    // silenciosa — era exactamente el modo de fallo original.
+    initApp().catch(error => console.error('[arranque] fallo no capturado:', error));
   }
 });

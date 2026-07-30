@@ -100,7 +100,22 @@ async function correrCicloDeVida(fuente, almacen, opciones = {}) {
   const resultadoInstall = await despachar('install');
   const resultadoActivate = await despachar('activate');
 
-  return { almacen, pedidas, skipWaiting, claim, resultadoInstall, resultadoActivate };
+  // Consulta por MessageChannel, como lo hace js/swPuente.js desde la página.
+  // waitUntil retiene la promesa que acaba llamando a postMessage, así que
+  // esperarla garantiza que la respuesta ya llegó.
+  const preguntar = async mensaje => {
+    let resolver;
+    const respuesta = new Promise(r => { resolver = r; });
+    const pendientes = [];
+    const puerto = { postMessage: datos => resolver(datos) };
+    handlers.message?.({ data: mensaje, ports: [puerto], waitUntil: p => pendientes.push(p) });
+    await Promise.allSettled(pendientes);
+    return respuesta;
+  };
+
+  return {
+    almacen, pedidas, skipWaiting, claim, resultadoInstall, resultadoActivate, preguntar,
+  };
 }
 
 const urlsEn = (almacen, nombre) =>
@@ -229,6 +244,50 @@ describe('sw.js sellado — ciclo de deploy (el bug de la pantalla en blanco)', 
 
     expect(skipWaiting).toBe(0);
     expect(resultadoInstall.some(r => r.status === 'rejected')).toBe(true);
+  });
+
+  it('responde el estado offline por mensaje, con el motor aparte', async () => {
+    // Sin esta consulta el estado del caché es invisible sin Web Inspector: es
+    // la razón por la que el bug del precache sobrevivió cinco arreglos.
+    const { preguntar } = await correrCicloDeVida(swV1, new Map());
+    const estado = await preguntar({ tipo: 'estado-offline' });
+
+    expect(estado.sellado).toBe(true);
+    expect(estado.version).toMatch(/^\d+\.\d+\.\d+\+/);
+    expect(estado.shell.faltantes).toEqual([]);
+    expect(estado.assets.faltantes).toEqual([]);
+    expect(estado.motor.esperados).toBe(motor.length);
+    expect(estado.motor.faltantes).toEqual([]);
+    expect(estado.catalogo.datos).toBe(2);
+  });
+
+  it('detecta que falta el motor tras un desalojo del navegador', async () => {
+    const almacen = new Map();
+    const { preguntar } = await correrCicloDeVida(swV1, almacen);
+
+    // Simula lo que hace WebKit bajo presión de cuota: se lleva entradas de la
+    // caché por su cuenta, sin que la app se entere.
+    const assets = almacen.get('gymlog-assets');
+    for (const url of motor) assets.entradas.delete(absoluta(url));
+
+    const estado = await preguntar({ tipo: 'estado-offline' });
+    expect(estado.motor.faltantes.length).toBe(motor.length);
+    expect(estado.assets.faltantes.length).toBe(motor.length);
+  });
+
+  it('reparar-precache repone lo desalojado sin esperar a un deploy', async () => {
+    const almacen = new Map();
+    const { preguntar } = await correrCicloDeVida(swV1, almacen);
+
+    const assets = almacen.get('gymlog-assets');
+    for (const url of motor) assets.entradas.delete(absoluta(url));
+
+    const estado = await preguntar({ tipo: 'reparar-precache' });
+
+    expect(estado.motor.faltantes).toEqual([]);
+    for (const url of motor) {
+      expect(urlsEn(almacen, 'gymlog-assets')).toContain(absoluta(url));
+    }
   });
 
   it('un fallo al sembrar el catálogo NO impide tomar control', async () => {

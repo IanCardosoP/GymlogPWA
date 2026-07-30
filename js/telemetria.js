@@ -27,3 +27,27 @@ export const registrarUso = (deviceId, evt = 'open') => {
   const blob = new Blob([payload], { type: 'text/plain' });
   navigator.sendBeacon(TELEMETRY_URL, blob);
 };
+
+// Códigos permitidos para un fallo de arranque. Conjunto cerrado a propósito:
+// mismo criterio que el whitelist del worker — nunca se manda a la red un string
+// que venga de un mensaje de error arbitrario.
+const MOTIVOS_FALLO = ['sin-red', 'motor', 'chunk', 'db', 'timeout'];
+
+// El arranque puede fallar ANTES de que exista la base, así que acá no hay
+// device_id que mandar (el worker acepta id vacío). Sin este evento, un iPhone
+// que no arranca es indistinguible de un iPhone que nadie abrió.
+export const registrarFalloArranque = motivo => {
+  if (!navigator.onLine) return;                 // sin red no hay a dónde mandarlo
+  if (location.hostname === 'localhost') return; // no contaminar datos con el dev server
+
+  const codigo = MOTIVOS_FALLO.includes(motivo) ? motivo : 'db';
+  const payload = JSON.stringify({
+    id: '',
+    evt: `boot_fail:${codigo}`,
+    v: '1.0',
+    pwa: esPWAInstalada(),
+    os: detectOS(navigator.userAgent),
+  });
+  const blob = new Blob([payload], { type: 'text/plain' });
+  navigator.sendBeacon(TELEMETRY_URL, blob);
+};

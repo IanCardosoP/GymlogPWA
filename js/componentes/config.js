@@ -11,6 +11,9 @@ import {
 import { exportarBackup, importarBackup } from '../csv.js';
 import { getCandidatos, urlsParaWarming } from '../catalogo.js';
 import { abrirPreviewEjercicio } from './previewModal.js';
+import {
+  consultarEstadoOffline, repararPrecache, hayServiceWorker, medirAlmacenamiento,
+} from '../swPuente.js';
 
 const ACENTOS_LABELS = {
   verde:  'Verde terminal',
@@ -20,6 +23,90 @@ const ACENTOS_LABELS = {
 };
 
 const DIAS_CORTO = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+
+const mb = bytes => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+function filaOffline(etiqueta, valor, marca) {
+  const fila = cel('div', 'offline-fila');
+  fila.appendChild(cel('span', 'offline-etiqueta', etiqueta));
+  const val = cel('span', 'offline-valor', valor);
+  if (marca) val.classList.add(marca);
+  fila.appendChild(val);
+  return fila;
+}
+
+// Traduce la respuesta del Service Worker a filas legibles. El objetivo es que el
+// PM pueda comprobar un iPhone en tres segundos, sin cable ni Web Inspector: sin
+// esto el estado del caché es invisible, y esa invisibilidad es la razón por la
+// que el bug del precache sobrevivió cinco intentos de arreglo.
+async function pintarEstadoOffline(bloque, btnReparar) {
+  const pintar = filas => {
+    bloque.textContent = '';
+    filas.forEach(f => bloque.appendChild(f));
+  };
+
+  if (!hayServiceWorker()) {
+    pintar([filaOffline('Service Worker', 'no activo', 'is-falta')]);
+    return;
+  }
+
+  let estado;
+  try {
+    estado = await consultarEstadoOffline();
+  } catch (error) {
+    pintar([filaOffline('Estado', `no disponible (${error.message})`, 'is-falta')]);
+    return;
+  }
+
+  if (!estado?.sellado) {
+    pintar([filaOffline('Build', 'sin sellar (desarrollo)')]);
+    return;
+  }
+
+  const marca = faltan => (faltan === 0 ? 'is-ok' : 'is-falta');
+  const resumen = ({ esperados, faltantes }) =>
+    faltantes.length === 0 ? `${esperados}/${esperados} ✓` : `faltan ${faltantes.length}`;
+
+  const filas = [
+    filaOffline('Versión', estado.version),
+    filaOffline('App (shell)', resumen(estado.shell), marca(estado.shell.faltantes.length)),
+    filaOffline('Archivos de la app', resumen(estado.assets), marca(estado.assets.faltantes.length)),
+    // La fila que de verdad decide si la app abre sin datos.
+    filaOffline(
+      'Motor de la base',
+      estado.motor.faltantes.length === 0 ? 'completo ✓' : 'INCOMPLETO',
+      marca(estado.motor.faltantes.length)
+    ),
+    filaOffline('Catálogo (datos)', `${estado.catalogo.datos}/2`, marca(2 - estado.catalogo.datos)),
+    filaOffline('Catálogo (imágenes)', String(estado.catalogo.imagenes)),
+  ];
+
+  const almacenamiento = await medirAlmacenamiento();
+  if (almacenamiento?.usados != null) {
+    filas.push(filaOffline('Espacio usado', mb(almacenamiento.usados)));
+  }
+
+  pintar(filas);
+
+  const faltaAlgo = estado.shell.faltantes.length + estado.assets.faltantes.length > 0;
+  btnReparar.hidden = !faltaAlgo;
+  if (!faltaAlgo) return;
+
+  btnReparar.onclick = async () => {
+    btnReparar.disabled = true;
+    const previo = btnReparar.textContent;
+    btnReparar.textContent = '[ DESCARGANDO… ]';
+    try {
+      await repararPrecache();
+      await pintarEstadoOffline(bloque, btnReparar);
+    } catch (error) {
+      pintar([filaOffline('Reparación', `falló (${error.message})`, 'is-falta')]);
+    } finally {
+      btnReparar.disabled = false;
+      btnReparar.textContent = previo;
+    }
+  };
+}
 
 function cel(tag, clase, texto) {
   const e = document.createElement(tag);
@@ -161,6 +248,22 @@ export async function render(state) {
   secApp.appendChild(btnDescargarCatalogo);
   const catalogoFeedback = cel('p', 'resultado-importacion');
   secApp.appendChild(catalogoFeedback);
+
+  secApp.appendChild(cel('hr', 'config-separador'));
+
+  // Estado offline: qué hay realmente en caché. Va acá, junto a las acciones que
+  // lo modifican. Se rellena de forma asíncrona (hay que preguntarle al SW) para
+  // no retrasar el render del resto de Config.
+  secApp.appendChild(cel('p', 'reset-advertencia',
+    'Estado de la descarga para uso sin conexión. Si algo falta, la app puede no ' +
+    'abrir sin datos.'));
+  const bloqueOffline = cel('div', 'offline-estado');
+  bloqueOffline.appendChild(filaOffline('Comprobando…', ''));
+  secApp.appendChild(bloqueOffline);
+  const btnReparar = cel('button', 'btn-descargar-catalogo', '[ ⇩ COMPLETAR DESCARGA ]');
+  btnReparar.hidden = true;
+  secApp.appendChild(btnReparar);
+  pintarEstadoOffline(bloqueOffline, btnReparar); // fire-and-forget
 
   container.appendChild(secApp);
 

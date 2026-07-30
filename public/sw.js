@@ -180,6 +180,73 @@ async function podarAssets() {
   );
 }
 
+// El SW es el único que conoce los manifiestos sellados, así que la página le
+// pregunta por mensaje si la app está completa para funcionar offline. Sin esto
+// el estado de la caché es invisible: es la razón por la que el bug del precache
+// sobrevivió cinco intentos de arreglo. Responde por el MessageChannel que manda
+// la página (ver js/swPuente.js).
+self.addEventListener('message', event => {
+  const puerto = event.ports?.[0];
+  if (!puerto) return;
+
+  const responder = promesa => event.waitUntil(
+    promesa
+      .then(datos => puerto.postMessage(datos))
+      .catch(error => puerto.postMessage({ error: String(error?.message ?? error) }))
+  );
+
+  if (event.data?.tipo === 'estado-offline') {
+    responder(estadoOffline());
+    return;
+  }
+
+  // Repone lo que falte sin esperar a un deploy nuevo: es el remedio real
+  // cuando el navegador desalojó parte de la caché.
+  if (event.data?.tipo === 'reparar-precache') {
+    responder(precachear().then(() => estadoOffline()));
+  }
+});
+
+async function estadoOffline() {
+  if (!manifiestosSellados()) return { sellado: false };
+
+  const [shell, assets, catalogo] = await Promise.all([
+    revisarCache(SHELL_CACHE, PRECACHE_SHELL),
+    revisarCache(ASSETS_CACHE, PRECACHE_ASSETS),
+    caches.open(CATALOGO_CACHE).then(c => c.keys()),
+  ]);
+
+  return {
+    sellado: true,
+    version: SHELL_CACHE.replace('gymlog-shell-v', ''),
+    shell,
+    assets,
+    // Se reporta aparte porque es LO que decide si la app arranca sin red.
+    motor: {
+      esperados: assets.esperados_motor,
+      faltantes: assets.faltantes.filter(esDelMotor),
+    },
+    catalogo: {
+      imagenes: catalogo.filter(r => r.url.includes('/assets/catalogo/img/')).length,
+      datos: catalogo.filter(r => r.url.endsWith('.json')).length,
+    },
+  };
+}
+
+const esDelMotor = url => url.endsWith('.wasm') || url.endsWith('.data');
+
+async function revisarCache(nombre, manifiesto) {
+  const cache = await caches.open(nombre);
+  const presentes = await Promise.all(
+    manifiesto.map(url => cache.match(url, { ignoreVary: true }).then(Boolean))
+  );
+  return {
+    esperados: manifiesto.length,
+    esperados_motor: manifiesto.filter(esDelMotor).length,
+    faltantes: manifiesto.filter((_, i) => !presentes[i]),
+  };
+}
+
 // Todas las llamadas a .match() de este archivo pasan { ignoreVary: true }.
 // Motivo: algunos hostings (vite preview/sirv, y potencialmente cualquiera)
 // responden con `Vary: Origin`. El fetch de cache.addAll() en install va en

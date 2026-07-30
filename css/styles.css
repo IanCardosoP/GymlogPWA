@@ -2244,3 +2244,118 @@ details:not(.metrica-info) > summary:hover {
   font-size: var(--fs-caption);
   letter-spacing: 0.05em;
 }
+
+/* ── Estado de arranque ────────────────────────────────────────────────────────
+   Panel que se pinta mientras la app prepara la base y, si algo falla, en lugar
+   de la pantalla vacía silenciosa que dejaba el arranque sin catch. */
+
+.arranque {
+  padding: var(--sp-4) 0;
+}
+
+.arranque-titulo {
+  font-size: var(--fs-body-lg);
+  font-weight: normal;
+  color: var(--color-peligro);
+  letter-spacing: 0.05em;
+  margin-bottom: var(--sp-3);
+}
+
+.arranque-mensaje {
+  font-size: var(--fs-body-sm);
+  color: var(--color-texto-dim);
+  line-height: 1.6;
+  margin-bottom: var(--sp-3);
+}
+
+.arranque-pista {
+  font-size: var(--fs-detail);
+  color: var(--color-texto-faint);
+  line-height: 1.6;
+  margin-bottom: var(--sp-3);
+}
+
+.arranque-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.arranque-btn {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 1px solid var(--color-acento);
+  color: var(--color-acento);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body-sm);
+  padding: var(--sp-3);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-base) var(--ease-out),
+              color var(--dur-base) var(--ease-out);
+}
+
+.arranque-btn:hover {
+  background-color: var(--color-acento);
+  color: var(--color-fondo);
+}
+
+.arranque-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.arranque-detalle {
+  font-size: var(--fs-detail);
+  color: var(--color-texto-faint);
+}
+
+.arranque-detalle-texto {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  background-color: var(--color-fondo-alt);
+  border: 1px solid var(--color-borde);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--color-texto-dim);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* ── Estado offline (Config) ───────────────────────────────────────────────────
+   Hace visible qué hay realmente en caché. El bug del precache sobrevivió cinco
+   arreglos justamente porque este estado era invisible sin Web Inspector. */
+
+.offline-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--color-linea);
+  font-size: var(--fs-body-sm);
+}
+
+.offline-fila:last-of-type {
+  border-bottom: none;
+}
+
+.offline-etiqueta {
+  color: var(--color-texto-dim);
+}
+
+.offline-valor {
+  color: var(--color-texto-faint);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.offline-valor.is-ok {
+  color: var(--color-exito);
+}
+
+.offline-valor.is-falta {
+  color: var(--color-peligro);
+}
