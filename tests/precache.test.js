@@ -32,28 +32,34 @@ const leerManifiesto = (fuente, nombre) => {
   return JSON.parse(linea[1]);
 };
 
+// El motor legado (PGLite) se identifica igual que en vite.config.js.
+const esMotorLegado = nombre => /^(pglite|initdb)-/.test(nombre);
+
 describe('manifiesto de precache (build real)', () => {
-  let shell, assets, emitidos;
+  let shell, assets, legado, emitidos;
 
   beforeAll(() => {
     const fuente = readFileSync(DIST_SW, 'utf-8');
     shell = leerManifiesto(fuente, 'PRECACHE_SHELL');
     assets = leerManifiesto(fuente, 'PRECACHE_ASSETS');
+    legado = leerManifiesto(fuente, 'ASSETS_LEGADO');
     emitidos = readdirSync(DIST_ASSETS).filter(f => !COPIADOS_DE_PUBLIC.has(f));
   });
 
   it('no deja ningún placeholder sin sellar en dist/sw.js', () => {
     const fuente = readFileSync(DIST_SW, 'utf-8');
-    for (const ph of ['__APP_VERSION__', '__PRECACHE_SHELL__', '__PRECACHE_ASSETS__']) {
+    for (const ph of ['__APP_VERSION__', '__PRECACHE_SHELL__', '__PRECACHE_ASSETS__', '__ASSETS_LEGADO__']) {
       expect(fuente, `placeholder sin sellar: ${ph}`).not.toContain(ph);
     }
   });
 
-  it('precachea el motor de la base de datos (.wasm y .data) — el bug original', () => {
-    const motorEmitido = emitidos.filter(f => f.endsWith('.wasm') || f.endsWith('.data'));
-    // Si PGLite deja de emitir wasm, este test debe romperse a propósito: el
+  it('precachea el motor VIGENTE de la base de datos (.wasm) — el bug original', () => {
+    const motorEmitido = emitidos
+      .filter(f => (f.endsWith('.wasm') || f.endsWith('.data')) && !esMotorLegado(f));
+    // Si el motor deja de emitir wasm, este test debe romperse a propósito: el
     // supuesto de la aserción siguiente cambió y hay que revisarla.
-    expect(motorEmitido.length, 'el build no emitió ningún .wasm/.data').toBeGreaterThan(0);
+    expect(motorEmitido.length, 'el build no emitió ningún .wasm/.data vigente')
+      .toBeGreaterThan(0);
 
     for (const archivo of motorEmitido) {
       expect(assets, `el motor no está en el precache: ${archivo}`)
@@ -61,11 +67,23 @@ describe('manifiesto de precache (build real)', () => {
     }
   });
 
-  it('precachea TODO lo que Rollup emite, no solo .js y .css', () => {
-    // La aserción amplia es deliberada: es la que impide que vuelva a colarse
-    // una allowlist de extensiones y se olvide del próximo formato que aparezca.
-    const faltantes = emitidos.filter(f => !assets.includes(`/GymlogPWA/assets/${f}`));
-    expect(faltantes, `assets emitidos fuera del precache: ${faltantes.join(', ')}`).toEqual([]);
+  it('cada asset emitido está en un manifiesto: precache o legado, ninguno huérfano', () => {
+    // La aserción amplia es deliberada: es la que impide que vuelva a colarse una
+    // allowlist de extensiones y se olvide del próximo formato que aparezca. El
+    // motor legado cuenta como cubierto porque, aunque no se precachea, sí está
+    // protegido de la poda.
+    const cubiertos = new Set([...assets, ...legado]);
+    const huerfanos = emitidos.filter(f => !cubiertos.has(`/GymlogPWA/assets/${f}`));
+    expect(huerfanos, `assets emitidos sin manifiesto: ${huerfanos.join(', ')}`).toEqual([]);
+  });
+
+  it('el motor legado (16.2 MB de PGLite) NO se precachea', () => {
+    // Un usuario nuevo no debe descargar 16 MB de un motor que nunca va a usar;
+    // solo hace falta una vez, y solo a quien viene de la versión anterior.
+    const legadoEnPrecache = assets.filter(u => esMotorLegado(u.split('/').pop()));
+    expect(legadoEnPrecache).toEqual([]);
+    expect(legado.length).toBeGreaterThan(0);
+    expect(legado.some(u => u.includes('pglite'))).toBe(true);
   });
 
   it('no precachea el catálogo (regla no negociable: es dato de referencia estático)', () => {

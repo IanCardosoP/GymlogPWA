@@ -39,7 +39,7 @@ export const registrarUso = (deviceId, evt = 'open') => {
 // Códigos permitidos para un fallo de arranque. Conjunto cerrado a propósito:
 // mismo criterio que el whitelist del worker — nunca se manda a la red un string
 // que venga de un mensaje de error arbitrario.
-const MOTIVOS_FALLO = ['sin-red', 'motor', 'chunk', 'db', 'timeout'];
+const MOTIVOS_FALLO = ['sin-red', 'motor', 'chunk', 'db', 'timeout', 'migracion'];
 
 // El arranque puede fallar ANTES de que exista la base, así que acá no hay
 // device_id que mandar (el worker acepta id vacío). Sin este evento, un iPhone

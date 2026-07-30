@@ -13,7 +13,7 @@ async function insertarEnLotes(dbInstance, tabla, columnas, filas, tamanoLote = 
   for (let i = 0; i < filas.length; i += tamanoLote) {
     const lote = filas.slice(i, i + tamanoLote);
     const placeholders = lote
-      .map((_, fi) => `(${columnas.map((_, ci) => `$${fi * n + ci + 1}`).join(',')})`)
+      .map((_, fi) => `(${columnas.map((_, ci) => `?${fi * n + ci + 1}`).join(',')})`)
       .join(',');
     const valores = lote.flatMap(fila => columnas.map(col => fila[col] ?? null));
     await dbInstance.query(
@@ -83,17 +83,14 @@ export async function importarBackup(textoJson, dbInstance) {
 
     if (conf)
       await dbInstance.query(
-        'UPDATE conf SET pref_unit = $1, pref_acento = $2 WHERE id = 1',
+        'UPDATE conf SET pref_unit = ?1, pref_acento = ?2 WHERE id = 1',
         [conf.pref_unit ?? 'lb', conf.pref_acento ?? 'verde']);
 
-    // Resetear secuencias para que futuros INSERTs no colisionen con IDs restaurados
-    await dbInstance.exec(`
-      SELECT setval('ejercicios_id_seq', COALESCE((SELECT MAX(id) FROM ejercicios), 0) + 1, false);
-      SELECT setval('rutinas_id_seq', COALESCE((SELECT MAX(id) FROM rutinas), 0) + 1, false);
-      SELECT setval('rutina_ejercicios_id_seq', COALESCE((SELECT MAX(id) FROM rutina_ejercicios), 0) + 1, false);
-      SELECT setval('sesiones_id_seq', COALESCE((SELECT MAX(id) FROM sesiones), 0) + 1, false);
-      SELECT setval('series_id_seq', COALESCE((SELECT MAX(id) FROM series), 0) + 1, false);
-    `);
+    // Antes acá había cinco SELECT setval(...) para reajustar las secuencias de
+    // Postgres y que los INSERT futuros no colisionaran con los IDs restaurados.
+    // En SQLite no hace falta: con INTEGER PRIMARY KEY AUTOINCREMENT el motor
+    // mantiene sqlite_sequence y lo sube solo al insertar un id explícito mayor
+    // que el máximo registrado, que es justo lo que hace este import.
 
     await dbInstance.exec('COMMIT');
     return {

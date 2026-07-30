@@ -208,6 +208,39 @@ describe('sw.js sellado — ciclo de deploy (el bug de la pantalla en blanco)', 
     expect(enAssets).toContain(absoluta('/GymlogPWA/assets/index-NUEVOHASH2.js'));
   });
 
+  it('la poda NO se lleva el motor legado, aunque no esté precacheado', async () => {
+    // Interacción sutil y peligrosa: PGLite ya no se precachea (son 16 MB que un
+    // usuario nuevo no necesita), pero un iPhone que viene de la versión anterior
+    // SÍ los tiene cacheados y los necesita una última vez para migrar sus datos.
+    // Si la poda se los llevara, ese usuario se quedaría sin poder migrar hasta
+    // tener conexión — con sus datos inalcanzables mientras tanto.
+    const legado = JSON.parse(/^const ASSETS_LEGADO = (\[.*\]);$/m.exec(swV1)[1]);
+    expect(legado.length).toBeGreaterThan(0);
+
+    const almacen = new Map();
+    await correrCicloDeVida(swV1, almacen);
+
+    // Simula al usuario que llega con el motor viejo ya en caché.
+    const assets = almacen.get('gymlog-assets');
+    for (const url of legado) await assets.put(url, { ok: true });
+
+    await correrCicloDeVida(swV2, almacen);
+
+    const enAssets = urlsEn(almacen, 'gymlog-assets');
+    for (const url of legado) {
+      expect(enAssets, `la poda borró el motor legado: ${url}`).toContain(absoluta(url));
+    }
+  });
+
+  it('el install no descarga el motor legado (un usuario nuevo no paga 16 MB)', async () => {
+    const legado = JSON.parse(/^const ASSETS_LEGADO = (\[.*\]);$/m.exec(swV1)[1]);
+    const { pedidas } = await correrCicloDeVida(swV1, new Map());
+
+    for (const url of legado) {
+      expect(pedidas, `el install bajó el motor legado: ${url}`).not.toContain(absoluta(url));
+    }
+  });
+
   it('el shell viejo y las cachés monolíticas legadas (gymlog-v*) sí se borran', async () => {
     const almacen = new Map();
     // Simula un usuario que viene del esquema anterior

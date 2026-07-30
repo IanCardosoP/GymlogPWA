@@ -10,6 +10,15 @@ const PLACEHOLDER = '__APP_VERSION__';
 // como __APP_VERSION__.
 const SHELL_PLACEHOLDER  = "'__PRECACHE_SHELL__'";
 const ASSETS_PLACEHOLDER = "'__PRECACHE_ASSETS__'";
+const LEGADO_PLACEHOLDER = "'__ASSETS_LEGADO__'";
+
+// Artefactos del motor LEGADO (PGLite): 16.2 MB que solo hacen falta una vez, y
+// solo a quien viene de una versión anterior, para migrar sus datos a SQLite.
+// No se precachean (un usuario nuevo no debe bajar 16 MB de un motor que nunca
+// va a usar) pero TAMPOCO se podan: quien ya los tenga cacheados de la versión
+// anterior debe poder migrar sin red. Se retiran del todo en la fase de limpieza,
+// cuando ya nadie quede sin migrar.
+const esMotorLegado = clave => /(^|\/)(pglite|initdb)-/.test(clave);
 const { version } = JSON.parse(readFileSync('./package.json', 'utf8'));
 
 // El sha hace que CADA deploy tenga un SHELL_CACHE distinto aunque nadie suba la
@@ -81,7 +90,7 @@ function selloDeVersion() {
       }
       fuente = fuente.replaceAll(PLACEHOLDER, SELLO);
 
-      for (const ph of [SHELL_PLACEHOLDER, ASSETS_PLACEHOLDER]) {
+      for (const ph of [SHELL_PLACEHOLDER, ASSETS_PLACEHOLDER, LEGADO_PLACEHOLDER]) {
         if (!fuente.includes(ph)) {
           throw new Error(
             `sw.js no contiene ${ph}: alguien fijó el manifiesto a mano. ` +
@@ -117,28 +126,34 @@ function selloDeVersion() {
         `${BASE}icons/icon-192.svg`,
         `${BASE}icons/icon-512.svg`,
       ])];
-      const assets = [...new Set(assetsHasheados)];
+      const todos = [...new Set(assetsHasheados)];
+      const assets = todos.filter(u => !esMotorLegado(u));
+      const legado = todos.filter(esMotorLegado);
 
-      // Guard de regresión en el propio build: si el motor de la base de datos
-      // no está en el manifiesto de assets, la app no puede arrancar offline y
-      // no tiene sentido publicar ese build. Es el seguro contra volver a
-      // introducir una allowlist de extensiones en generateBundle.
+      // Guard de regresión en el propio build: si el motor de la base de datos no
+      // está en el manifiesto de assets, la app no puede arrancar offline y no
+      // tiene sentido publicar ese build. Es el seguro contra volver a introducir
+      // una allowlist de extensiones en generateBundle. Cuenta solo el motor
+      // VIGENTE: si algún día el filtro dejara pasar únicamente el legado, esto
+      // seguiría fallando, que es lo que se quiere.
       const motor = assets.filter(u => u.endsWith('.wasm') || u.endsWith('.data'));
       if (motor.length === 0) {
         throw new Error(
-          'El manifiesto de assets no contiene ningún .wasm/.data: el motor de la ' +
-          'base de datos quedaría fuera del precache y la app no arrancaría sin red. ' +
-          'Revisa los filtros de generateBundle en vite.config.js.'
+          'El manifiesto de assets no contiene ningún .wasm/.data vigente: el motor ' +
+          'de la base de datos quedaría fuera del precache y la app no arrancaría ' +
+          'sin red. Revisa los filtros de generateBundle en vite.config.js.'
         );
       }
 
       fuente = fuente.replaceAll(SHELL_PLACEHOLDER, JSON.stringify(shell));
       fuente = fuente.replaceAll(ASSETS_PLACEHOLDER, JSON.stringify(assets));
+      fuente = fuente.replaceAll(LEGADO_PLACEHOLDER, JSON.stringify(legado));
 
       writeFileSync(ruta, fuente);
       this.info(`SHELL_CACHE → gymlog-shell-v${SELLO}`);
       this.info(`PRECACHE_SHELL  → ${shell.length} entradas`);
       this.info(`PRECACHE_ASSETS → ${assets.length} entradas (${motor.length} del motor)`);
+      this.info(`ASSETS_LEGADO   → ${legado.length} entradas (no se precachean, no se podan)`);
     },
   };
 }

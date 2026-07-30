@@ -32,6 +32,12 @@ const ASSETS_CACHE = 'gymlog-assets';
 const CATALOGO_CACHE = 'gymlog-catalogo';
 const PRECACHE_SHELL = '__PRECACHE_SHELL__';
 const PRECACHE_ASSETS = '__PRECACHE_ASSETS__';
+// Artefactos del motor LEGADO (PGLite, 16.2 MB). Ni se precachean ni se podan:
+// un usuario nuevo no debe bajar 16 MB de un motor que nunca usará, pero quien
+// venga de la versión anterior y los tenga ya cacheados debe poder migrar sus
+// datos SIN RED. Se sirven cache-first como cualquier asset, y quien no los
+// tenga los baja al vuelo la única vez que migra.
+const ASSETS_LEGADO = '__ASSETS_LEGADO__';
 
 const esImagenCatalogo = pathname => pathname.includes('/assets/catalogo/img/');
 const esDatoCatalogo = pathname =>
@@ -168,8 +174,12 @@ async function podarAssets() {
   const cache = await caches.open(ASSETS_CACHE);
   // Comparación por pathname: el manifiesto trae rutas absolutas del sitio
   // (`/GymlogPWA/assets/…`) y las Request cacheadas traen URL completa.
+  // El motor legado entra en «vigentes» aunque no se precachee: si se podara,
+  // un iPhone sin red que aún no ha migrado perdería los bytes con los que leer
+  // su base vieja, y sus datos quedarían inalcanzables hasta tener conexión.
   const vigentes = new Set(
-    PRECACHE_ASSETS.map(url => new URL(url, self.registration.scope).pathname)
+    [...PRECACHE_ASSETS, ...(Array.isArray(ASSETS_LEGADO) ? ASSETS_LEGADO : [])]
+      .map(url => new URL(url, self.registration.scope).pathname)
   );
   const entradas = await cache.keys();
 

@@ -144,18 +144,28 @@ function clasificarFallo(error) {
 function fallarArranque(error) {
   store.estado = 'fallo';
 
+  // La migración es el único fallo en el que el usuario TIENE datos en juego, así
+  // que se le dice explícitamente que están a salvo. Arrancar con la base vacía
+  // sería peor que no arrancar: empezaría a registrar encima y acabaríamos con
+  // dos conjuntos de datos divergentes. La base vieja no se borra hasta que la
+  // migración haya salido bien.
+  const esMigracion = /migración fallida/i.test(String(error?.message ?? ''));
+
   arranque.setFallo({
-    titulo: '[ ✕ NO SE PUDO INICIAR ]',
-    mensaje: navigator.onLine
-      ? 'No se pudo preparar la base de datos. Falta parte de la app en la caché ' +
-        'del dispositivo.'
-      : 'Falta parte de la app en la caché del dispositivo y no hay conexión para ' +
-        'reponerla.',
+    titulo: esMigracion ? '[ ⚠ MIGRACIÓN PENDIENTE ]' : '[ ✕ NO SE PUDO INICIAR ]',
+    mensaje: esMigracion
+      ? 'Tus datos están a salvo, pero no se pudieron trasladar todavía. ' +
+        'Conéctate una vez a internet y vuelve a abrir la app: se completa sola.'
+      : navigator.onLine
+        ? 'No se pudo preparar la base de datos. Falta parte de la app en la caché ' +
+          'del dispositivo.'
+        : 'Falta parte de la app en la caché del dispositivo y no hay conexión para ' +
+          'reponerla.',
     detalle: `${error?.name ?? 'Error'}: ${error?.message ?? error}`,
   });
   arranque.render(`${store.currentTab}-container`);
 
-  registrarFalloArranque(clasificarFallo(error)); // fire-and-forget
+  registrarFalloArranque(esMigracion ? 'migracion' : clasificarFallo(error));
 }
 
 export async function initApp() {
@@ -187,7 +197,20 @@ export async function initApp() {
     arranque.setCargando('Preparando base de datos…');
     arranque.render(`${store.currentTab}-container`);
 
-    await initDB('idb://gym-log-db');
+    const motor = await initDB('idb://gym-log-db');
+
+    // Migración única desde la base PGLite legada. El módulo se carga en un chunk
+    // aparte y solo si hace falta: una instalación nueva nunca descarga PGLite.
+    // Si falla, se propaga al panel de arranque en vez de arrancar con la base
+    // vacía — el usuario tiene datos y hay que decírselo, no perderlos en
+    // silencio (la base legada no se borra en este release).
+    const { migrarDesdePglite, yaMigrado } = await import('./migracion/desdePglite.js');
+    if (!yaMigrado()) {
+      arranque.setCargando('Migrando tus datos…');
+      arranque.render(`${store.currentTab}-container`);
+      await migrarDesdePglite(motor);
+    }
+
     const conf = await getConf();
     store.prefUnit  = conf.pref_unit;
     store.acentoKey = conf.pref_acento ?? 'verde';

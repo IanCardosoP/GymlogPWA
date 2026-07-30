@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.2",
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "html2canvas": "^1.4.1"
   }
 }
