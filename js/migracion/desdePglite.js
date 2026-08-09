@@ -55,7 +55,14 @@ export async function leerBaseLegada(pg) {
     pg.query('SELECT id, nombre FROM rutinas ORDER BY id'),
     pg.query('SELECT rutina_id, ejercicio_id, orden, activo_hoy FROM rutina_ejercicios ORDER BY rutina_id, orden'),
     pg.query('SELECT rutina_id, dia FROM rutina_dias ORDER BY rutina_id, dia'),
-    pg.query('SELECT id, fecha::text AS fecha, rutina_id, energia_sueno, peso_corporal FROM sesiones ORDER BY fecha, id'),
+    // hora_inicio/hora_fin son TIMESTAMPTZ en la base legada y TEXT en la nueva.
+    // Se leen crudas (PGLite las devuelve como Date) y se normalizan a ISO en JS
+    // — ver isoOrNull más abajo. Un `::text` de Postgres daría
+    // '2026-07-30 09:00:00+00', que no es ISO-8601 y rompería el new Date() con
+    // el que progreso.js calcula la duración.
+    pg.query(`SELECT id, fecha::text AS fecha, rutina_id, energia_sueno, peso_corporal,
+                     sensacion_final, cardio_tipo, cardio_tiempo, hora_inicio, hora_fin
+              FROM sesiones ORDER BY fecha, id`),
     pg.query('SELECT sesion_id, ejercicio_id, numero_serie, peso, repeticiones FROM series ORDER BY sesion_id, numero_serie'),
   ]);
 
@@ -67,10 +74,23 @@ export async function leerBaseLegada(pg) {
     rutinas: rutinas.rows,
     rutina_ejercicios: reRows.rows,
     rutina_dias: rdRows.rows,
-    sesiones: sesiones.rows,
+    sesiones: sesiones.rows.map(s => ({
+      ...s,
+      hora_inicio: isoOrNull(s.hora_inicio),
+      hora_fin: isoOrNull(s.hora_fin),
+    })),
     series: series.rows,
   };
 }
+
+// TIMESTAMPTZ de PGLite → el mismo formato ISO que escribe el motor nuevo
+// (new Date().toISOString()). Acepta Date o string por si el driver cambia de
+// criterio entre versiones.
+const isoOrNull = valor => {
+  if (valor == null) return null;
+  if (valor instanceof Date) return valor.toISOString();
+  return String(valor);
+};
 
 // Guarda el backup íntegro antes de tocar nada. Si el import falla a medias (o
 // sale bien pero el usuario reporta algo raro), los datos originales siguen

@@ -75,8 +75,13 @@ export async function importarBackup(textoJson, dbInstance) {
     await insertarEnLotes(dbInstance, 'rutina_dias',
       ['rutina_id', 'dia'], rutina_dias);
 
+    // Las columnas de tiempo y las de cardio se añadieron después del formato
+    // original. Los backups viejos no las traen: insertarEnLotes usa
+    // `fila[col] ?? null`, así que entran como NULL sin romper nada y sin
+    // necesidad de subir BACKUP_VERSION (el cambio es aditivo y compatible).
     await insertarEnLotes(dbInstance, 'sesiones',
-      ['id', 'fecha', 'rutina_id', 'energia_sueno', 'peso_corporal'], sesiones);
+      ['id', 'fecha', 'rutina_id', 'energia_sueno', 'peso_corporal',
+       'sensacion_final', 'cardio_tipo', 'cardio_tiempo', 'hora_inicio', 'hora_fin'], sesiones);
 
     await insertarEnLotes(dbInstance, 'series',
       ['sesion_id', 'ejercicio_id', 'numero_serie', 'peso', 'repeticiones'], series);

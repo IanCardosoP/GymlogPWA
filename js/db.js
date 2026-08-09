@@ -722,7 +722,16 @@ export async function getAllDataForExport() {
     query('SELECT id, nombre FROM rutinas ORDER BY id'),
     query('SELECT rutina_id, ejercicio_id, orden, activo_hoy FROM rutina_ejercicios ORDER BY rutina_id, orden'),
     query('SELECT rutina_id, dia FROM rutina_dias ORDER BY rutina_id, dia'),
-    query('SELECT id, fecha, rutina_id, energia_sueno, peso_corporal FROM sesiones ORDER BY fecha, id'),
+    // TODAS las columnas de sesiones. Antes solo viajaban cinco, y hora_inicio /
+    // hora_fin quedaban fuera: como progreso.js y diario.js calculan la duración
+    // del entrenamiento con ellas, cada backup/restore —y la migración a SQLite,
+    // que reutiliza este mismo camino— borraba en silencio la duración de todas
+    // las sesiones pasadas. sensacion_final y cardio_* van también aunque hoy
+    // nadie las escriba: dejarlas fuera es sembrar exactamente el mismo bug para
+    // el día que alguien empiece a usarlas.
+    query(`SELECT id, fecha, rutina_id, energia_sueno, peso_corporal,
+                  sensacion_final, cardio_tipo, cardio_tiempo, hora_inicio, hora_fin
+           FROM sesiones ORDER BY fecha, id`),
     query('SELECT sesion_id, ejercicio_id, numero_serie, peso, repeticiones FROM series ORDER BY sesion_id, numero_serie'),
   ]);
 

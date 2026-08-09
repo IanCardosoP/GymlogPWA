@@ -39,7 +39,9 @@ const DDL_LEGADA = `
   );
   CREATE TABLE sesiones (
     id SERIAL PRIMARY KEY, fecha DATE, rutina_id INT REFERENCES rutinas(id),
-    energia_sueno INT, peso_corporal NUMERIC
+    energia_sueno INT, peso_corporal NUMERIC,
+    sensacion_final TEXT, cardio_tipo TEXT, cardio_tiempo INT,
+    hora_inicio TIMESTAMPTZ, hora_fin TIMESTAMPTZ
   );
   CREATE TABLE series (
     id SERIAL PRIMARY KEY,
@@ -64,9 +66,12 @@ const DDL_LEGADA = `
     (1, 1, 1, TRUE), (1, 3, 2, TRUE), (2, 2, 1, FALSE);
   INSERT INTO rutina_dias (rutina_id, dia) VALUES (1, 1), (2, 3), (2, 5);
 
-  INSERT INTO sesiones (fecha, rutina_id, energia_sueno, peso_corporal) VALUES
-    ('2026-07-20', 1, 4, 78.4),
-    ('2026-07-27', 2, 3, 78.1);
+  -- hora_inicio/hora_fin son TIMESTAMPTZ acá y TEXT en el motor nuevo. Sembrarlas
+  -- es lo que faltaba: sin ellas el test no podía ver que la migración las perdía,
+  -- y progreso.js calcula con ellas la duración del entrenamiento.
+  INSERT INTO sesiones (fecha, rutina_id, energia_sueno, peso_corporal, hora_inicio, hora_fin) VALUES
+    ('2026-07-20', 1, 4, 78.4, '2026-07-20T18:00:00.000Z', '2026-07-20T19:12:30.000Z'),
+    ('2026-07-27', 2, 3, 78.1, NULL, NULL);
 
   -- peso 0 = peso corporal (regla BW de CLAUDE.md §8): tiene que sobrevivir como 0,
   -- nunca como null.
@@ -139,6 +144,28 @@ describe('migración PGLite → SQLite: fidelidad de los datos', () => {
     const fechas = sesiones.map(s => s.fecha).sort();
 
     expect(fechas).toEqual(['2026-07-20', '2026-07-27']);
+  });
+
+  it('conserva la duración del entrenamiento (hora_inicio / hora_fin)', async () => {
+    const { sesiones } = await getAllDataForExport();
+    const conTiempo = sesiones.find(s => s.fecha === '2026-07-20');
+
+    // Formato ISO, el mismo que escribe el motor nuevo: progreso.js hace
+    // `new Date(hora_fin) - new Date(hora_inicio)` y un formato de Postgres
+    // ('2026-07-20 18:00:00+00') no parsea de forma fiable.
+    expect(conTiempo.hora_inicio).toBe('2026-07-20T18:00:00.000Z');
+    expect(conTiempo.hora_fin).toBe('2026-07-20T19:12:30.000Z');
+
+    const duracionMin = (new Date(conTiempo.hora_fin) - new Date(conTiempo.hora_inicio)) / 60000;
+    expect(duracionMin).toBe(72.5);
+  });
+
+  it('una sesión sin tiempos migra con NULL, no revienta', async () => {
+    const { sesiones } = await getAllDataForExport();
+    const sinTiempo = sesiones.find(s => s.fecha === '2026-07-27');
+
+    expect(sinTiempo.hora_inicio).toBeNull();
+    expect(sinTiempo.hora_fin).toBeNull();
   });
 
   it('conserva el peso corporal decimal de las sesiones', async () => {
