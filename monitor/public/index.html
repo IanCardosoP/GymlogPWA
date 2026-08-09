@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GymLog // Monitor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" id="status-dot"></span>
+    <h1>GYMLOG <span class="dim">// MONITOR</span></h1>
+  </div>
+  <div class="topbar-actions">
+    <span class="updated-at" id="updated-at">—</span>
+    <label class="auto-refresh">
+      <input type="checkbox" id="auto-refresh" checked>
+      auto (60s)
+    </label>
+    <button id="refresh-btn">[ REFRESCAR ]</button>
+  </div>
+</header>
+
+<div id="error-banner" class="error-banner" hidden></div>
+
+<main>
+  <section class="cards" id="cards">
+    <div class="card">
+      <div class="card-label">Dispositivos únicos</div>
+      <div class="card-value" id="stat-dispositivos">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Aperturas totales</div>
+      <div class="card-value" id="stat-aperturas">—</div>
+    </div>
+    <div class="card accent">
+      <div class="card-label">Nuevos hoy</div>
+      <div class="card-value" id="stat-nuevos-hoy">—</div>
+    </div>
+    <div class="card accent">
+      <div class="card-label">Activos hoy</div>
+      <div class="card-value" id="stat-activos-hoy">—</div>
+    </div>
+  </section>
+
+  <section class="charts-row">
+    <div class="panel wide">
+      <h2>Actividad diaria — 30 días</h2>
+      <canvas id="chart-diario"></canvas>
+    </div>
+  </section>
+
+  <section class="charts-row">
+    <div class="panel wide">
+      <h2>Nuevos vs. recurrentes — 30 días</h2>
+      <canvas id="chart-tendencia"></canvas>
+    </div>
+  </section>
+
+  <section class="charts-row">
+    <div class="panel">
+      <h2>Sistema operativo</h2>
+      <canvas id="chart-os"></canvas>
+    </div>
+    <div class="panel">
+      <h2>PWA instalada vs. navegador</h2>
+      <canvas id="chart-pwa"></canvas>
+    </div>
+  </section>
+
+  <section class="charts-row">
+    <div class="panel">
+      <h2>Versiones en uso <span class="dim">(según el último ping de cada dispositivo)</span></h2>
+      <div class="table-wrap">
+        <table id="table-versiones">
+          <thead>
+            <tr><th>versión</th><th>dispositivos</th><th>de ellos iOS</th><th>visto por última vez</th></tr>
+          </thead>
+          <tbody id="versiones-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="charts-row">
+    <div class="panel">
+      <h2>Fallos de arranque <span class="dim">(boot_fail)</span></h2>
+      <p class="nota-fallos">
+        Un fallo <strong>sin red no puede reportarse</strong>: sin conexión no hay a dónde
+        mandar el beacon. Lo que aparece aquí son fallos <strong>con</strong> red, es decir
+        problemas distintos del bug de caché original. Que esté vacío no prueba que ese bug
+        esté arreglado — eso se comprueba en un iPhone en Modo Avión.
+      </p>
+      <div class="table-wrap">
+        <table id="table-fallos">
+          <thead>
+            <tr><th>motivo</th><th>os</th><th>modo</th><th>versión</th><th>veces</th><th>última vez</th></tr>
+          </thead>
+          <tbody id="fallos-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="tables-row">
+    <div class="panel">
+      <h2>Top dispositivos</h2>
+      <div class="table-wrap">
+        <table id="table-top-devices">
+          <thead>
+            <tr><th>usuario</th><th>device_id</th><th>versión</th><th>os</th><th>aperturas</th><th>última vez</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Log en vivo <span class="dim">(últimos 50)</span></h2>
+      <div class="table-wrap log-wrap">
+        <table id="table-logs">
+          <thead>
+            <tr><th>ts</th><th>usuario</th><th>evt</th><th>versión</th><th>modo</th><th>os</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/vendor/chart.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
