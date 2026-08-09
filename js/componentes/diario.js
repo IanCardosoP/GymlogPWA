@@ -20,6 +20,7 @@ import {
   linkEjercicioToRutina, reordenarEjercicios,
 } from '../db.js';
 import { getCandidatos, getInstrucciones, getEntradaCatalogo, rutasImagenCatalogo } from '../catalogo.js';
+import { montarBurbuja } from './temporizadorDescanso.js';
 
 export const MAX_ROUTINE_SLOTS = 8;
 
@@ -86,6 +87,7 @@ export async function render(state) {
   // Sin rutina asignada → pantalla de descanso
   if (!rutinaHoy) {
     mostrarPantallaDescanso(container);
+    montarBurbuja(container);
     return;
   }
 
@@ -204,6 +206,8 @@ export async function render(state) {
     }
     // Ejercicio existente: <details> maneja el acordeón nativamente
   }, { signal: clickAbort.signal });
+
+  montarBurbuja(container);
 }
 
 function marcarComoGuardada(fila, peso, reps, serieId) {

@@ -1,0 +1,12 @@
+{
+  "name": "gymlog-monitor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.4",
+    "express": "^4.19.2"
+  }
+}

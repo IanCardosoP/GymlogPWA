@@ -243,6 +243,32 @@ elemento.innerHTML = `<span>${ejercicio.nombre}</span>`;
 Toda importación de backup JSON debe ejecutarse dentro de `BEGIN; ... COMMIT;`.
 Si cualquier registro falla → `ROLLBACK;` automático. Sin excepciones.
 
+**Cobertura del backup — regla no negociable.** Toda columna del esquema o viaja
+en el backup, o está documentada en la lista `EXCLUIDAS` de
+`tests/backup-cobertura.test.js` con el motivo escrito. Al añadir una columna a la
+DDL hay que tocar **tres** sitios, no uno:
+
+1. `getAllDataForExport()` en `js/db.js` — el SELECT
+2. `importarBackup()` en `js/csv.js` — la lista de columnas del INSERT
+3. `leerBaseLegada()` en `js/migracion/desdePglite.js` — el lector Postgres legado
+   (mientras siga existiendo, ver §10)
+
+Motivo: `sesiones.hora_inicio`/`hora_fin` existían en el esquema y `progreso.js`
+calculaba con ellas la duración del entrenamiento, pero el export solo
+seleccionaba cinco de las diez columnas. Cada backup/restore —y la migración a
+SQLite, que reutiliza ese mismo camino— borraba la duración de todas las sesiones
+**en silencio**. Los tests de entonces comprobaban los campos que sí viajaban.
+
+Los dos guards de `tests/backup-cobertura.test.js` cubren los dos lados: el de
+*cobertura* detecta huecos de export, y el de *ida y vuelta* (exportar → importar
+→ exportar da lo mismo) detecta huecos de import. Verificado que cada uno se pone
+rojo con su mitad del bug reintroducida.
+
+Los cambios de columnas son **aditivos**: `insertarEnLotes` usa `fila[col] ?? null`,
+así que un backup viejo sin las claves nuevas entra con NULL. **No subas
+`BACKUP_VERSION`** por añadir columnas — mientras haya usuarios sin migrar, subirla
+rompe su migración, que produce `version: 1`.
+
 ### A05 · Configuración — Tabla `conf` protegida
 
 - La tabla `conf` solo tiene UNA fila (`id = 1`). Nunca hacer `DELETE` sobre ella.
@@ -360,5 +386,6 @@ El separador visual ya se eliminó; falta la limpieza del código:
 - Migración: la DDL es idempotente y corre en el dispositivo de cada usuario, así que
   el cambio debe ser retrocompatible con bases ya existentes.
 
-_Última actualización: arquitectura offline — precache por mutabilidad, arranque
-observable y motor SQLite (845 KB) en lugar de PGLite (16.2 MB) — julio 2026_
+_Última actualización: arquitectura offline completa y en producción (v1.4.1) —
+precache por mutabilidad, arranque observable, motor SQLite (845 KB) en lugar de
+PGLite (16.2 MB) y cobertura del backup. Queda pendiente la Fase C (§10) — agosto 2026_
