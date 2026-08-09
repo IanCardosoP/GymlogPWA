@@ -10,7 +10,7 @@
 export const ETIQUETAS = {
   'ef99724b-cc34-44b5-9863-d9f6cd824d6f': 'Diego',
   '919452d9-bba7-41b4-b45c-7ae4481fc564': 'Alex',
-  'f7081868-3fe7-4104-81b8-4843f8d8e5d8': 'Ian',
+  '9a7681d4-cf76-4b6a-b35e-e353ec847b57': 'Ian',
   '62bd546e-2edf-47b8-aabd-531d5d61f962': 'Frankie',
 };
 
