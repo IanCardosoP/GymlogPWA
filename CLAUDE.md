@@ -358,7 +358,10 @@ El motor es SQLite desde el cambio de `js/motor.js`, pero PGLite **sigue en
 `dependencies`** y `js/migracion/desdePglite.js` lo importa de forma dinámica para
 migrar a quien venga de una versión anterior. Pendiente, y en este orden:
 
-1. Esperar a que el PM confirme que nadie perdió datos en la migración.
+1. Esperar a que el PM confirme que nadie perdió datos en la migración, **y** que
+   `repararTiemposDesdePglite()` ya corrió en los dispositivos que migraron con el
+   bug de cobertura del backup (la base legada es la única fuente de los
+   `hora_inicio`/`hora_fin` que esa migración perdió).
 2. `pnpm remove @electric-sql/pglite`, borrar `js/migracion/`, y borrar la IndexedDB
    legada (`gym-log-db`) — **no se toca hasta entonces**, es la red de seguridad.
 3. Quitar `esMotorLegado` y el manifiesto `ASSETS_LEGADO` de `vite.config.js` y

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { leerBaseLegada } from '../js/migracion/desdePglite.js';
+import {
+  leerBaseLegada, leerTiemposLegados, aplicarTiemposLegados,
+} from '../js/migracion/desdePglite.js';
 import { importarBackup } from '../js/csv.js';
 import { initDB, getDB, getAllDataForExport } from '../js/db.js';
 import { cerrarMotor } from '../js/motor.js';
@@ -204,5 +206,108 @@ describe('migración PGLite → SQLite: fidelidad de los datos', () => {
 
     expect(idsPrevios).not.toContain(rows[0].id);
     expect(rows[0].id).toBeGreaterThan(Math.max(...idsPrevios));
+  });
+});
+
+// La reparación de tiempos: los dispositivos que migraron ANTES del fix de
+// cobertura del backup recrearon sus sesiones con hora_inicio/hora_fin en NULL,
+// pero la base PGLite legada (que la migración no borra) los conserva. Acá se
+// reproduce ese estado —un import con el backup SIN las columnas de tiempo, como
+// lo producía el lector con el bug— y se verifica que la reparación los recupera
+// sin pisar nada.
+describe('reparación de tiempos desde la base legada', () => {
+  let filasLegadas;
+
+  const tiemposDe = async () => {
+    const { sesiones } = await getAllDataForExport();
+    return Object.fromEntries(
+      sesiones.map(s => [s.fecha, { hora_inicio: s.hora_inicio, hora_fin: s.hora_fin }])
+    );
+  };
+
+  beforeAll(async () => {
+    const pg = new PGlite('memory://');
+    await pg.exec(DDL_LEGADA);
+    filasLegadas = await leerTiemposLegados(pg);
+    const backup = await leerBaseLegada(pg);
+    await pg.close();
+
+    // Simula la migración pre-fix: el backup viajaba sin las columnas de tiempo
+    // y el import las dejaba en NULL (insertarEnLotes usa `fila[col] ?? null`).
+    backup.sesiones = backup.sesiones.map(({ hora_inicio, hora_fin, ...resto }) => resto);
+
+    await initDB('memory://');
+    const resultado = await importarBackup(JSON.stringify(backup), getDB());
+    expect(resultado.error).toBeNull();
+  }, 120_000);
+
+  afterAll(() => { cerrarMotor(); });
+
+  it('el lector legado trae solo las sesiones con tiempos, ya en ISO', () => {
+    expect(filasLegadas).toHaveLength(1);
+    expect(filasLegadas[0]).toMatchObject({
+      fecha: '2026-07-20',
+      hora_inicio: '2026-07-20T18:00:00.000Z',
+      hora_fin: '2026-07-20T19:12:30.000Z',
+    });
+  });
+
+  it('el estado pre-reparación reproduce el bug: todos los tiempos en NULL', async () => {
+    const tiempos = await tiemposDe();
+    expect(tiempos['2026-07-20']).toEqual({ hora_inicio: null, hora_fin: null });
+    expect(tiempos['2026-07-27']).toEqual({ hora_inicio: null, hora_fin: null });
+  });
+
+  it('rellena los huecos con los tiempos de la base legada', async () => {
+    const actualizadas = await aplicarTiemposLegados(getDB(), filasLegadas);
+
+    expect(actualizadas).toBe(1);
+    const tiempos = await tiemposDe();
+    expect(tiempos['2026-07-20']).toEqual({
+      hora_inicio: '2026-07-20T18:00:00.000Z',
+      hora_fin: '2026-07-20T19:12:30.000Z',
+    });
+    // La sesión que nunca tuvo tiempos sigue en NULL: no hay nada que inventar.
+    expect(tiempos['2026-07-27']).toEqual({ hora_inicio: null, hora_fin: null });
+  });
+
+  it('es idempotente: una segunda pasada no toca nada', async () => {
+    const actualizadas = await aplicarTiemposLegados(getDB(), filasLegadas);
+    expect(actualizadas).toBe(0);
+  });
+
+  it('nunca pisa un tiempo ya presente, aunque el legado traiga otro', async () => {
+    const actualizadas = await aplicarTiemposLegados(getDB(), [{
+      id: filasLegadas[0].id,
+      fecha: '2026-07-20',
+      hora_inicio: '2026-07-20T06:00:00.000Z',
+      hora_fin: '2026-07-20T07:00:00.000Z',
+    }]);
+
+    expect(actualizadas).toBe(0);
+    const tiempos = await tiemposDe();
+    expect(tiempos['2026-07-20'].hora_inicio).toBe('2026-07-20T18:00:00.000Z');
+  });
+
+  it('un id cuya fecha no coincide no se toca (cinturón contra ids reasignados)', async () => {
+    // La sesión 2 (2026-07-27) sigue con NULL; una fila legada con su id pero
+    // otra fecha no debe escribirle nada.
+    const actualizadas = await aplicarTiemposLegados(getDB(), [{
+      id: 2,
+      fecha: '2099-01-01',
+      hora_inicio: '2099-01-01T10:00:00.000Z',
+      hora_fin: '2099-01-01T11:00:00.000Z',
+    }]);
+
+    expect(actualizadas).toBe(0);
+    const tiempos = await tiemposDe();
+    expect(tiempos['2026-07-27']).toEqual({ hora_inicio: null, hora_fin: null });
+  });
+
+  it('con una lista vacía o sin tiempos útiles no abre ni transacción', async () => {
+    expect(await aplicarTiemposLegados(getDB(), [])).toBe(0);
+    expect(await aplicarTiemposLegados(getDB(), [
+      { id: 2, fecha: '2026-07-27', hora_inicio: null, hora_fin: null },
+    ])).toBe(0);
   });
 });
