@@ -596,28 +596,34 @@ export async function clearRutinaDia(dia) {
 
 // ── Analítica y estadísticas ──────────────────────────────────────────────────
 
-export async function getEstadisticasGlobales(fechaHoy) {
-  const { rows: [stats] } = await query(`
-    SELECT
-      (SELECT COUNT(*) FROM sesiones
-       WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS total_sesiones,
-      (SELECT COALESCE(SUM(peso * repeticiones), 0) FROM series) AS volumen_total,
-      (SELECT COUNT(*) FROM sesiones
-       WHERE fecha >= date(?1, '-27 days')
-         AND EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS sesiones_4_sem
-  `, [fechaHoy]);
-
-  const { rows: fechaRows } = await query(
+export async function getFechasConSesiones() {
+  const { rows } = await query(
     `SELECT DISTINCT fecha FROM sesiones
      WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)
      ORDER BY fecha DESC`
   );
+  return rows.map(r => r.fecha);
+}
+
+export async function getEstadisticasGlobales(fechaHoy) {
+  const [{ rows: [stats] }, fechas] = await Promise.all([
+    query(`
+      SELECT
+        (SELECT COUNT(*) FROM sesiones
+         WHERE EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS total_sesiones,
+        (SELECT COALESCE(SUM(peso * repeticiones), 0) FROM series) AS volumen_total,
+        (SELECT COUNT(*) FROM sesiones
+         WHERE fecha >= date(?1, '-27 days')
+           AND EXISTS (SELECT 1 FROM series WHERE sesion_id = sesiones.id)) AS sesiones_4_sem
+    `, [fechaHoy]),
+    getFechasConSesiones(),
+  ]);
 
   return {
     total_sesiones: stats.total_sesiones,
     volumen_total: stats.volumen_total,
     sesiones_4_sem: stats.sesiones_4_sem,
-    fechas: fechaRows.map(r => r.fecha),
+    fechas,
   };
 }
 
@@ -711,6 +717,32 @@ export async function getUltimasSesionesConSeries(n = 2) {
      LEFT JOIN ejercicios e ON e.id = s.ejercicio_id
      ORDER BY se.fecha DESC, se.id DESC, s.ejercicio_id, s.numero_serie ASC`,
     [n]
+  );
+  return rows;
+}
+
+export async function getSesionesConSeriesEnRango(fechaInicio, fechaFin) {
+  const { rows } = await query(
+    `SELECT
+       se.id            AS sesion_id,
+       se.fecha         AS fecha,
+       se.hora_inicio,
+       se.hora_fin,
+       se.rutina_id,
+       r.nombre         AS rutina_nombre,
+       s.ejercicio_id,
+       e.nombre         AS ejercicio_nombre,
+       s.numero_serie,
+       s.peso,
+       s.repeticiones
+     FROM sesiones se
+     LEFT JOIN rutinas    r ON r.id = se.rutina_id
+     LEFT JOIN series     s ON s.sesion_id = se.id
+     LEFT JOIN ejercicios e ON e.id = s.ejercicio_id
+     WHERE se.fecha BETWEEN ?1 AND ?2
+       AND EXISTS (SELECT 1 FROM series WHERE sesion_id = se.id)
+     ORDER BY se.fecha DESC, se.id DESC, s.ejercicio_id, s.numero_serie ASC`,
+    [fechaInicio, fechaFin]
   );
   return rows;
 }

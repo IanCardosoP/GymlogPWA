@@ -10,6 +10,7 @@ import {
   getConf, updatePrefUnit, updatePrefAcento, getOrCreateDeviceId,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
   getPesoMaxPorEjercicio, getVolumenPorSesion,
+  getFechasConSesiones, getSesionesConSeriesEnRango,
   getEjerciciosPendientesRevision, vincularEjercicioCatalogo, descartarSugerenciaCatalogo,
 } from '../js/db.js';
 
@@ -692,6 +693,93 @@ describe('getVolumenPorSesion', () => {
     const rows = await getVolumenPorSesion(ej1.id);
     expect(rows.length).toBe(1);
     expect(rows[0].volumen).toBeCloseTo(800);
+  });
+});
+
+// ── getFechasConSesiones ──────────────────────────────────────────────────────
+
+describe('getFechasConSesiones', () => {
+  it('retorna array vacío sin sesiones', async () => {
+    const fechas = await getFechasConSesiones();
+    expect(fechas).toEqual([]);
+  });
+
+  it('excluye sesiones sin series y ordena descendente', async () => {
+    const ej = await saveEjercicio('Sentadilla', 'PIERNA');
+    await saveSesion('2026-06-18', null, null); // vacía — no debe aparecer
+    const s1 = await saveSesion('2026-06-19', null, null);
+    await saveSerie(s1.id, ej.id, 1, 100, 5);
+    const s2 = await saveSesion('2026-06-21', null, null);
+    await saveSerie(s2.id, ej.id, 1, 100, 5);
+    const fechas = await getFechasConSesiones();
+    expect(fechas).toEqual(['2026-06-21', '2026-06-19']);
+  });
+});
+
+// ── getSesionesConSeriesEnRango ───────────────────────────────────────────────
+
+describe('getSesionesConSeriesEnRango', () => {
+  it('retorna array vacío para un rango sin sesiones', async () => {
+    const rows = await getSesionesConSeriesEnRango('2026-06-01', '2026-06-30');
+    expect(rows).toEqual([]);
+  });
+
+  it('retorna array vacío para una sesión sin series', async () => {
+    await saveSesion('2026-06-21', null, null);
+    const rows = await getSesionesConSeriesEnRango('2026-06-01', '2026-06-30');
+    expect(rows).toEqual([]);
+  });
+
+  it('incluye los dos extremos del rango (BETWEEN inclusive)', async () => {
+    const ej  = await saveEjercicio('Sentadilla', 'PIERNA');
+    const s1  = await saveSesion('2026-06-01', null, null);
+    await saveSerie(s1.id, ej.id, 1, 100, 5);
+    const s2  = await saveSesion('2026-06-30', null, null);
+    await saveSerie(s2.id, ej.id, 1, 100, 5);
+
+    const rows = await getSesionesConSeriesEnRango('2026-06-01', '2026-06-30');
+    const sesionIds = new Set(rows.map(r => r.sesion_id));
+    expect(sesionIds).toEqual(new Set([s1.id, s2.id]));
+  });
+
+  it('excluye fechas fuera del rango', async () => {
+    const ej = await saveEjercicio('Peso Muerto', 'ESPALDA');
+    const fuera = await saveSesion('2026-05-31', null, null);
+    await saveSerie(fuera.id, ej.id, 1, 120, 5);
+
+    const rows = await getSesionesConSeriesEnRango('2026-06-01', '2026-06-30');
+    expect(rows).toEqual([]);
+  });
+
+  it('trae rutina_id y las series con nombre de ejercicio de cada sesión', async () => {
+    const rutina = await saveRutina('Push Day', null);
+    const ej1 = await saveEjercicio('Press Banca', 'PECHO');
+    const ej2 = await saveEjercicio('Press Militar', 'HOMBRO');
+    const ses = await saveSesion('2026-06-21', rutina.id, null);
+    await saveSerie(ses.id, ej1.id, 1, 80, 10);
+    await saveSerie(ses.id, ej1.id, 2, 80, 8);
+    await saveSerie(ses.id, ej2.id, 1, 40, 12);
+
+    const rows = await getSesionesConSeriesEnRango('2026-06-01', '2026-06-30');
+    expect(rows.length).toBe(3);
+    expect(rows.every(r => r.sesion_id === ses.id)).toBe(true);
+    expect(rows.every(r => r.rutina_id === rutina.id)).toBe(true);
+    expect(rows.every(r => r.rutina_nombre === 'Push Day')).toBe(true);
+    expect(rows.filter(r => r.ejercicio_nombre === 'Press Banca').length).toBe(2);
+    expect(rows.filter(r => r.ejercicio_nombre === 'Press Militar').length).toBe(1);
+  });
+
+  it('incluye varias sesiones en fechas distintas dentro del rango', async () => {
+    const ej  = await saveEjercicio('Curl', 'BRAZO');
+    const s1  = await saveSesion('2026-06-05', null, null);
+    await saveSerie(s1.id, ej.id, 1, 15, 12);
+    const s2  = await saveSesion('2026-06-12', null, null);
+    await saveSerie(s2.id, ej.id, 1, 15, 12);
+
+    const rows = await getSesionesConSeriesEnRango('2026-06-01', '2026-06-30');
+    const sesionIds = new Set(rows.map(r => r.sesion_id));
+    expect(sesionIds.size).toBe(2);
+    expect(sesionIds).toEqual(new Set([s1.id, s2.id]));
   });
 });
 

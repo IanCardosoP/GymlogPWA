@@ -3,6 +3,7 @@ import {
   getRutinas, getRutinaEjercicios, getSeriesPorEjercicio,
   getEstadisticasGlobales, getActividadSemanal, getVolumenPorGrupoMuscular,
   getPesoMaxPorEjercicio, getVolumenPorSesion, getUltimasSesionesConSeries,
+  getFechasConSesiones, getSesionesConSeriesEnRango,
 } from '../db.js';
 import {
   METRICAS_REGISTRY, prepararDatosProgreso, calcularTendencia, calcularRacha,
@@ -29,7 +30,7 @@ export async function render(state) {
 
   // ── Tab bar ────────────────────────────────────────────────────────────────
   const tabBar = cel('div', 'progreso-tabs');
-  const tabNames = ['GLOBAL', 'EJERCICIOS', 'RÉCORDS'];
+  const tabNames = ['GLOBAL', 'EJERCICIOS', 'RÉCORDS', 'HISTORIAL'];
   for (const nombre of tabNames) {
     const btn = cel('button', 'progreso-tab-btn', nombre);
     if (nombre === tabActivo) btn.classList.add('is-active');
@@ -60,6 +61,7 @@ async function renderTabContent(container, state) {
   if (tabActivo === 'GLOBAL')     await renderGlobal(container, state);
   if (tabActivo === 'EJERCICIOS') await renderEjercicios(container, state);
   if (tabActivo === 'RÉCORDS')    await renderRecords(container, state);
+  if (tabActivo === 'HISTORIAL')  await renderHistorial(container, state);
 }
 
 // ── Vista GLOBAL ──────────────────────────────────────────────────────────────
@@ -127,16 +129,18 @@ async function renderGlobal(container, state) {
   renderSeccionUltimasSesiones(container, filasSes, state);
 }
 
-function renderSeccionUltimasSesiones(container, filas, state) {
-  const unit = state.prefUnit || 'lb';
-
+// Agrupa filas planas (join sesión+ejercicio+serie) en sesiones con sus
+// ejercicios y series anidados — usado por la vista GLOBAL y por HISTORIAL.
+function agruparFilasPorSesion(filas) {
   const sesionesMap = new Map();
   for (const fila of filas) {
     if (!sesionesMap.has(fila.sesion_id)) {
       sesionesMap.set(fila.sesion_id, {
+        sesion_id: fila.sesion_id,
         fecha: fila.fecha,
         hora_inicio: fila.hora_inicio,
         hora_fin: fila.hora_fin,
+        rutina_id: fila.rutina_id ?? null,
         rutina_nombre: fila.rutina_nombre,
         ejercicios: new Map(),
       });
@@ -149,8 +153,24 @@ function renderSeccionUltimasSesiones(container, filas, state) {
       ses.ejercicios.get(fila.ejercicio_id).series.push(fila);
     }
   }
+  return [...sesionesMap.values()];
+}
 
-  const sesiones = [...sesionesMap.values()];
+// Duración total de una sesión ya agrupada (ver agruparFilasPorSesion), o null si
+// falta hora_inicio/hora_fin — única fuente de verdad para mostrar y para ordenar.
+function calcularDuracionMin(ses) {
+  if (!ses.hora_inicio || !ses.hora_fin) return null;
+  const diffMs = new Date(ses.hora_fin) - new Date(ses.hora_inicio);
+  const mins = Math.floor(diffMs / 60000);
+  const hh = String(Math.floor(mins / 60)).padStart(2, '0');
+  const mm = String(mins % 60).padStart(2, '0');
+  return { mins, texto: `${hh}h:${mm}m` };
+}
+
+function renderSeccionUltimasSesiones(container, filas, state) {
+  const unit = state.prefUnit || 'lb';
+
+  const sesiones = agruparFilasPorSesion(filas);
   if (sesiones.length === 0) return;
 
   const card = crearSeccion('ÚLTIMAS 2 SESIONES');
@@ -199,16 +219,9 @@ function renderSeccionUltimasSesiones(container, filas, state) {
     }
     card.appendChild(tabla);
 
-    let durStr = '';
-    if (ses.hora_inicio && ses.hora_fin) {
-      const diffMs = new Date(ses.hora_fin) - new Date(ses.hora_inicio);
-      const totalMin = Math.floor(diffMs / 60000);
-      const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
-      const mm = String(totalMin % 60).padStart(2, '0');
-      durStr = ` · ${hh}h:${mm}m`;
-    }
+    const dur = calcularDuracionMin(ses);
     const footer = cel('div', 'sesresumen-footer');
-    footer.textContent = `${ejercs.length} EJERC · ${totalSeries} SERIES${durStr}`;
+    footer.textContent = `${ejercs.length} EJERC · ${totalSeries} SERIES${dur ? ` · ${dur.texto}` : ''}`;
     card.appendChild(footer);
   });
 
@@ -555,4 +568,327 @@ function formatFechaPR(fechaStr) {
   return new Date(fechaStr + 'T12:00:00Z')
     .toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
     .toUpperCase();
+}
+
+// ── Vista HISTORIAL ───────────────────────────────────────────────────────────
+
+const HISTORIAL_PAGINA_TAM = 10;
+const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const HISTORIAL_ORDEN_OPCIONES = [
+  { value: 'recientes',      label: 'Recientes primero' },
+  { value: 'duracion-desc',  label: 'Duración: mayor a menor' },
+  { value: 'duracion-asc',   label: 'Duración: menor a mayor' },
+];
+
+async function renderHistorial(container, state) {
+  const [fechas, rutinas] = await Promise.all([getFechasConSesiones(), getRutinas()]); // fechas DESC
+
+  if (fechas.length === 0) {
+    container.appendChild(cel('p', 'global-vacio', 'Aún no hay sesiones registradas.'));
+    return;
+  }
+
+  const fechasSet = new Set(fechas);
+
+  // root es un nodo nuevo por cada visita a la tab (renderTabContent limpia
+  // el container antes de llamar aquí), así que el listener delegado de abajo
+  // no necesita AbortController: muere con el nodo al cambiar de tab.
+  const root = cel('div', 'historial-root');
+  container.appendChild(root);
+
+  const cardCal = crearSeccion('EXPLORAR POR RANGO DE FECHAS');
+  const rangoResumen = cel('p', 'historial-rango-resumen');
+  cardCal.appendChild(rangoResumen);
+  root.appendChild(cardCal);
+
+  // ── Filtros: rutina + orden ────────────────────────────────────────────────
+  const cardFiltros = cel('div', 'historial-filtros');
+
+  const selectRutinaFiltro = document.createElement('select');
+  selectRutinaFiltro.setAttribute('aria-label', 'Filtrar por rutina');
+  const optTodas = document.createElement('option');
+  optTodas.value = '';
+  optTodas.textContent = 'Todas las rutinas';
+  selectRutinaFiltro.appendChild(optTodas);
+  for (const r of rutinas) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.nombre;
+    selectRutinaFiltro.appendChild(opt);
+  }
+  cardFiltros.appendChild(selectRutinaFiltro);
+
+  const selectOrden = document.createElement('select');
+  selectOrden.setAttribute('aria-label', 'Ordenar por');
+  for (const { value, label } of HISTORIAL_ORDEN_OPCIONES) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    selectOrden.appendChild(opt);
+  }
+  cardFiltros.appendChild(selectOrden);
+  root.appendChild(cardFiltros);
+
+  const detalle = cel('div', 'historial-detalle');
+  root.appendChild(detalle);
+
+  // Rango inicial: los últimos hasta 10 días con sesión — misma sensación que
+  // antes (mostrar lo más reciente sin que el usuario tenga que elegir nada).
+  let rangoInicio = fechas[Math.min(HISTORIAL_PAGINA_TAM - 1, fechas.length - 1)];
+  let rangoFin    = fechas[0];
+  let pagina      = 0;
+  let sesionesRango = []; // cache en memoria del rango actual — filtro/orden/página no reconsultan la BD
+
+  const [yInit, mInit] = fechas[0].split('-').map(Number);
+  let mesActual = new Date(Date.UTC(yInit, mInit - 1, 1));
+
+  const refrescarCalendario = () => {
+    cardCal.querySelector('.historial-cal')?.remove();
+    cardCal.appendChild(construirCalendario(mesActual, fechasSet, rangoInicio, rangoFin));
+    rangoResumen.textContent = !rangoInicio
+      ? 'Elige la fecha de inicio'
+      : !rangoFin
+        ? `DESDE ${formatFechaCorta(rangoInicio)} · elige la fecha final`
+        : `DESDE ${formatFechaCorta(rangoInicio)} · HASTA ${formatFechaCorta(rangoFin)}`;
+  };
+
+  // Repinta la lista a partir de sesionesRango ya cargado — sin tocar la BD,
+  // así que filtrar/ordenar/paginar se siente instantáneo.
+  const refrescarResultados = () => {
+    detalle.textContent = '';
+
+    if (!rangoInicio || !rangoFin) {
+      detalle.appendChild(cel('p', 'global-vacio', 'Selecciona la fecha final del rango.'));
+      return;
+    }
+
+    const rutinaId = selectRutinaFiltro.value ? Number(selectRutinaFiltro.value) : null;
+    const sesionesFiltradas = rutinaId
+      ? sesionesRango.filter(ses => ses.rutina_id === rutinaId)
+      : sesionesRango;
+
+    if (sesionesFiltradas.length === 0) {
+      detalle.appendChild(cel('p', 'global-vacio', 'No hay sesiones en el rango y filtros seleccionados.'));
+      return;
+    }
+
+    const ordenadas = ordenarSesiones(sesionesFiltradas, selectOrden.value);
+
+    const totalPaginas = Math.ceil(ordenadas.length / HISTORIAL_PAGINA_TAM);
+    if (pagina >= totalPaginas) pagina = totalPaginas - 1;
+    const desde = pagina * HISTORIAL_PAGINA_TAM;
+    const sesionesPagina = ordenadas.slice(desde, desde + HISTORIAL_PAGINA_TAM);
+
+    for (const ses of sesionesPagina) {
+      renderSesionDetalleCompleto(detalle, ses, state.prefUnit || 'lb');
+    }
+
+    if (totalPaginas > 1) {
+      detalle.appendChild(construirPaginacion(pagina, totalPaginas, ordenadas.length));
+    }
+  };
+
+  // Trae el rango completo en una sola query y cachea en sesionesRango.
+  const cargarRango = async () => {
+    if (!rangoInicio || !rangoFin) {
+      sesionesRango = [];
+      refrescarResultados();
+      return;
+    }
+    const filas = await getSesionesConSeriesEnRango(rangoInicio, rangoFin);
+    sesionesRango = agruparFilasPorSesion(filas);
+    refrescarResultados();
+  };
+
+  root.addEventListener('click', e => {
+    const diaBtn = e.target.closest('.historial-cal-dia');
+    if (diaBtn) {
+      const fecha = diaBtn.dataset.fecha;
+      if (rangoInicio && rangoFin) {
+        // rango ya completo — un nuevo click empieza otro rango
+        rangoInicio = fecha;
+        rangoFin = null;
+      } else if (rangoInicio && !rangoFin) {
+        // segundo click cierra el rango, ordenando si tocaron antes del inicio
+        if (fecha < rangoInicio) { rangoFin = rangoInicio; rangoInicio = fecha; }
+        else { rangoFin = fecha; }
+      } else {
+        rangoInicio = fecha;
+      }
+      pagina = 0;
+      refrescarCalendario();
+      cargarRango();
+      return;
+    }
+
+    const navBtn = e.target.closest('.historial-cal-nav-btn');
+    if (navBtn) {
+      const delta = Number(navBtn.dataset.delta);
+      mesActual = new Date(Date.UTC(mesActual.getUTCFullYear(), mesActual.getUTCMonth() + delta, 1));
+      refrescarCalendario();
+      return;
+    }
+
+    const pagBtn = e.target.closest('.historial-pag-btn');
+    if (pagBtn) {
+      pagina = Math.max(0, pagina + Number(pagBtn.dataset.delta));
+      refrescarResultados();
+    }
+  });
+
+  selectRutinaFiltro.addEventListener('change', () => { pagina = 0; refrescarResultados(); });
+  selectOrden.addEventListener('change', () => { pagina = 0; refrescarResultados(); });
+
+  refrescarCalendario();
+  await cargarRango();
+}
+
+// 'recientes' (default): fecha DESC, sesion_id DESC como desempate. Los órdenes
+// por duración mandan al final las sesiones sin hora_inicio/hora_fin en vez de
+// romper el sort (calcularDuracionMin puede devolver null).
+function ordenarSesiones(sesiones, orden) {
+  const arr = [...sesiones];
+  if (orden === 'duracion-desc' || orden === 'duracion-asc') {
+    const signo = orden === 'duracion-desc' ? -1 : 1;
+    arr.sort((a, b) => {
+      const da = calcularDuracionMin(a)?.mins;
+      const db = calcularDuracionMin(b)?.mins;
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return signo * (da - db);
+    });
+    return arr;
+  }
+  arr.sort((a, b) => b.fecha.localeCompare(a.fecha) || b.sesion_id - a.sesion_id);
+  return arr;
+}
+
+function formatFechaCorta(fecha) {
+  return new Date(fecha + 'T12:00:00Z')
+    .toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })
+    .toUpperCase();
+}
+
+// Calendario de un mes con selección de rango (inicio/fin) por clicks y un
+// punto de acento bajo los días que sí tienen sesión registrada.
+function construirCalendario(mesDate, fechasSet, rangoInicio, rangoFin) {
+  const cal = cel('div', 'historial-cal');
+
+  const nav = cel('div', 'historial-cal-nav');
+  const btnPrev = cel('button', 'historial-cal-nav-btn', '‹');
+  btnPrev.type = 'button';
+  btnPrev.dataset.delta = '-1';
+  const label = cel('span', 'historial-cal-mes', mesDate
+    .toLocaleDateString('es-MX', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .toUpperCase());
+  const btnNext = cel('button', 'historial-cal-nav-btn', '›');
+  btnNext.type = 'button';
+  btnNext.dataset.delta = '1';
+  nav.appendChild(btnPrev);
+  nav.appendChild(label);
+  nav.appendChild(btnNext);
+  cal.appendChild(nav);
+
+  const grid = cel('div', 'historial-cal-grid');
+  for (const d of DIAS_SEMANA) grid.appendChild(cel('span', 'historial-cal-dow', d));
+
+  const year  = mesDate.getUTCFullYear();
+  const month = mesDate.getUTCMonth();
+  const primerDiaSemana = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7; // 0 = lunes
+  const diasEnMes = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+  for (let i = 0; i < primerDiaSemana; i++) grid.appendChild(cel('span', 'historial-cal-spacer'));
+
+  for (let d = 1; d <= diasEnMes; d++) {
+    const fecha = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const celda = cel('button', 'historial-cal-dia', String(d));
+    celda.type = 'button';
+    celda.dataset.fecha = fecha;
+    if (fechasSet.has(fecha)) celda.classList.add('has-sesion');
+    if (rangoInicio && rangoFin && fecha >= rangoInicio && fecha <= rangoFin) {
+      celda.classList.add('is-in-range');
+    }
+    if (fecha === rangoInicio) celda.classList.add('is-rango-inicio');
+    if (fecha === rangoFin)    celda.classList.add('is-rango-fin');
+    grid.appendChild(celda);
+  }
+
+  cal.appendChild(grid);
+  return cal;
+}
+
+function construirPaginacion(pagina, totalPaginas, totalSesiones) {
+  const nav = cel('div', 'historial-pag');
+
+  const btnPrev = cel('button', 'historial-pag-btn', '‹ ANTERIOR');
+  btnPrev.type = 'button';
+  btnPrev.dataset.delta = '-1';
+  btnPrev.disabled = pagina === 0;
+
+  const btnNext = cel('button', 'historial-pag-btn', 'SIGUIENTE ›');
+  btnNext.type = 'button';
+  btnNext.dataset.delta = '1';
+  btnNext.disabled = pagina >= totalPaginas - 1;
+
+  nav.appendChild(btnPrev);
+  nav.appendChild(cel('span', 'historial-pag-info', `${pagina + 1} / ${totalPaginas} · ${totalSesiones} SESIONES`));
+  nav.appendChild(btnNext);
+  return nav;
+}
+
+// Detalle completo de una sesión ya agrupada (ver agruparFilasPorSesion): una
+// tarjeta colapsada por defecto (fecha/rutina/duración/conteo en una línea), que
+// al abrirse muestra sus ejercicios — cada uno también colapsado, y al abrirse
+// muestra sus sets como tabla SERIE/PESO/REPS.
+function renderSesionDetalleCompleto(container, ses, unit) {
+  const fechaStr = new Date(ses.fecha + 'T12:00:00Z')
+    .toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
+    .toUpperCase();
+
+  const ejercs = [...ses.ejercicios.values()];
+  const totalSeries = ejercs.reduce((sum, e) => sum + e.series.length, 0);
+  const dur = calcularDuracionMin(ses);
+
+  const bloque = document.createElement('details');
+  bloque.className = 'historial-sesion-bloque';
+
+  const summary = cel('summary', 'historial-sesion-summary');
+  const linea1 = cel('div', 'sesresumen-header');
+  linea1.appendChild(cel('span', 'sesresumen-fecha', fechaStr));
+  if (ses.rutina_nombre) {
+    linea1.appendChild(cel('span', 'sesresumen-rutina', ses.rutina_nombre.toUpperCase()));
+  }
+  summary.appendChild(linea1);
+
+  const metaTexto = `${ejercs.length} EJERC · ${totalSeries} SERIES${dur ? ` · ${dur.texto}` : ''}`;
+  summary.appendChild(cel('div', 'historial-sesion-meta', metaTexto));
+  bloque.appendChild(summary);
+
+  const cuerpo = cel('div', 'historial-sesion-cuerpo');
+  for (const { nombre, series } of ejercs) {
+    const details = document.createElement('details');
+    details.className = 'historial-ej-fila';
+
+    const ejSummary = cel('summary', 'historial-ej-summary');
+    ejSummary.appendChild(cel('span', 'historial-ej-nombre', nombre));
+    ejSummary.appendChild(cel('span', 'historial-ej-sets', `×${series.length}`));
+    details.appendChild(ejSummary);
+
+    const tabla = cel('div', 'historial-sets-tabla');
+    tabla.appendChild(cel('span', 'historial-sets-th', 'SERIE'));
+    tabla.appendChild(cel('span', 'historial-sets-th historial-sets-th-r', 'PESO'));
+    tabla.appendChild(cel('span', 'historial-sets-th historial-sets-th-r', 'REPS'));
+    for (const s of series) {
+      const pesoStr = Number(s.peso) === 0 ? 'BW' : `${s.peso}${unit}`;
+      tabla.appendChild(cel('span', 'historial-sets-td', `S${s.numero_serie}`));
+      tabla.appendChild(cel('span', 'historial-sets-td historial-sets-td-r', pesoStr));
+      tabla.appendChild(cel('span', 'historial-sets-td historial-sets-td-r', String(s.repeticiones)));
+    }
+    details.appendChild(tabla);
+    cuerpo.appendChild(details);
+  }
+  bloque.appendChild(cuerpo);
+
+  container.appendChild(bloque);
 }

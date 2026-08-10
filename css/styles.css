@@ -1170,6 +1170,240 @@ input.is-saved::placeholder {
   color: var(--color-texto);
 }
 
+/* Calendario de rango — tab HISTORIAL de Progreso */
+.historial-cal {
+  margin-top: var(--sp-3);
+}
+
+.historial-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+
+.historial-cal-nav-btn {
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto-dim);
+  font-size: var(--fs-body);
+  border-radius: var(--radius-sm);
+}
+
+.historial-cal-nav-btn:hover {
+  color: var(--color-acento);
+  border-color: var(--color-acento);
+}
+
+.historial-cal-mes {
+  font-size: var(--fs-caption);
+  color: var(--color-texto-dim);
+  letter-spacing: 0.08em;
+}
+
+.historial-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.historial-cal-dow {
+  text-align: center;
+  font-size: var(--fs-micro);
+  color: var(--color-texto-faint);
+  padding-bottom: var(--sp-1);
+}
+
+.historial-cal-spacer {
+  visibility: hidden;
+}
+
+.historial-cal-dia {
+  position: relative;
+  aspect-ratio: 1;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-texto);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body-sm);
+}
+
+.historial-cal-dia:hover {
+  border-color: var(--color-texto-dim);
+}
+
+.historial-cal-dia.has-sesion::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--color-acento);
+}
+
+.historial-cal-dia.is-in-range {
+  background-color: var(--velo-acento);
+}
+
+.historial-cal-dia.is-rango-inicio,
+.historial-cal-dia.is-rango-fin {
+  border-color: var(--color-acento);
+  color: var(--color-acento);
+}
+
+.historial-pag {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--sp-3);
+}
+
+.historial-pag-btn {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--color-texto-dim);
+  color: var(--color-texto-dim);
+  font-size: var(--fs-caption);
+  border-radius: var(--radius-sm);
+}
+
+.historial-pag-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.historial-pag-info {
+  font-size: var(--fs-caption);
+  color: var(--color-texto-dim);
+}
+
+.historial-rango-resumen {
+  font-size: var(--fs-caption);
+  color: var(--color-texto-dim);
+  letter-spacing: 0.05em;
+  margin-bottom: var(--sp-2);
+}
+
+.historial-filtros {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.historial-filtros select {
+  flex: 1;
+  width: auto;
+}
+
+/* Fila de ejercicio del HISTORIAL — compacta, sin borde de acento, aspecto de
+   tabla: a diferencia de .ejercicio-bloque (acordeón táctil de Diario), esto es
+   de solo lectura y prioriza densidad de información. */
+.historial-ej-fila {
+  border: none;
+}
+
+.historial-ej-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  background: none;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--fs-body-sm);
+}
+
+.historial-ej-fila[open] > .historial-ej-summary {
+  border-bottom: 1px solid var(--color-linea);
+}
+
+.historial-ej-nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historial-ej-sets {
+  color: var(--color-texto-dim);
+  font-size: var(--fs-caption);
+  flex-shrink: 0;
+}
+
+.historial-sets-tabla {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  column-gap: var(--sp-3);
+  font-size: var(--fs-detail);
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+}
+
+.historial-sets-th {
+  font-size: var(--fs-micro);
+  color: var(--color-texto-faint);
+  letter-spacing: 0.08em;
+  padding-bottom: 2px;
+}
+
+.historial-sets-th-r { text-align: right; }
+
+.historial-sets-td {
+  padding: 1px 0;
+  color: var(--color-texto);
+}
+
+.historial-sets-td-r {
+  text-align: right;
+  color: var(--color-texto-dim);
+}
+
+.historial-sesion-bloque {
+  background-color: var(--color-fondo-alt);
+  border: 1px solid var(--color-borde);
+  margin-bottom: var(--sp-2);
+}
+
+.historial-sesion-summary {
+  display: block;
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.historial-sesion-bloque[open] > .historial-sesion-summary {
+  border-bottom: 1px solid var(--color-borde);
+}
+
+.historial-sesion-summary .sesresumen-header {
+  margin-bottom: 2px;
+}
+
+.historial-sesion-meta {
+  font-size: var(--fs-caption);
+  color: var(--color-texto-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.historial-sesion-cuerpo {
+  padding: var(--sp-1) var(--sp-3) var(--sp-2);
+}
+
+/* La fuga de especificidad de `details[open] summary` (línea ~320: selector
+   descendiente, sin >) pinta de acento CUALQUIER <summary> anidado dentro de un
+   <details> abierto — con sesión conteniendo ejercicio, eso teñía de verde los
+   nombres de ejercicio colapsados solo porque la sesión que los envuelve estaba
+   abierta. Estas dos reglas igualan esa especificidad (0,1,2) para forzar color
+   neutro sin importar el estado open de ningún ancestro. */
+details.historial-sesion-bloque > summary.historial-sesion-summary,
+details.historial-ej-fila > summary.historial-ej-summary {
+  color: var(--color-texto);
+}
+
 .metrica-info {
   border: none;
   border-left: 2px solid;
