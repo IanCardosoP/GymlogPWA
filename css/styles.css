@@ -1293,9 +1293,14 @@ input.is-saved::placeholder {
   margin-bottom: var(--sp-3);
 }
 
+/* min-width: 0 anula el `min-width: auto` implícito de los ítems flex: sin él, el
+   select no baja de su min-content —el ancho de su opción más larga
+   ("Duración: mayor a menor")— y se desborda del contenedor de 450px. */
 .historial-filtros select {
   flex: 1;
   width: auto;
+  min-width: 0;
+  text-overflow: ellipsis;
 }
 
 /* Fila de ejercicio del HISTORIAL — compacta, sin borde de acento, aspecto de
