@@ -2,9 +2,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import {
   leerBaseLegada, leerTiemposLegados, aplicarTiemposLegados,
+  migrarDesdePglite, destinoTieneDatos,
 } from '../js/migracion/desdePglite.js';
 import { importarBackup } from '../js/csv.js';
-import { initDB, getDB, getAllDataForExport } from '../js/db.js';
+import {
+  initDB, getDB, getAllDataForExport,
+  saveEjercicio, saveRutina, saveSesion, saveSerie,
+} from '../js/db.js';
 import { cerrarMotor } from '../js/motor.js';
 
 // El test que decide si la migración pierde datos o no: se construye una base
@@ -309,5 +313,72 @@ describe('reparación de tiempos desde la base legada', () => {
     expect(await aplicarTiemposLegados(getDB(), [
       { id: 2, fecha: '2026-07-27', hora_inicio: null, hora_fin: null },
     ])).toBe(0);
+  });
+});
+
+// Issue #30. La marca de migración vive en localStorage, así que borrar los datos
+// de la app se la lleva. Un usuario que borraba sus datos y restauraba un backup
+// arrancaba con yaMigrado() === false: la migración volvía a correr y su
+// importarBackup() empieza con DELETE FROM …, así que pisaba el backup recién
+// restaurado con el contenido —más viejo— de la base legada. En silencio.
+//
+// La guarda corta antes de tocar IndexedDB o de importar PGLite, así que estos
+// casos no necesitan ninguno de los dos.
+
+describe('la migración no pisa una base que ya tiene datos', () => {
+  // localStorage no existe en el entorno `node` de vitest, y el módulo lo lee
+  // dentro de try/catch. Se inyecta uno falso para poder afirmar que la marca de
+  // migración NO se escribe al saltar.
+  const claves = new Map();
+  const localStorageFalso = {
+    getItem: k => (claves.has(k) ? claves.get(k) : null),
+    setItem: (k, v) => claves.set(k, String(v)),
+    removeItem: k => claves.delete(k),
+  };
+
+  beforeAll(async () => {
+    await initDB('memory://');
+  }, 120_000);
+
+  afterAll(() => {
+    cerrarMotor();
+    delete globalThis.localStorage;
+  });
+
+  it('destinoTieneDatos: false en una base recién creada, true con un ejercicio', async () => {
+    // La base recién creada ya trae su fila de conf (singleton, id = 1); por eso
+    // conf queda fuera de la cuenta.
+    expect(await destinoTieneDatos(getDB())).toBe(false);
+
+    await saveEjercicio('Peso muerto', 'ESPALDA');
+    expect(await destinoTieneDatos(getDB())).toBe(true);
+  });
+
+  it('el caso del issue: con datos en destino no migra y no toca nada', async () => {
+    globalThis.localStorage = localStorageFalso;
+    claves.clear();
+
+    const rutina = await saveRutina('Torso A', 1);
+    const sesion = await saveSesion('2026-08-08', rutina.id, 4);
+    const { rows: ejercicios } = await getDB().query('SELECT id FROM ejercicios LIMIT 1');
+    await saveSerie(sesion.id, ejercicios[0].id, 1, 100, 5);
+
+    const antes = await getAllDataForExport();
+
+    const resultado = await migrarDesdePglite(getDB());
+    expect(resultado).toEqual({ migrado: false, motivo: 'destino-con-datos' });
+
+    // Lo que el bug destruía: el DELETE FROM … del importarBackup de la migración.
+    const despues = await getAllDataForExport();
+    expect(despues.ejercicios).toEqual(antes.ejercicios);
+    expect(despues.rutinas).toEqual(antes.rutinas);
+    expect(despues.sesiones).toEqual(antes.sesiones);
+    expect(despues.series).toEqual(antes.series);
+  });
+
+  it('al saltar no marca la migración: la base legada sigue recuperable', async () => {
+    // Marcarla cerraría para siempre la puerta a migrar si el usuario vacía la
+    // base más adelante, a cambio de nada.
+    expect(claves.get('gymlog:migrado-a-sqlite')).toBeUndefined();
   });
 });

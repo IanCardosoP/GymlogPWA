@@ -117,6 +117,25 @@ export function leerRescate() {
 }
 
 /**
+ * ¿La base destino ya tiene datos del usuario? `conf` queda fuera a propósito:
+ * es un singleton que initDB() siempre crea, así que contarla daría siempre que
+ * sí. Ninguna otra tabla se siembra al arrancar, de modo que una instalación
+ * nueva da 0.
+ *
+ * @param {{query: Function}} destino - motor SQLite abierto
+ * @returns {Promise<boolean>}
+ */
+export async function destinoTieneDatos(destino) {
+  const { rows } = await destino.query(
+    `SELECT (SELECT COUNT(*) FROM ejercicios)
+          + (SELECT COUNT(*) FROM rutinas)
+          + (SELECT COUNT(*) FROM sesiones)
+          + (SELECT COUNT(*) FROM series) AS n`
+  );
+  return (rows[0]?.n ?? 0) > 0;
+}
+
+/**
  * Migra los datos del usuario desde la base PGLite legada al motor SQLite ya
  * abierto. Idempotente: si ya se migró, no hace nada.
  *
@@ -128,6 +147,21 @@ export function leerRescate() {
  */
 export async function migrarDesdePglite(destino) {
   if (yaMigrado()) return { migrado: false, motivo: 'ya-migrado' };
+
+  // La marca de migración vive en localStorage, y borrar los datos de la app se
+  // la lleva. Sin esta guarda, un usuario que borra sus datos y restaura un
+  // backup arranca con yaMigrado() === false: la migración corría, y su
+  // importarBackup() empieza con DELETE FROM …, así que pisaba el backup recién
+  // restaurado con el contenido —más viejo— de la base legada. En silencio.
+  //
+  // Va ANTES de hayBaseLegada() y del import de PGLite, así que este caso
+  // tampoco paga los 16 MB del motor viejo para acabar no usándolo.
+  //
+  // No se marca como migrado al saltar, y es a propósito: si el usuario vacía la
+  // base más adelante, su base legada sigue siendo recuperable. La guarda es una
+  // consulta local, sin red, y correrla en cada arranque no cuesta nada.
+  if (await destinoTieneDatos(destino))
+    return { migrado: false, motivo: 'destino-con-datos' };
 
   const legadaPresente = await hayBaseLegada();
   if (legadaPresente === false) {
