@@ -204,7 +204,8 @@ export async function initApp() {
     // Si falla, se propaga al panel de arranque en vez de arrancar con la base
     // vacía — el usuario tiene datos y hay que decírselo, no perderlos en
     // silencio (la base legada no se borra en este release).
-    const { migrarDesdePglite, yaMigrado } = await import('./migracion/desdePglite.js');
+    const { migrarDesdePglite, yaMigrado, repararTiemposDesdePglite } =
+      await import('./migracion/desdePglite.js');
     if (!yaMigrado()) {
       arranque.setCargando('Migrando tus datos…');
       arranque.render(`${store.currentTab}-container`);
@@ -222,6 +223,13 @@ export async function initApp() {
     navigateTo(store.currentTab);
 
     calentarCacheImagenesCatalogo(getRutinas, getRutinaEjercicios); // fire-and-forget
+
+    // Reparación única: quien migró antes del fix de hora_inicio/hora_fin
+    // recupera los tiempos desde la base PGLite legada. Fire-and-forget: puede
+    // implicar descargar el chunk de PGLite y no debe bloquear el arranque; si
+    // falla, no se marca el flag y se reintenta en el siguiente arranque.
+    repararTiemposDesdePglite(motor)
+      .catch(error => console.warn('[migracion] reparación de tiempos pendiente:', error));
   } catch (error) {
     fallarArranque(error);
   } finally {

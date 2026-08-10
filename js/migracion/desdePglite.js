@@ -14,9 +14,11 @@
 // lector viejo y no deben "modernizarse".
 
 import { importarBackup } from '../csv.js';
+import { guardar } from '../motor.js';
 
 const CLAVE_MIGRADO = 'gymlog:migrado-a-sqlite';
 const CLAVE_RESCATE = 'gymlog:rescate-pglite';
+const CLAVE_TIEMPOS = 'gymlog:tiempos-reparados';
 
 export const yaMigrado = () => {
   try { return localStorage.getItem(CLAVE_MIGRADO) !== null; } catch { return false; }
@@ -30,8 +32,7 @@ const marcarMigrado = detalle => {
 // no hace falta). Emscripten/IDBFS nombra la IndexedDB por el dataDir, así que en
 // vez de fijar el prefijo exacto ('/pglite/gym-log-db') se busca por coincidencia:
 // es resistente a que PGLite cambie el prefijo entre versiones.
-export async function hayBaseLegada() {
-  if (yaMigrado()) return false;
+async function detectarBaseLegada() {
   if (typeof indexedDB === 'undefined') return false;
   // indexedDB.databases() existe en Safari ≥14 y Chrome ≥71. Si no está, no se
   // puede saber sin abrir PGLite: se devuelve null y decide quien llama.
@@ -43,6 +44,11 @@ export async function hayBaseLegada() {
   } catch {
     return null;
   }
+}
+
+export async function hayBaseLegada() {
+  if (yaMigrado()) return false;
+  return detectarBaseLegada();
 }
 
 // Copia congelada del lector legado, en dialecto Postgres.
@@ -175,4 +181,117 @@ export async function migrarDesdePglite(destino) {
   await pg.close?.();
   marcarMigrado({ en: new Date().toISOString(), filas, rescatado });
   return { migrado: true, filas, rescatado };
+}
+
+// ── Reparación de tiempos ─────────────────────────────────────────────────────
+// Los dispositivos que migraron antes del fix de cobertura del backup (commit
+// 7496804) recrearon sus sesiones sin hora_inicio/hora_fin: el camino de
+// export/import omitía esas columnas. La base PGLite legada no se borra en la
+// migración, así que los tiempos originales siguen ahí — esta reparación única
+// los lee y rellena los huecos en la base SQLite. Un dato ya presente jamás se
+// pisa (WHERE hora_inicio IS NULL).
+
+const tiemposReparados = () => {
+  try { return localStorage.getItem(CLAVE_TIEMPOS) !== null; } catch { return false; }
+};
+
+const marcarTiemposReparados = detalle => {
+  try { localStorage.setItem(CLAVE_TIEMPOS, JSON.stringify(detalle)); } catch { /* modo privado */ }
+};
+
+// Lado de LECTURA, en dialecto Postgres congelado como leerBaseLegada.
+// Exportada para probarla contra una PGLite real en memoria.
+export async function leerTiemposLegados(pg) {
+  const { rows } = await pg.query(
+    `SELECT id, fecha::text AS fecha, hora_inicio, hora_fin
+     FROM sesiones WHERE hora_inicio IS NOT NULL ORDER BY id`
+  );
+  return rows.map(s => ({
+    ...s,
+    hora_inicio: isoOrNull(s.hora_inicio),
+    hora_fin: isoOrNull(s.hora_fin),
+  }));
+}
+
+// Lado de ESCRITURA. El `fecha = ?` es cinturón de seguridad por si un id de la
+// base legada ya no corresponde a la misma sesión en la nueva.
+export async function aplicarTiemposLegados(destino, filas) {
+  const conTiempo = filas.filter(f => f.hora_inicio != null);
+  if (conTiempo.length === 0) return 0;
+
+  let actualizadas = 0;
+  await destino.exec('BEGIN');
+  try {
+    for (const fila of conTiempo) {
+      const { rows } = await destino.query(
+        `UPDATE sesiones SET hora_inicio = ?2, hora_fin = ?3
+         WHERE id = ?1 AND fecha = ?4 AND hora_inicio IS NULL
+         RETURNING id`,
+        [fila.id, fila.hora_inicio, fila.hora_fin ?? null, fila.fecha]
+      );
+      actualizadas += rows.length;
+    }
+    await destino.exec('COMMIT');
+  } catch (err) {
+    await destino.exec('ROLLBACK');
+    throw err;
+  }
+  guardar(); // tras el COMMIT, nunca dentro de la transacción
+  return actualizadas;
+}
+
+/**
+ * Repara los hora_inicio/hora_fin perdidos por la migración pre-fix, leyéndolos
+ * de la base PGLite legada. Idempotente; guardas de la más barata a la más cara
+ * para no descargar los 16 MB de PGLite sin necesidad. Si falla (p. ej. sin red
+ * para el chunk de PGLite), NO se marca el flag: se reintenta al arrancar.
+ *
+ * @param {{query: Function, exec: Function}} destino - motor SQLite abierto
+ * @returns {Promise<{reparado: boolean, motivo?: string, actualizadas?: number}>}
+ */
+export async function repararTiemposDesdePglite(destino) {
+  if (tiemposReparados()) return { reparado: false, motivo: 'ya-reparado' };
+
+  if (!yaMigrado()) {
+    // La migración corre antes que esto y, ya con el fix, trae los tiempos.
+    marcarTiemposReparados({ en: new Date().toISOString(), motivo: 'sin-migracion-previa' });
+    return { reparado: false, motivo: 'sin-migracion-previa' };
+  }
+
+  const { rows } = await destino.query(
+    'SELECT COUNT(*) AS n FROM sesiones WHERE hora_inicio IS NULL'
+  );
+  if ((rows[0]?.n ?? 0) === 0) {
+    marcarTiemposReparados({ en: new Date().toISOString(), motivo: 'sin-huecos' });
+    return { reparado: false, motivo: 'sin-huecos' };
+  }
+
+  const legadaPresente = await detectarBaseLegada();
+  if (legadaPresente === false) {
+    marcarTiemposReparados({ en: new Date().toISOString(), motivo: 'sin-base-legada' });
+    return { reparado: false, motivo: 'sin-base-legada' };
+  }
+
+  // legadaPresente === true (o null: se comprueba abriendo). Acá se pagan los
+  // 16 MB de PGLite — una sola vez, y solo si de verdad hay huecos que llenar.
+  const { PGlite } = await import('@electric-sql/pglite');
+  const pg = new PGlite('idb://gym-log-db');
+
+  let filas;
+  try {
+    filas = await leerTiemposLegados(pg);
+  } catch {
+    // La base existe pero sin el esquema esperado: no hay tiempos que recuperar.
+    await pg.close?.();
+    marcarTiemposReparados({ en: new Date().toISOString(), motivo: 'base-legada-ilegible' });
+    return { reparado: false, motivo: 'base-legada-ilegible' };
+  }
+
+  try {
+    const actualizadas = await aplicarTiemposLegados(destino, filas);
+    marcarTiemposReparados({ en: new Date().toISOString(), actualizadas });
+    return { reparado: true, actualizadas };
+  } finally {
+    await pg.close?.();
+  }
 }
