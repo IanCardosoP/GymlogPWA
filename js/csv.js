@@ -1,6 +1,8 @@
 // Backup completo en JSON — exportación e importación con transacción obligatoria
 // Nombrado csv por compatibilidad con versiones anteriores, aunque ahora es JSON
 
+import { guardarAhora } from './motor.js';
+
 export const BACKUP_VERSION = 1;
 
 export function exportarBackup(datos) {
@@ -44,6 +46,14 @@ export async function importarBackup(textoJson, dbInstance) {
     sesiones = [],
     series = [],
   } = datos;
+
+  const resumen = {
+    ejercicios: ejercicios.length,
+    rutinas: rutinas.length,
+    sesiones: sesiones.length,
+    series: series.length,
+    error: null,
+  };
 
   try {
     await dbInstance.exec('BEGIN');
@@ -98,16 +108,29 @@ export async function importarBackup(textoJson, dbInstance) {
     // que el máximo registrado, que es justo lo que hace este import.
 
     await dbInstance.exec('COMMIT');
-    return {
-      ejercicios: ejercicios.length,
-      rutinas: rutinas.length,
-      sesiones: sesiones.length,
-      series: series.length,
-      error: null,
-    };
 
   } catch (err) {
     await dbInstance.exec('ROLLBACK');
     return { error: err.message };
   }
+
+  // El COMMIT solo toca la base EN MEMORIA: sin esto, restaurar un backup no
+  // sobrevive a la recarga que hace config.js justo después — la base se va con
+  // la página y el arranque siguiente lee el snapshot viejo de IndexedDB. El
+  // handler de 'pagehide' del motor no salva el caso: guardarAhora() es
+  // asíncrono y el navegador cancela ese trabajo durante el unload (WebKit sobre
+  // todo). Va FUERA del try de la transacción a propósito: un fallo acá no puede
+  // caer en el catch de arriba, que haría ROLLBACK sin transacción abierta.
+  // guardarAhora() y no guardar(): el debounce de 150 ms es justo la ventana que
+  // se pierde. Con `memory://` (todos los tests) es no-op.
+  try {
+    await guardarAhora();
+  } catch (err) {
+    return {
+      ...resumen,
+      error: `Datos importados, pero no se pudieron guardar en el dispositivo: ${err.message}`,
+    };
+  }
+
+  return resumen;
 }
