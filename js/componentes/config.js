@@ -9,6 +9,7 @@ import {
   getEjerciciosPendientesRevision, vincularEjercicioCatalogo, descartarSugerenciaCatalogo,
 } from '../db.js';
 import { exportarBackup, importarBackup } from '../csv.js';
+import { borrarBasesDeDatos } from '../motor.js';
 import { getCandidatos, urlsParaWarming } from '../catalogo.js';
 import { abrirPreviewEjercicio } from './previewModal.js';
 import {
@@ -659,7 +660,15 @@ export async function render(state) {
     panel.appendChild(btnConf);
     panel.appendChild(btnCancel);
 
-    btnConf.addEventListener('click', resetearTodo);
+    // Ahora el borrado se ESPERA de verdad, así que puede tardar un instante
+    // perceptible: sin este feedback parecería que el tap no hizo nada y el
+    // usuario volvería a pulsar.
+    btnConf.addEventListener('click', async () => {
+      btnConf.disabled = true;
+      btnCancel.disabled = true;
+      btnConf.textContent = '[ BORRANDO… ]';
+      await resetearTodo();
+    });
     btnCancel.addEventListener('click', () => panel.remove());
 
     secDatos.appendChild(panel);
@@ -809,14 +818,29 @@ function construirFilaRetrofit(ejercicio, candidatos) {
   return fila;
 }
 
+// Todas las claves de la app van prefijadas. Se barre por prefijo y no por lista
+// fija porque hoy son cinco repartidas en dos módulos (la marca de migración, el
+// rescate de PGLite —que es una copia ÍNTEGRA de los datos del usuario—, los
+// tiempos reparados y las dos del temporizador de descanso), y una lista se
+// queda desactualizada sola en cuanto alguien añada la sexta.
+const PREFIJO_CLAVES = 'gymlog:';
+
+function borrarClavesLocales() {
+  try {
+    const claves = Object.keys(localStorage).filter(k => k.startsWith(PREFIJO_CLAVES));
+    for (const clave of claves) localStorage.removeItem(clave);
+  } catch { /* modo privado */ }
+}
+
 async function resetearTodo() {
-  if (typeof indexedDB.databases === 'function') {
-    const dbs = await indexedDB.databases();
-    await Promise.all(dbs.map(d => indexedDB.deleteDatabase(d.name)));
-  } else {
-    indexedDB.deleteDatabase('/gym-log-db');
-    indexedDB.deleteDatabase('gym-log-db');
-  }
+  // El borrado de IndexedDB vive en motor.js: es quien abre la conexión y quien
+  // tiene que cerrarla antes, porque una conexión viva bloquea el deleteDatabase.
+  // Antes acá se hacía Promise.all sobre IDBRequest —que no son thenables—, así
+  // que no se esperaba nada y el borrado solo se completaba de milagro durante
+  // el unload de la recarga de abajo.
+  const { bloqueadas } = await borrarBasesDeDatos();
+  if (bloqueadas.length > 0)
+    console.warn('[config] bases bloqueadas al borrar:', bloqueadas.join(', '));
 
   if ('caches' in window) {
     const keys = await caches.keys();
@@ -827,6 +851,8 @@ async function resetearTodo() {
     const regs = await navigator.serviceWorker.getRegistrations();
     await Promise.all(regs.map(r => r.unregister()));
   }
+
+  borrarClavesLocales();
 
   window.location.reload();
 }
