@@ -62,6 +62,10 @@ class BaseFalsa {
     this.name = nombre;
     this.almacenes = new Map();
     this.objectStoreNames = { contains: n => this.almacenes.has(n) };
+    // Cuenta las conexiones vivas. Es lo que decide si un deleteDatabase se
+    // bloquea, que es el corazón del bug del «BORRAR TODO»: el motor dejaba su
+    // conexión abierta y el borrado no ocurría nunca.
+    this.conexionesAbiertas = 0;
   }
 
   createObjectStore(nombre) {
@@ -71,18 +75,27 @@ class BaseFalsa {
 
   transaction(_nombre, _modo) { return new TransaccionFalsa(this); }
 
-  close() {}
+  close() {
+    if (this.conexionesAbiertas > 0) this.conexionesAbiertas -= 1;
+  }
 }
 
-export function crearIndexedDBFalsa() {
+/**
+ * @param {{conDatabases?: boolean}} opciones - `conDatabases: false` simula un
+ *   navegador sin indexedDB.databases() (Safari < 14), donde el borrado tiene
+ *   que caer a la lista de nombres conocidos.
+ */
+export function crearIndexedDBFalsa({ conDatabases = true } = {}) {
   const bases = new Map();
 
-  return {
+  const falsa = {
     open(nombre, _version) {
       const peticion = {};
       const nueva = !bases.has(nombre);
       if (nueva) bases.set(nombre, new BaseFalsa(nombre));
-      peticion.result = bases.get(nombre);
+      const base = bases.get(nombre);
+      base.conexionesAbiertas += 1;
+      peticion.result = base;
 
       luego(() => {
         if (nueva) peticion.onupgradeneeded?.();
@@ -91,7 +104,29 @@ export function crearIndexedDBFalsa() {
       return peticion;
     },
 
-    // Utilidad de test: borrar el "disco" sin tocar el resto del estado.
-    _borrarTodo() { bases.clear(); },
+    // Fiel al comportamiento real: con una conexión abierta el borrado NO ocurre
+    // y se dispara onblocked. Es exactamente el caso que rompía el «BORRAR TODO».
+    deleteDatabase(nombre) {
+      const peticion = {};
+      const base = bases.get(nombre);
+
+      luego(() => {
+        if (base && base.conexionesAbiertas > 0) {
+          peticion.onblocked?.();
+          return;
+        }
+        bases.delete(nombre);
+        peticion.onsuccess?.();
+      });
+      return peticion;
+    },
+
+    // Utilidad de test: qué bases quedan realmente en el "disco".
+    _nombres() { return [...bases.keys()]; },
   };
+
+  if (conDatabases)
+    falsa.databases = async () => [...bases.keys()].map(name => ({ name }));
+
+  return falsa;
 }

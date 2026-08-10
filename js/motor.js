@@ -192,11 +192,92 @@ export async function abrirMotor({ persistir = true } = {}) {
 export function cerrarMotor() {
   if (pendiente) { clearTimeout(pendiente); pendiente = null; }
   handle?.close();
+  // Soltar TAMBIÉN la conexión a IndexedDB, no solo la base SQLite. Mientras esta
+  // siga abierta, un deleteDatabase('gymlog-motor') se queda bloqueado
+  // indefinidamente: es lo que hacía que el «BORRAR TODO» solo funcionara de
+  // milagro, completándose durante el unload de la recarga.
+  idb?.close();
+  idb = null;
   persistencia = false;
   handle = null;
   sqlite3 = null;
   slotActual = 0;
   generacion = 0;
+}
+
+// ── Borrado total ─────────────────────────────────────────────────────────────
+// IndexedDB es competencia de este módulo (es quien la abre, la nombra y la
+// mantiene), así que el borrado vive acá y no en el componente de config.
+//
+// deleteDatabase() devuelve un IDBRequest, que NO es thenable: un
+// `Promise.all(nombres.map(n => indexedDB.deleteDatabase(n)))` resuelve en el
+// mismo tick sin haber borrado nada. Hay que esperar el evento.
+
+// Nombres a borrar cuando el navegador no expone indexedDB.databases()
+// (Safari < 14). DB_IDB va primero: es la base con los datos del usuario, y
+// justamente era la que la rama de respaldo se dejaba sin borrar.
+const BASES_CONOCIDAS = [DB_IDB, 'gym-log-db', '/gym-log-db'];
+
+// El «borrar todo» borra las bases DE ESTA APP, no las del origen entero. En
+// GitHub Pages el origen es `<usuario>.github.io`, compartido por todos los
+// repos publicados del mismo usuario: un deleteDatabase indiscriminado sobre
+// indexedDB.databases() se llevaría por delante los datos de otra app suya.
+// El `includes('gym-log-db')` cubre el nombre que Emscripten/IDBFS le pone a la
+// base legada de PGLite, que lleva el dataDir como prefijo ('/pglite/gym-log-db').
+const esBaseDeLaApp = nombre =>
+  nombre === DB_IDB || nombre.includes('gym-log-db') || nombre.includes('gymlog');
+
+function borrarBase(nombre, tiempoLimiteMs) {
+  return new Promise(resolver => {
+    let resuelto = false;
+    const terminar = estado => {
+      if (resuelto) return;
+      resuelto = true;
+      clearTimeout(temporizador);
+      resolver({ nombre, estado });
+    };
+
+    // Red de seguridad: si otra pestaña tiene la base abierta, el borrado queda
+    // bloqueado para siempre. Mejor informar y seguir que dejar la UI colgada.
+    const temporizador = setTimeout(() => terminar('bloqueada'), tiempoLimiteMs);
+
+    const peticion = indexedDB.deleteDatabase(nombre);
+    peticion.onsuccess = () => terminar('borrada');
+    peticion.onerror   = () => terminar('error');
+    peticion.onblocked = () => terminar('bloqueada');
+  });
+}
+
+/**
+ * Borra las IndexedDB de la app y ESPERA a que el borrado ocurra de verdad.
+ * Cierra el motor primero: si no, la propia conexión abierta bloquea el borrado.
+ *
+ * @param {{tiempoLimiteMs?: number}} opciones - tope por base antes de darla por
+ *   bloqueada y seguir. Parametrizado para que los tests no esperen segundos.
+ * @returns {Promise<{borradas: string[], bloqueadas: string[]}>}
+ */
+export async function borrarBasesDeDatos({ tiempoLimiteMs = 3000 } = {}) {
+  cerrarMotor();
+
+  if (typeof indexedDB === 'undefined') return { borradas: [], bloqueadas: [] };
+
+  let nombres = BASES_CONOCIDAS;
+  if (typeof indexedDB.databases === 'function') {
+    try {
+      const bases = await indexedDB.databases();
+      nombres = bases.map(b => b.name).filter(n => n && esBaseDeLaApp(n));
+    } catch {
+      // Si la enumeración falla se borran las conocidas: peor es no borrar nada.
+    }
+  }
+
+  const resultados = await Promise.all(
+    nombres.map(nombre => borrarBase(nombre, tiempoLimiteMs)));
+
+  return {
+    borradas:   resultados.filter(r => r.estado === 'borrada').map(r => r.nombre),
+    bloqueadas: resultados.filter(r => r.estado === 'bloqueada').map(r => r.nombre),
+  };
 }
 
 export const motorAbierto = () => handle !== null;
